@@ -1,4 +1,4 @@
-                      Series Version 2.1.5 RELEASE NOTES
+                      Series Version 2.3 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -6,7 +6,7 @@
                              matomira@acm.org
 
 
-                              21st March, 2000
+                              25th March, 2000
 
 
                     Series created by Richard C. Waters
@@ -42,6 +42,7 @@
                               Tim Bradshaw    (Symbolics)
                               Bruno Haible    (CLISP)
                              Arthur Lemmens
+                             Dave Linenberg
                              Lieven Marchand  (Allegro)
                             Reginald S. Perry
                              Pekka Pirinen    (Liquid)
@@ -111,29 +112,30 @@ NEW FEATURES:
   [:cltl2-series reactivates the old 'list assumption]
 - SCAN now can scan multidimensional arrays in row-major order.
 
-
 IMPROVEMENTS:
 ------------
 - MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
 - Better code generation
-  - Stricter typing.
-  - Replaced some SETQs by initializations at LET binding time.
-  - Removed global function namespace pollution.
-  - Encapsulated series subfunctions.
-  - Prevented generation of some dead termination code.
-  - Whole expression (t) and :loop wrapper placement
+  . Stricter typing.
+  . Replaced some SETQs by initializations at LET binding time.
+  . Removed global function namespace pollution.
+  . Encapsulated series subfunctions.
+  . Prevented generation of some dead termination code.
+  . Whole expression (t) and :loop wrapper placement
     (:prolog and :epilog support easy to add, if necessary).
-  - Improved letification merging.
-  - Optimized collections of the form (collect [type] (scan [type] ({list | ..}
-  - Some fixnum declarations were further constrained.
-  - Optimized scanning of constant sequences.
-  - Somewhat optimized scanning of "empty" vectors, ie,
+  . Improved letification merging.
+  . Optimized collections of the form (collect [type] (scan [type] ({list | ..}
+  . Some fixnum declarations were further constrained.
+  . Optimized scanning of constant sequences.
+  . Somewhat optimized scanning of "empty" vectors, ie,
     declared to be of constant 0 length, like in
     (collect (scan '(vector t 0) <gimme-a-huge-array-to-throw-away>) 
     now gives you NIL generating/executing less instructions.
     [<gimme-a-huge-array-to-throw-away> is still executed if not constantp, 
      though]
-  - Variables of type NULL are replaced by constant NILs.
+  . Variables of type NULL are replaced by constant NILs.
+  . Avoid indirect funcalling through a variable in CHOOSE-IF and basic-collect-fn whenever possible.
+  . Avoid consing in MAP-FN.
 
 - Source clean up.
   Local series functions are almost there (FLET extension)
@@ -165,6 +167,8 @@ NIL is OK, but which can be left unbound, if an implementation provides another 
 - Some incorrect fixnum declarations were relaxed.
 - Improved some declarations to avoid spurious range warnings regarding 
   dead code by not-so-smart compilers.
+- Removed redundant &optional in binding lists.
+- lister-p was too aggressive regarding *CD*R
 
 COMPILING
 --------

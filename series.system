@@ -1,0 +1,16 @@
+;;; -*- Mode: lisp -*-
+
+(defsystem series
+    :source-pathname #.(logical-pathname "lisp:series;")
+    :source-extension "lisp"
+    :components ((:file "s-package")
+		 (:file "s-code")
+		 (:file "s-install"
+			:load-only t)))
+
+
+(defsystem series-tests
+    :source-pathname "lisp:series;"
+    :depends-on (series)
+    :components ((:file "s-test")))
+    
