@@ -9,12 +9,37 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.76 2000/10/01 23:07:28 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.77 2000/10/06 23:03:01 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.77  2000/10/06 23:03:01  rtoy
+;;;; First cut at trying to lift some variable initializations into the
+;;;; enclosing LET.
+;;;;
+;;;; Basically, we look for something like
+;;;;
+;;;; (let (out-1 out-2)
+;;;;   (setq out-1 <init-1>)
+;;;;   (setq out-2 <init-2>)
+;;;;   <stuff>)
+;;;;
+;;;; and try to convert that to
+;;;;
+;;;; (let ((out-1 <init-1>) (out-2 <init-2>))
+;;;;   <stuff>)
+;;;;
+;;;; right after series has completed all of the macroexpansions it wants.
+;;;;
+;;;; Because this may be buggy, you can enable this feature by setting
+;;;; *lift-out-vars-p* to T.  It defaults to NIL.
+;;;;
+;;;; Note:  this can cause CMUCL sometimes to produce a compile warning
+;;;; that constant folding failed.  (Often caused by trying to compute
+;;;; array-total-size of a known constant list.)
+;;;;
 ;;;; Revision 1.76  2000/10/01 23:07:28  rtoy
 ;;;; o Add some comments.
 ;;;; o Add a template for LOCALLY.  (MCL works now!!!!)
@@ -5016,6 +5041,81 @@
     (when alist
       (nsublis alist loop))))
 
+(cl:defun out-var-p (var)
+  (when (atom var)
+    (cl:let ((var-name (symbol-name var)))
+      (when (>= (length var-name) 4)
+	(string-equal "OUT-" (subseq var-name 0 4))))))
+
+(cl:defun find-out-vars (code)
+  (when (member (first code) '(let cl:let))
+    (destructuring-bind (let (&rest bindings) &rest body)
+	code
+      (declare (ignore let body))
+      ;; Extract the binding vars.
+      (remove-if-not #'out-var-p
+		     bindings))))
+
+(cl:defun find-initializers (vars-to-init code)
+  (do ((inits nil)
+       (list (cddr code) (rest list)))
+      ((not (and (listp (first list))
+		 (member (first (first list)) '(setq cl:setq))
+		 (out-var-p (second (first list)))))
+       inits)
+    ;;(format t "setq = ~A~%" (first list))
+    (cl:let ((name (member (second (first list)) vars-to-init)))
+      ;;(format t "name = ~A~%" name)
+      (when name
+	;;(format t "init = ~%" (third (first list)))
+	(push (list (first name) (third (first list))) inits)))))
+
+(cl:defun delete-initializers (out-vars code)
+  (do ((list (cddr code) (rest list)))
+      ((not (and (listp (first list))
+		 (member (first (first list)) '(setq cl:setq))
+		 (out-var-p (second (first list)))))
+       (setf (cddr code) list)
+       code)
+    nil))
+
+;; Try to lift the initialization of out vars to the let.  This is a
+;; heuristic that I (toy@rtp.ericsson.se) hope works.
+(cl:defun lift-out-vars (code)
+  ;; This MUST destructively modify CODE.
+  ;;
+  ;; We look for something like
+  ;; (let (out-1 out-2)
+  ;;   (setq out-1 <init-1>)
+  ;;   (setq out-2 <init-2>)
+  ;;   <stuff>
+  ;; and try to convert that to
+  ;;
+  ;; (let ((out-1 <init-1>) (out-2 <init-2>))
+  ;;   <stuff>
+  (cl:let ((bindings (second code))
+	(out-vars (find-out-vars code)))
+    (when out-vars
+      ;; There are output vars.  Find the initializers associated with
+      ;; those output vars.
+      (cl:let ((new-bindings '())
+	    (inits (find-initializers out-vars code)))
+	;; Create a new bindings list that initializes the variables
+	;; appropriately.
+	(dolist (binding bindings)
+	  (cl:let ((init (assoc binding inits)))
+	    (if init
+		(push init new-bindings)
+		(push binding new-bindings))))
+	;;(format t "new-bindings = ~A~%" new-bindings)
+	;; Set the new bindings by destructively modifying the list.
+	(setf (second code) new-bindings)
+	;; Remove the initializers (destructively).
+	(delete-initializers out-vars code)
+	code))))
+
+(defvar *lift-out-vars-p* nil)
+
 (cl:defun codify (frag)
   (dolist (r (rets frag))
     (when (series-var-p r)
@@ -5056,6 +5156,8 @@
     (when wrps
       (setq code (car (wrap-code wrps (list code)))))
     (use-user-names aux code)
+    (when *lift-out-vars-p*
+      (lift-out-vars code))
     (setq *last-series-loop* code)))
 
 ); end of eval-when
