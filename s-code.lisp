@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.72 2000/06/26 15:28:19 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.73 2000/06/26 18:11:26 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.73  2000/06/26 18:11:26  rtoy
+;;;; Fix for bug #108331: collect 'vector sometimes returns results in
+;;;; reverse order.  Example is (collect 'vector (scan '(1 2 3))).
+;;;;
 ;;;; Revision 1.72  2000/06/26 15:28:19  rtoy
 ;;;; DECODE-SEQ-TYPE was getting BASE-STRING and STRING mashed together,
 ;;;; and didn't even handle BASE-STRING.  They are slightly different:
@@ -5683,7 +5687,7 @@
 				     (num (length lst)))
 			     (declare (type nonnegative-integer num))
 			     (setq seq (make-sequence ,seq-type num))
-			     (do ((i (1- num) (1- i))) ((minusp i))
+			     (dotimes (i num)
 			       (setf (aref seq i) (pop lst)))))
 			  ()
 			  nil
