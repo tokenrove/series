@@ -36,9 +36,12 @@
 ;comparison of results, all of the old tests are given numerical names
 ;that match the numbers printed out when running the old tester.
 
-;;;; $Id: s-test.lisp,v 1.7 1999/04/13 15:56:39 toy Exp $
+;;;; $Id: s-test.lisp,v 1.8 1999/04/29 22:07:43 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.8  1999/04/29 22:07:43  toy
+;;;; Don't break on signals for Allegro either.
+;;;;
 ;;;; Revision 1.7  1999/04/13 15:56:39  toy
 ;;;; Remove an unused NIL tag from test 418.
 ;;;;
@@ -144,8 +147,8 @@
 	   ;; that otherwise would pass because the compiler generates
 	   ;; a warning.
 	   #-(or cmu allegro) (*break-on-warnings* t)
-	   #+(or cmu allegro harlequin) (*break-on-signals* #+cmu nil
-							    #- cmu 'warning)
+	   #+(or cmu allegro harlequin) (*break-on-signals* #+(or cmu allegro) nil
+							    #-(or cmu allegro) 'warning)
 	   ;; Don't print out "Compiling..." messages
 	   #+cmu
 	   (*compile-print* nil)
