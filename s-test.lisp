@@ -1946,7 +1946,13 @@
 (deftest 490 (tw (block bar
 		   (iterate ((x (series -1 2 3)))
 		     (if (plusp x) (return-from bar x))))) 2 29)
+#-allegro
 (deftest 491 (tw (compiler-let ((*suppress-series-warnings* T))
+		   (block bar
+		     (iterate ((x (series -1 2 3)))
+		       (if (plusp x) (return-from bar x)))))) 2 nil)
+#+allegro
+(deftest 491 (tw (cltl1:compiler-let ((*suppress-series-warnings* T))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
