@@ -6,12 +6,17 @@
 ;;;; a long time ago, you might consider copying them from the above
 ;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.43 2000/02/04 23:05:57 toy Exp $
+;;;; $Id: s-code.lisp,v 1.44 2000/02/08 17:08:36 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.44  2000/02/08 17:08:36  toy
+;;;; o As discussed with Fernando, the "optional" type is renamed to
+;;;;   null-or.
+;;;; o Cleaned up and indented some of the comments.
+;;;;
 ;;;; Revision 1.43  2000/02/04 23:05:57  toy
 ;;;; A few more changes from Fernando:
 ;;;;
@@ -265,51 +270,62 @@
 ;;;;
 ;------------------------------------------------------------------------
 
-;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
+;;;; Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
 
-;Permission to use, copy, modify, and distribute this software and its
-;documentation for any purpose and without fee is hereby granted,
-;provided that this copyright and permission notice appear in all
-;copies and supporting documentation, and that the name of M.I.T. not
-;be used in advertising or publicity pertaining to distribution of the
-;software without specific, written prior permission. M.I.T. makes no
-;representations about the suitability of this software for any
-;purpose.  It is provided "as is" without express or implied warranty.
+;;;; Permission to use, copy, modify, and distribute this software and
+;;;; its documentation for any purpose and without fee is hereby
+;;;; granted, provided that this copyright and permission notice
+;;;; appear in all copies and supporting documentation, and that the
+;;;; name of M.I.T. not be used in advertising or publicity pertaining
+;;;; to distribution of the software without specific, written prior
+;;;; permission. M.I.T. makes no representations about the suitability
+;;;; of this software for any purpose.  It is provided "as is" without
+;;;; express or implied warranty.
 
-;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
-;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
-;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
-;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
-;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
-;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
-;    SOFTWARE.
+;;;;     M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+;;;;     INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;;;;     FITNESS, IN NO EVENT SHALL M.I.T. BE LIABLE FOR ANY SPECIAL,
+;;;;     INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
+;;;;     RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+;;;;     ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+;;;;     ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+;;;;     OF THIS SOFTWARE.
 
-;------------------------------------------------------------------------
+;;;;------------------------------------------------------------------------
 
-;This file implements efficient computation with series
-;expressions in Common Lisp.  The functions in this file
-;are documented in Appendices A and B of Common Lisp: the Language,
-;Second Edition, Guy L. Steele Jr, Digital press, 1990,
-;and in even greater detail in
-;  MIT/AIM-1082 and MIT/AIM-1083 both dated December 1989
-;These reports can be obtained by writing to:
+;;;; This file implements efficient computation with series
+;;;; expressions in Common Lisp.  The functions in this file
+;;;; are documented in Appendices A and B of Common Lisp: the Language,
+;;;; Second Edition, Guy L. Steele Jr, Digital press, 1990,
+;;;; and in even greater detail in
+;;;;   MIT/AIM-1082 and MIT/AIM-1083 both dated December 1989
+;;;; These reports can be obtained by writing to:
+;;;;
+;;;;                Publications
+;;;;                MIT AI Laboratory
+;;;;                545 Tech. Sq.
+;;;;                Cambridge MA 02139
 
-;               Publications
-;               MIT AI Laboratory
-;               545 Tech. Sq.
-;               Cambridge MA 02139
-
-;This file attempts to be as compatible with standard Common Lisp as possible.
-;It has been tested on the following Common Lisps to date (1/18/89).
-;  Symbolics CL version 8.
-;  LUCID CL version 3.0.2 on a sun.
-;  Allegro CL version 1.2.1 on a Macintosh.
-;  LispWorks CL version 2.1.
-
-;The companion file "STEST.LISP" contains several hundred tests.  You should
-;run these tests after the first time you compile this file on a new system.
-
-;The companion file "SDOC.TXT" contains brief documentation.
+;;;; This file attempts to be as compatible with standard Common Lisp
+;;;; as possible. It has been tested on the following Common Lisps to
+;;;; date (1/18/89).
+;;;;
+;;;;   Symbolics CL version 8.
+;;;;   LUCID CL version 3.0.2 on a sun.
+;;;;   Allegro CL version 1.2.1 on a Macintosh.
+;;;;   LispWorks CL version 2.1.
+;;;;
+;;;; This version has been tested on
+;;;;
+;;;;   CMUCL 18b
+;;;;   Lispworks CL
+;;;;   Allegro CL 5.0
+;;;;
+;;;; The companion file "STEST.LISP" contains several hundred tests.
+;;;; You should run these tests after the first time you compile this
+;;;; file on a new system.
+;;;;
+;;;; The companion file "SDOC.TXT" contains brief documentation.
 
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
@@ -381,7 +397,7 @@
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
                                           :load-toplevel
                                           :execute)
-  (deftype optional (typ) #-:cmu typ #+:cmu `(or null ,typ))
+  (deftype null-or (&rest types) `(or null ,@types))
   
   ;; DEBUG
   (defmacro definline (&rest args) `(cl:defun ,@args))
@@ -569,9 +585,12 @@
 ;;scan templates used in macro expansion.
 
 (defvar *optimize-series-expressions* T)
-(defvar *in-series-expr* nil "the topmost series expression")
-(defvar *testing-errors* nil "Used only be the file of tests")
-(defvar *not-straight-line-code* nil "not-nil if nested in non-straight-line code")
+(defvar *in-series-expr* nil
+  "the topmost series expression")
+(defvar *testing-errors* nil
+  "Used only be the file of tests")
+(defvar *not-straight-line-code* nil
+  "not-nil if nested in non-straight-line code")
 
 (declaim (special *graph*               ;list of frags in expression
                   *renames*             ;alist of variable renamings
@@ -583,16 +602,21 @@
                   *type*))              ;Communicates types to frag instantiations
 
 ;; DEBUG
-;; With these two assigments you can use (SERIES::PROCESS-TOP <quoted form>) to view series expansions
-;;(setq *renames* nil)
-;;(setq *env* nil)
+;;
+;; With these two assigments you can use (SERIES::PROCESS-TOP <quoted
+;; form>) to view series expansions (setq *renames* nil) (setq *env*
+;; nil)
 
-;*renames* has three kinds of entries on it.  Each is a cons of a
-;variable and something else:  (type 1 cannot ever be setqed.)
-; 1- a ret, var is a series::let var or a series::lambda var.  You
-;  can tell between the two because series::lambda var frags are not in *graph*.
-; 2- a new var, var is an aux var.
-; 3- nil, var is rebound and protected from renaming.
+;; *renames* has three kinds of entries on it.  Each is a cons of a
+;; variable and something else: (type 1 cannot ever be setqed.)
+;;
+;; 1- a ret, var is a series::let var or a series::lambda var.  You
+;; can tell between the two because series::lambda var frags are not
+;; in *graph*.
+;;
+;; 2- a new var, var is an aux var.
+;;
+;; 3- nil, var is rebound and protected from renaming.
 
 (defconstant *short-hand-types*
         '(array atom bignum bit bit-vector character common compiled-function
@@ -600,7 +624,8 @@
           keyword list long-float nil null number package pathname random-state
           ratio rational readtable sequence short-float simple-array
           simple-bit-vector simple-string simple-vector single-float standard-char
-          stream string string-char symbol t vector series) "table 4.1 from CLTL")
+          stream string string-char symbol t vector series)
+  "table 4.1 from CLTL")
 
 (defvar *standard-function-reader* (get-dispatch-macro-character #\# #\'))
 
@@ -623,73 +648,77 @@
   (epilog nil)    ;list of forms (without labels).
   (wrappers nil)) ;functions that wrap forms around the whole loop.
 
-;There cannot be any redundancy in or between the args and aux.  Each
-;ret variable must be either on the args list or the aux list.  The args
-;and ret have additional data as discussed below.  The aux is just a
-;list of lists of a symbol and a type specifier.  Every symbol used in a
-;frag which could possible clash with other frags (eg args, rets, aux,
-;and also labels) must be gensyms and unique in the whole world.
-
-;The order of the args is important when the frag is first
-;instantiated and funcalled.  However, it does not matter after that.
-;Similarly, the order of the rets also matters at the time it is
-;instantiated, and at the time that a whole expression is turned into
-;one frag, but it does not matter at other times.
-
-;There are two basic kinds of frags, series frags and non-series
-;frags.  A non-series frag is a frag which just has a simple
-;computation which has to be performed only once.  The rets and
-;args must be non-series values, and the body and epilog must be
-;empty.  (The code below maintains the invariant that if all the
-;ports of a frag are non-series then the body and epilog are
-;empty.)
-
-;a frag has three internal parts so that a wide variety of fragmentary
-;series functions can be compressed into a single frag.
-
-;Inside frags there is a label which has a special meaning.
-; END is used as the label after the end of the loop created.  If the
-;    body of a fragment contains (go END) then the fragment is an
-;    active terminator.
-
-;If a programmer uses these symbols in his program, very bad things could
-;happen.  However, it is in the series package, so there should not be any
-;conflict problems.  the code in this file assumes in many places that no
-;symbol in the "SERIES" package can possibly clash with a user symbol.
-
-;The code field is used solely to generate error messages.  However, it is
-;never the less very important.  In particular, it is important that the
-;code field only contain things that were actually in the user's source
-;code.  It is also important that it always contain something.
-
-;  There are several reasons why the code might end up being something the
-;user did not write.  The foremost reason is macro expansion.  It might be
-;the result of some expansion that turns into a frag.  To fix this,
-;my-macroexpand saves the first form before macro expansion, and puts that
-;in the code field.  To make this work, it must be the case that every
-;macro that can possibly expand into something that will trigger the
-;process of converting an expression into a loop must call PROCESS-TOP.  To
-;ensure this it must be the case that every macro the user can type must be
-;defined with defS or DEFUN with an OPTIMIZABLE-SERIES-FUNCTION
-;declaration.  (Note it is fine for things the user cannot type anyway to
-;be defined with defmacro.)  (Unfortunately, the end user can break this
-;rule if they define a new collector with DEFMACRO, but you cannot make
-;everything work.  At least all they will see is things generated by their
-;own macro)
+;;; There cannot be any redundancy in or between the args and aux.
+;;; Each ret variable must be either on the args list or the aux list.
+;;; The args and ret have additional data as discussed below.  The aux
+;;; is just a list of lists of a symbol and a type specifier.  Every
+;;; symbol used in a frag which could possible clash with other frags
+;;; (eg args, rets, aux, and also labels) must be gensyms and unique
+;;; in the whole world.
+;;;
+;;; The order of the args is important when the frag is first
+;;; instantiated and funcalled.  However, it does not matter after
+;;; that. Similarly, the order of the rets also matters at the time it
+;;; is instantiated, and at the time that a whole expression is turned
+;;; into one frag, but it does not matter at other times.
+;;;
+;;; There are two basic kinds of frags, series frags and non-series
+;;; frags.  A non-series frag is a frag which just has a simple
+;;; computation which has to be performed only once.  The rets and
+;;; args must be non-series values, and the body and epilog must be
+;;; empty.  (The code below maintains the invariant that if all the
+;;; ports of a frag are non-series then the body and epilog are
+;;; empty.)
+;;;
+;;; A frag has three internal parts so that a wide variety of
+;;; fragmentary series functions can be compressed into a single frag.
+;;;
+;;; Inside frags there is a label which has a special meaning.
+;;;  END is used as the label after the end of the loop created.  If the
+;;;     body of a fragment contains (go END) then the fragment is an
+;;;     active terminator.
+;;;
+;;; If a programmer uses these symbols in his program, very bad things
+;;; could happen.  However, it is in the series package, so there
+;;; should not be any conflict problems.  the code in this file
+;;; assumes in many places that no symbol in the "SERIES" package can
+;;; possibly clash with a user symbol.
+;;;
+;;; The code field is used solely to generate error messages.
+;;; However, it is never the less very important.  In particular, it
+;;; is important that the code field only contain things that were
+;;; actually in the user's source code.  It is also important that it
+;;; always contain something.
+;;;
+;;; There are several reasons why the code might end up being
+;;; something the user did not write.  The foremost reason is macro
+;;; expansion.  It might be the result of some expansion that turns
+;;; into a frag.  To fix this, my-macroexpand saves the first form
+;;; before macro expansion, and puts that in the code field.  To make
+;;; this work, it must be the case that every macro that can possibly
+;;; expand into something that will trigger the process of converting
+;;; an expression into a loop must call PROCESS-TOP.  To ensure this
+;;; it must be the case that every macro the user can type must be
+;;; defined with defS or DEFUN with an OPTIMIZABLE-SERIES-FUNCTION
+;;; declaration.  (Note it is fine for things the user cannot type
+;;; anyway to be defined with defmacro.)  (Unfortunately, the end user
+;;; can break this rule if they define a new collector with DEFMACRO,
+;;; but you cannot make everything work.  At least all they will see
+;;; is things generated by their own macro)
 
 (cl:defun annotate (code frag)
   (when (frag-p frag)
     (setf (code frag) code))
   frag)
 
-;Considerable effort is expended to see that the code field usually
-;contains code that makes sense to the user.  Extensive testing
-;indicates that it never ends up containing :||, and that the code it
-;contains always is part of the code the user types except that an
-;optional argument can end up having the default value which ends up
-;in the annotation.
-
-;Each arg and ret has the following parts.
+;;; Considerable effort is expended to see that the code field usually
+;;; contains code that makes sense to the user.  Extensive testing
+;;; indicates that it never ends up containing :||, and that the code it
+;;; contains always is part of the code the user types except that an
+;;; optional argument can end up having the default value which ends up
+;;; in the annotation.
+;;;
+;;; Each arg and ret has the following parts.
 
 (defstruct (sym (:conc-name nil) (:type list) :named)
   (back-ptrs (make-array 2 :initial-element nil))
@@ -698,16 +727,16 @@
   (off-line-spot nil)    ;if off-line, place to insert the computation.
   (off-line-exit nil))   ;if non-passive input, label to catch exit.
 
-;If there is an on-line-spot, it must appear in the frag code exactly
-;once at top level.  It cannot be nested in a form.  It also can only be
-;referred to from a single input or output.
+;;; If there is an on-line-spot, it must appear in the frag code exactly
+;;; once at top level.  It cannot be nested in a form.  It also can only be
+;;; referred to from a single input or output.
 
-;A number of functions depend on the fact that frags and syms are list
-;structures which can be traversed by functions like nsubst.  The
-;following three circular pointers are hidden in an array so they
-;won't be followed.  (Note that ins only have prv and rets only have
-;nxts, as a result, they can both be stored in the same place.  two
-;names are used in order to enhance the readability of the program.)
+;;; A number of functions depend on the fact that frags and syms are list
+;;; structures which can be traversed by functions like nsubst.  The
+;;; following three circular pointers are hidden in an array so they
+;;; won't be followed.  (Note that ins only have prv and rets only have
+;;; nxts, as a result, they can both be stored in the same place.  two
+;;; names are used in order to enhance the readability of the program.)
 
 (defmacro fr (s)       ;back pointer to containing frag.
   `(aref (back-ptrs ,s) 0))
@@ -716,65 +745,75 @@
 (defmacro prv (s)      ;the single source of dflow to here.
   `(aref (back-ptrs ,s) 1))
 
-;The sym vars are symbols which appear in the body of the frag where they
-;should.  All of the symbols must be unique in all the world.  Every instance
-;of the symbol anywhere must be a use of the symbol.
-;  Output variables can be freely read and written.
-;Input variables can be read freely, but cannot ever be written.
-;  These restrictions guarantee that when frags are combined, it is OK to
-;rename the input var of one to be the output var of the other.  In
-;addition, the creator of an output can depend on the output variable
-;being unchanged by the user(s).  However, this is not the main point.
-;More critical is the situation where two frags use the same value.
-;The second frag can be sure that the first frag did not mess up the value.
-;(Side-effects could still cause problems.  The user must guard
-;against destroying some other fragment's internal state.)
-;  In the interest of good output code, some work is done to simplify
-;things when frags are merged.  If an output is of the form (setq out c)
-;where c is T, nil, or a number, then c is substituted directly for the
-;input.  Substitution is also applied if c is a variable which is not
-;bound in the destination frag.  In addition, other kinds of constants
-;are substituted if they are only used in one place.  A final pass
-;gets rid of setqs to variables that are never used for anything.
+;;; The sym vars are symbols which appear in the body of the frag
+;;; where they should.  All of the symbols must be unique in all the
+;;; world.  Every instance of the symbol anywhere must be a use of the
+;;; symbol.
+;;;
+;;; Output variables can be freely read and written. Input variables
+;;; can be read freely, but cannot ever be written.
+;;;
+;;; These restrictions guarantee that when frags are combined, it is
+;;; OK to rename the input var of one to be the output var of the
+;;; other.  In addition, the creator of an output can depend on the
+;;; output variable being unchanged by the user(s).  However, this is
+;;; not the main point. More critical is the situation where two frags
+;;; use the same value. The second frag can be sure that the first
+;;; frag did not mess up the value. (Side-effects could still cause
+;;; problems.  The user must guard against destroying some other
+;;; fragment's internal state.)
+;;;
+;;; In the interest of good output code, some work is done to simplify
+;;; things when frags are merged.  If an output is of the form (setq
+;;; out c) where c is T, nil, or a number, then c is substituted
+;;; directly for the input.  Substitution is also applied if c is a
+;;; variable which is not bound in the destination frag.  In addition,
+;;; other kinds of constants are substituted if they are only used in
+;;; one place.  A final pass gets rid of setqs to variables that are
+;;; never used for anything.
 
 (defmacro free-out (s) ;var output is assigned to if any.
   `(off-line-exit ,s))
 
-;only inputs can have off-line exits, so we can reuse the same field for
-;this.  if an output is assigned to a variable on *renames*, the variable
-;is recorded here.  This is used in some situations to hook up data flow
-;correctly.  It also indicates a few additional things.
-; (A) you cannot every kill this ret, because you may need it even if
-;     you do not need it for dflow by nesting of expressions.
-; (B) if you have it still existing at the end of everything, because
-;     it was never used, then this is something to issue a warning about,
-;     but it is not a value to be returned by the expression as a whole.
-
-;The third key internal form is a graph of frags.  This is
-;represented in an indirect way.  The special variable *graph*
-;contains a list of all of the frags in the series expression currently
-;being processed.  The order of the frags in this list is vitally
-;important.  It corresponds to their lexical order in the input
-;expression and controls the default way things with no data flow
-;between them are ordered when combined.  In addition, many of the
-;algorithms depend on the fact that the order in *graph* is compatible
-;with the data flow in that there can never be data flow from a frag
-;to an earlier frag in the list.
-
-;Subexpressions and regions within the expression as a whole are
-;delineated by setting marking bits in the frags in the region.
-
-;lambda-series makes special frags for arguments which are not in the list
-;*graph*.  They exist to record info about the arguments and to
-;preserve an invariant that every input of every frag in *graph* must
-;have data flow ending on it.  A related invariant states that if a
-;frag in *graph* has a ret then this ret must be used either by having
-;dflow from it, or as an output of the expression as a whole.  Unused
-;rets are removed from frags when the frags are created.
-
-;for the purposes of testing whether a subexpression is strongly
-;connected to its outputs, a frag with no rets is considered to be an
-;output of the subexpression.
+;;; only inputs can have off-line exits, so we can reuse the same
+;;; field for this.  if an output is assigned to a variable on
+;;; *renames*, the variable is recorded here.  This is used in some
+;;; situations to hook up data flow correctly.  It also indicates a
+;;; few additional things.
+;;;
+;;;  (A) you cannot every kill this ret, because you may need it even if
+;;;      you do not need it for dflow by nesting of expressions.
+;;;
+;;;  (B) if you have it still existing at the end of everything, because
+;;;      it was never used, then this is something to issue a warning about,
+;;;      but it is not a value to be returned by the expression as a whole.
+;;;
+;;; The third key internal form is a graph of frags.  This is
+;;; represented in an indirect way.  The special variable *graph*
+;;; contains a list of all of the frags in the series expression
+;;; currently being processed.  The order of the frags in this list is
+;;; vitally important.  It corresponds to their lexical order in the
+;;; input expression and controls the default way things with no data
+;;; flow between them are ordered when combined.  In addition, many of
+;;; the algorithms depend on the fact that the order in *graph* is
+;;; compatible with the data flow in that there can never be data flow
+;;; from a frag to an earlier frag in the list.
+;;;
+;;; Subexpressions and regions within the expression as a whole are
+;;; delineated by setting marking bits in the frags in the region.
+;;;
+;;; lambda-series makes special frags for arguments which are not in
+;;; the list *graph*.  They exist to record info about the arguments
+;;; and to preserve an invariant that every input of every frag in
+;;; *graph* must have data flow ending on it.  A related invariant
+;;; states that if a frag in *graph* has a ret then this ret must be
+;;; used either by having dflow from it, or as an output of the
+;;; expression as a whole.  Unused rets are removed from frags when
+;;; the frags are created.
+;;;
+;;; for the purposes of testing whether a subexpression is strongly
+;;; connected to its outputs, a frag with no rets is considered to be
+;;; an output of the subexpression.
 
 (cl:defun non-series-p (frag)
   (and (notany #'series-var-p (rets frag))
@@ -784,7 +823,7 @@
   (or (branches-to END (prolog frag))
       (branches-to END (body frag))))
 
-;;This gets rid of duplicate labs in a row.
+;; This gets rid of duplicate labs in a row.
 (cl:defun clean-labs (frag stmtns)
   (cl:let ((alist nil))
     (do ((l stmtns (cdr l))) ((not (consp (cdr l))))
@@ -794,8 +833,8 @@
                (go CLEANL)))
     (nsublis alist frag)))
 
-;;This takes a series frag all of whose inputs and outputs are non-series
-;;things and makes it into a non-series frag.
+;; This takes a series frag all of whose inputs and outputs are
+;; non-series things and makes it into a non-series frag.
 (cl:defun maybe-de-series (frag)
   (when (and (non-series-p frag) (or (body frag) (epilog frag)))
     (when (not (active-terminator-p frag))
@@ -808,8 +847,8 @@
       (clean-labs frag (cdr loop))))
   frag)
 
-;;this assumes that every instance of one of series's funny labels is
-;;really an instance of that label made by the macros below.
+;; this assumes that every instance of one of series's funny labels is
+;; really an instance of that label made by the macros below.
 (cl:defun branches-to (label tree)
   (cond ((and (eq-car tree 'tagbody) (member label tree)) nil)
         ((and (eq-car tree 'go) (eq-car (cdr tree) label)) T)
@@ -817,7 +856,7 @@
                ((not (consp tt)) nil)
              (if (branches-to label (car tt)) (return T))))))
 
-;hacking marks
+;; hacking marks
 
 (cl:defun reset-marks (&optional (value 0))
   (dolist (f *graph*)
@@ -834,11 +873,11 @@
     (setq body `((when (marked-p ,(car mask) ,var) ,@ body))))
   `(dolist (,var *graph*) ,@ body))
 
-;many of the functions in this file depend on the fact that frags and
-;syms are list structures.  However, only the following functions
-;depend on the exact position of parts of these structures.  Note that
-;the CL manual guarantees that these positions are correct in all
-;implementations.
+;; many of the functions in this file depend on the fact that frags
+;; and syms are list structures.  However, only the following
+;; functions depend on the exact position of parts of these
+;; structures.  Note that the CL manual guarantees that these
+;; positions are correct in all implementations.
 
 (cl:defun merge-frags (frag1 frag2)
   (when (must-run frag1) (setf (must-run frag2) T))
@@ -900,7 +939,7 @@
     (setf (fr s) frag)
     s))
 
-;some Common Lisps implement copy-tree tail recursively.
+;; some Common Lisps implement copy-tree tail recursively.
 
 (cl:defun iterative-copy-tree (tree)
   (if (not (consp tree)) tree
@@ -916,10 +955,10 @@
             (setq tail (cdr tail))
             (go L))))
 
-;Special form for defining series functions directly in the internal form.
-;The various variables and the exit label must be unique in the body.
-;The exit label must be END.  Also everything is arranged just as it is
-;in an actual frag structure.
+;; Special form for defining series functions directly in the internal
+;; form. The various variables and the exit label must be unique in
+;; the body. The exit label must be END.  Also everything is arranged
+;; just as it is in an actual frag structure.
 
 (cl:defun literal-frag (stuff) ;(args rets aux alt prolog body epilog wraprs)
   (cl:let ((gensyms (nconc (mapcar #'car (nth 0 stuff))
@@ -992,28 +1031,35 @@
 );end of eval-when
 
 
-;                ---- FUNCTIONS FOR CODE WALKING ----
+;;;;                ---- FUNCTIONS FOR CODE WALKING ----
 
-;M-&-R takes in a piece of code.  It assumes CODE is a semantic whole.  Ie, it
-;is something which could be evaled (as opposed to a disembodied cond clause).
-;It scans over CODE macroexpanding all of the parts of it, and performing
-;renames as specified by *RENAMES*.  M-&-R puts entries on the variable
-;*RENAMES* which block the renaming of bound variables.
-;  M-&-R also calls FN (if any) on every subpart of CODE (including the whole
-;thing) which could possibly be evaluated.  The result of consing together all
-;of the results of FN is returned.  Ie, the result is isomorphic to the input
-;with each part replaced with what FN returned.  This is done totally by
-;copying.  The input is not altered.
-;  In addition, m-&-R checks to see that the code isn't setqing variables
-;it shouldn't be.
-
-;In order to do the above, M-&-R has to be able to understand fexprs.  It
-;understands fexprs by having a description of each of the standard ones (see
-;below).  It will not work on certain weird ones.
-;  fexprs are understood by means of templates which are (usually circular)
-;lists of function names.  These fns are called in order to processes the
-;various fields of the fexpr.  The template can be a single fn in which case
-;this fn is called to process the fexpr as a whole.
+;;; M-&-R takes in a piece of code.  It assumes CODE is a semantic
+;;; whole.  Ie, it is something which could be evaled (as opposed to a
+;;; disembodied cond clause). It scans over CODE macroexpanding all of
+;;; the parts of it, and performing renames as specified by *RENAMES*.
+;;; M-&-R puts entries on the variable *RENAMES* which block the
+;;; renaming of bound variables.
+;;;
+;;; M-&-R also calls FN (if any) on every subpart of CODE (including
+;;; the whole thing) which could possibly be evaluated.  The result of
+;;; consing together all of the results of FN is returned.  Ie, the
+;;; result is isomorphic to the input with each part replaced with
+;;; what FN returned.  This is done totally by copying.  The input is
+;;; not altered.
+;;;
+;;; In addition, M-&-R checks to see that the code isn't setqing
+;;; variables it shouldn't be.
+;;;
+;;; In order to do the above, M-&-R has to be able to understand
+;;; fexprs.  It understands fexprs by having a description of each of
+;;; the standard ones (see below).  It will not work on certain weird
+;;; ones.
+;;;
+;;; fexprs are understood by means of templates which are (usually
+;;; circular) lists of function names.  These fns are called in order
+;;; to processes the various fields of the fexpr.  The template can be
+;;; a single fn in which case this fn is called to process the fexpr
+;;; as a whole.
 
 (defmacro make-template (head rest)
   `(cl:let ((h (append ',head nil))
@@ -1094,7 +1140,7 @@
   #-:lispworks
   code)
 
-;on lispm '(lambda ...) macroexpands to (function (lambda ...)) ugh!
+;; on lispm '(lambda ...) macroexpands to (function (lambda ...)) ugh!
 
 (cl:defun my-macroexpand (original-code)
   (cl:let ((code original-code))
@@ -1134,7 +1180,8 @@
         (setq code (expand-macrolet code))
         ))))
 
-;special macro-like forms to handle setq forms.  Note psetq is already a macro.
+;; special macro-like forms to handle setq forms.  Note psetq is
+;; already a macro.
 
 (cl:defun my-lambda-macro (form)
   (if (not (consp (car form))) form
@@ -1201,7 +1248,7 @@
   (if (not (listp template)) (cl:funcall template code)
       (mapcar #'(lambda (tm c) (cl:funcall tm c)) template code)))
 
-;The following are the fns allowed in templates.
+;; The following are the fns allowed in templates.
 
 (cl:defun Q   (code) code)
 (cl:defun E   (code) (m-&-r1 code))
@@ -1222,7 +1269,7 @@
 (cl:defun LAB (code) (if (symbolp code) code (EL code)))
 (cl:defun FUN (code) (if (not (consp code)) code (process-fn code)))
 
-;This handles binding lists for LET.
+;; This handles binding lists for LET.
 
 (cl:defun bind-list (args sequential &aux (pending nil))
   (prog1 (mapcar #'(lambda (arg)
@@ -1253,11 +1300,11 @@
 
 (setf (get 'compiler-let 'scan-template) #'compiler-let-template)
 
-;What the following is doing with the free variables may not be
-;quite right.  All in all, it is pretty scary if you refer to local lexical
-;vars in a fn in a series expression.  
-;HERE Note that for the moment, Series does not realize that you have used
-;a variable if this is the only way you use it.
+;;; What the following is doing with the free variables may not be
+;;; quite right.  All in all, it is pretty scary if you refer to local
+;;; lexical vars in a fn in a series expression.  HERE Note that for
+;;; the moment, Series does not realize that you have used a variable
+;;; if this is the only way you use it.
 
 (cl:defun process-fn (code)
   (cl:let ((*in-series-expr* nil) (*not-straight-line-code* nil)
@@ -1270,10 +1317,13 @@
         (setq fn (nsubst (cdr f) (car f) fn)))
       fn)))
 
-;templates for special forms.  Note that the following are not handled
-;  COMPILER-LET FLET LABELS MACROLET but must not macroexpand.
-;FLET and DECLARE in particular are macros in lucid and messed things up
-;by expanding at the wrong time.
+;;; templates for special forms.  Note that the following are not
+;;; handled
+;;;
+;;;   COMPILER-LET FLET LABELS MACROLET but must not macroexpand.
+;;;
+;;; FLET and DECLARE in particular are macros in lucid and messed
+;;; things up by expanding at the wrong time.
 
 (deft                block (Q Q)  (EL))
 (deft                catch (Q E)  (EL))
@@ -1314,9 +1364,9 @@
   (deft   scl:WITH-STACK-LIST (Q WSLB) (E))
   (deft  scl:WITH-STACK-LIST* (Q WSLB) (E)))
 
-;;Have to be careful not to macroexpand things twice.
-;;If you did, you could get two copies of some frags on *graph*.
-;;Note that a type of '* means any number of arguments.
+;; Have to be careful not to macroexpand things twice. If you did, you
+;; could get two copies of some frags on *graph*. Note that a type of
+;; '* means any number of arguments.
 (cl:defun retify (code &optional (type T))
   (if (sym-p code)
       code ;might have been retified/fragified before.
@@ -1327,18 +1377,20 @@
 	  ret
 	(car (rets (fragify expansion type)))))))
 
-;;This macro-expands everything in the code making sure that all free
-;;variables (that are not free in the whole series expression)
-;;are appropriately changed to gensyms.  It returns the new code plus
+;; This macro-expands everything in the code making sure that all free
+;; variables (that are not free in the whole series expression) are
+;; appropriately changed to gensyms.  It returns the new code plus
+;;
 ;; (a) list of pairs of internal var gensyms and external values.
 ;;     Typically, dflow should be inserted from the external values to
 ;;     ports made with these gensyms.
-
+;;
 ;; (b) list of pairs of output gensyms and the actual var names they modify.
 ;; (c) list of vars from the list CHECK-SETQ that are setqed.
-;; If the state argument is supplied, it contains lists of input and output
-;; info that is used to initialize things.
-;;error messages are issued if a series value is used in an improper context.
+;;
+;; If the state argument is supplied, it contains lists of input and
+;; output info that is used to initialize things. error messages are
+;; issued if a series value is used in an improper context.
 
 (cl:defun handle-non-series-stuff (code &optional (state nil) (check-setq nil))
   (cl:let ((free-ins (car state)) (free-outs (cadr state)) (setqed nil))
@@ -1374,40 +1426,52 @@
     (values code (mapcar #'cdr free-ins) (mapcar #'cdr free-outs)
             setqed (list free-ins free-outs))))
 
-; ---- PHYSICAL REPRESENTATIONS FOR SERIES AND GENERATORS ----
+;;;; ---- PHYSICAL REPRESENTATIONS FOR SERIES AND GENERATORS ----
 
-;The following structure is used as the physical representation for a
-;series.  It is a structure so that it can print itself and get read
-;in.  The only operation on it is to get it to return a a generator
-;object.  The only operation on a generator object is NEXT-IN.
+;;; The following structure is used as the physical representation for
+;;; a series.  It is a structure so that it can print itself and get
+;;; read in.  The only operation on it is to get it to return a a
+;;; generator object.  The only operation on a generator object is
+;;; NEXT-IN.
 
-;Physical series are of two kinds basic and image.
-;A basic series has three parts
-;GEN-FN is a fn that generates new values.  When called with no args, must either
-;  return a list of the next value, or nil indicating no more values to
-;  return.  (If there is an alter function, then each value is actually a
-;  list of the fundamental value and any additional information needed by
-;  the alter function.  NEXT-IN only returns the fundamental value in any case.)
-;DATA-SO-FAR cons of NIL and data generated by GEN-FN so far.  The last cdr is a
-;  flag that tells you whether the end has been reached.  If it is T
-;  there is still more to get, if it is NIL you are done.  (The NIL car is needed
-;  so that new elements can allways be added by side effect.)
-;ALTER-FN is a fn that alters elements (or NIL if none).  Must be a function
-;  that when called with a new item as its first arg and any additional
-;  information computed by the GEN-FN as its other arguments does the alteration.
-
-;Image series compute one series from another without requiring any mutable internal
-;state.  The also have four parts.
-;BASE-SERIES the series the image series is based on.  The elements of the image are
-;  some simple function of the elements of the base.  (The base can be another
-;  image series.)
-;IMAGE-FN is a function with no changing internal state that will get the next full
-;  item of the series given a generator of the base series.  It must behave the
-;  same as BASIC-DO-NEXT-IN.
-;IMAGE-DATUM Some non-null value that can be used by the IMAGE-FN when deciding
-;  what to do.  This often saves having to have the IMAGE-FN be a closure.
-;  It is passed as the second argument to the IMAGE-FN.
-;ALTER-FN same as for a basic series.
+;;; Physical series are of two kinds basic and image. A basic series
+;;; has three parts
+;;;
+;;; GEN-FN is a fn that generates new values.  When called with no
+;;; args, must either return a list of the next value, or nil
+;;; indicating no more values to return.  (If there is an alter
+;;; function, then each value is actually a list of the fundamental
+;;; value and any additional information needed by the alter function.
+;;; NEXT-IN only returns the fundamental value in any case.)
+;;;
+;;; DATA-SO-FAR cons of NIL and data generated by GEN-FN so far.  The
+;;; last cdr is a flag that tells you whether the end has been
+;;; reached.  If it is T there is still more to get, if it is NIL you
+;;; are done.  (The NIL car is needed so that new elements can allways
+;;; be added by side effect.)
+;;;
+;;; ALTER-FN is a fn that alters elements (or NIL if none).  Must be a
+;;; function that when called with a new item as its first arg and any
+;;; additional information computed by the GEN-FN as its other
+;;; arguments does the alteration.
+;;;
+;;; Image series compute one series from another without requiring any
+;;; mutable internal state.  The also have four parts.
+;;;
+;;; BASE-SERIES the series the image series is based on.  The elements
+;;; of the image are some simple function of the elements of the base.
+;;; (The base can be another image series.)
+;;;
+;;; IMAGE-FN is a function with no changing internal state that will
+;;; get the next full item of the series given a generator of the base
+;;; series.  It must behave the same as BASIC-DO-NEXT-IN.
+;;;
+;;; IMAGE-DATUM Some non-null value that can be used by the IMAGE-FN
+;;; when deciding what to do.  This often saves having to have the
+;;; IMAGE-FN be a closure. It is passed as the second argument to the
+;;; IMAGE-FN.
+;;;
+;;; ALTER-FN same as for a basic series.
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
@@ -1445,20 +1509,30 @@
   (declare (ignore var))
   T)
 
-;A generator is a data structure with the following parts.  For
-;speed in symbolics lisp, it is implement as a list.
-;GEN-BASE is the series the generator is generating the elements of.
-;GEN-BASE is one of two things depending on what kind of series the GEN-BASE is.
-;  For basic-series, it starts out as the data-so-far and is cdr'ed down as the
-;    elemnts are used.  Also additional elements are tagged on to the end as
-;    needed.  Sharing is used so that when elements are added here, they are
-;    automaticaly added onto the data-so-far of the series itself and to any
-;    other generators for this series as well.
-;  For image-series, it is a generator for the the IMAGE-BASE.
-;  In either of the cases above, the GEN-BASE becomes NIL when the generator is
-;    exhausted.
-;CURRENT-ALTER-INFO is the list of information that is needed to alter
-;  the last element generated.  (If the base has no alter-fn, then this is nil.)
+;;; A generator is a data structure with the following parts.  For
+;;; speed in symbolics lisp, it is implement as a list.
+;;;
+;;; GEN-BASE is the series the generator is generating the elements
+;;; of.
+;;;
+;;; GEN-BASE is one of two things depending on what kind of series the
+;;; GEN-BASE is.
+;;;
+;;;   For basic-series, it starts out as the data-so-far and is cdr'ed
+;;;   down as the elemnts are used.  Also additional elements are
+;;;   tagged on to the end as needed.  Sharing is used so that when
+;;;   elements are added here, they are automaticaly added onto the
+;;;   data-so-far of the series itself and to any other generators for
+;;;   this series as well.
+;;;
+;;;   For image-series, it is a generator for the the IMAGE-BASE.
+;;;
+;;;   In either of the cases above, the GEN-BASE becomes NIL when the
+;;;   generator is exhausted.
+;;;
+;;; CURRENT-ALTER-INFO is the list of information that is needed to
+;;; alter the last element generated.  (If the base has no alter-fn,
+;;; then this is nil.)
 
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
@@ -1490,13 +1564,14 @@
            ((basic-series-p s) (data-so-far s))
            (T (ers 60 "~%GENERATOR applied to something that is not a series.")))))
 
-;This function interfaces to generators.  No optimization ever happens to
-;generators except in the function PRODUCING.  The next element of the generator
-;is returned each time DO-NEXT-IN is called.  If there are no more elements, the
-;functional argument is funcalled.  It is an error to call DO-NEXT-IN again later.
+;; This function interfaces to generators.  No optimization ever
+;; happens to generators except in the function PRODUCING.  The next
+;; element of the generator is returned each time DO-NEXT-IN is
+;; called.  If there are no more elements, the functional argument is
+;; funcalled.  It is an error to call DO-NEXT-IN again later.
 
-;;This returns the next full entry in a generator, or sets the
-;;gen-state to NIL indicating the generator is exhausted.
+;; This returns the next full entry in a generator, or sets the
+;; gen-state to NIL indicating the generator is exhausted.
 (cl:defun basic-do-next-in (g)
   (when (gen-state g)
     (cl:let ((full-current
@@ -1530,8 +1605,9 @@
 
 
 
-;;The following is an example of an image function.  It selects the
-;;datum-th part of the full item of the base series as the item of the image series.
+;; The following is an example of an image function.  It selects the
+;; datum-th part of the full item of the base series as the item of
+;; the image series.
 (cl:defun image-of-datum-th (g datum)
   (nth datum (basic-do-next-in g)))
 
@@ -1561,12 +1637,13 @@
 );end of eval-when
 
 
-;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
+;;;;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
 
-;The form below has to be called to set things up right, before
-;processing of a series expression can proceed.
+;;; The form below has to be called to set things up right, before
+;;; processing of a series expression can proceed.
 
-;should have some general error catching thing but common lisp has none.
+;;; should have some general error catching thing but common lisp has
+;;; none.
 
 (defmacro starting-series-expr (call body)
   `(cl:let ((*renames* nil)
@@ -1575,7 +1652,7 @@
          (*in-series-expr* ,call))
      ,body))
 
-;assumes opt result cannot be NIL
+;; assumes opt result cannot be NIL
 (defmacro top-starting-series-expr (call opt non-opt)
   `(cond ((catch :series-restriction-violation
             (starting-series-expr ,call ,opt)))
@@ -1641,7 +1718,7 @@
         (t (star2t type)))))
 
 ;; TYPING
-;;this is also used by PROTECT-FROM-SETQ in an odd way.
+;; this is also used by PROTECT-FROM-SETQ in an odd way.
 (cl:defun coerce-to-type (type ret)
   (if (eq type 'series) 
       (setq type '(series T)))
@@ -1673,9 +1750,9 @@
       (mapc #'coerce-to-type types (rets frag))))
   frag)
 
-;  This parses code down to fundamental chunks creating a graph of the
-;expression.  Note that macroexpanding and renaming is applied while
-;this happens. (`fragmentation')
+;; This parses code down to fundamental chunks creating a graph of the
+;; expression.  Note that macroexpanding and renaming is applied while
+;; this happens. (`fragmentation')
 
 ;; FRAGMENTATION
 (cl:defun decode-type-arg (type &optional (allow-zero nil))
@@ -1703,9 +1780,10 @@
     (+frag frag)))
 
 ;; FRAGMENTATION
-;;note this can assume that the vars are gensyms that they only appear where
-;;they are really used. 
-;;HERE with the way if works, because it will not catch nested lets!
+;;
+;; note this can assume that the vars are gensyms that they only
+;; appear where they are really used.  HERE with the way if works,
+;; because it will not catch nested lets!
 
 (defunique (map-exp isolate-non-series) (exp vars)
   (cl:let ((prolog-exps nil)
@@ -1730,12 +1808,14 @@
         (values (nreverse prolog-exps) body-exp (nreverse new-aux))))))
 
 ;; FRAGMENTATION
-;;note that this does implicit mapping when appropriate.  Note also that it
-;;only maps the absolute minimum necessary.  This is to ensure that things
-;;will come out the same no matter how they were syntactically expresssed in
-;;the input.  Also mapping of special forms other than if is not allowed.
-;;If it were it could lead to all kinds of problems with binding scopes and
-;;scopes for gos and the like.
+;;
+;; note that this does implicit mapping when appropriate.  Note also
+;; that it only maps the absolute minimum necessary.  This is to
+;; ensure that things will come out the same no matter how they were
+;; syntactically expresssed in the input.  Also mapping of special
+;; forms other than if is not allowed. If it were it could lead to all
+;; kinds of problems with binding scopes and scopes for gos and the
+;; like.
 
 (defunique (isolate-non-series fragify) (n code)
   (cl:multiple-value-bind (exp free-ins free-outs)
@@ -1832,7 +1912,7 @@
         (T (cons (if (consp (car arg)) (cadar arg) (car arg))
                  (copy-list (cddr arg))))))
 
-;Important that this allows extra args and doesn't check.
+;; Important that this allows extra args and doesn't check.
 (cl:defun funcall-frag (frag values)
   (mapc #'(lambda (v a) (+dflow (retify v) a)) values (args frag))
   (+frag frag))
@@ -1845,12 +1925,13 @@
           #+:lispworks '(CLOS::VARIABLE-REBINDING)
           #-:lispworks nil))
 
-;;This takes a list of forms that may have documentation and/or
-;;declarations in the initial forms.  It parses the declarations and
-;;returns the remaining forms followed by the parsed declarations.  The
-;;list allowed-dcls specifies what kinds of declarations are allowed.
-;;Error messages are given if any other kind of declaration is found.
-;;Each allowed-dcl must be one of the symbols declared special below.
+;; This takes a list of forms that may have documentation and/or
+;; declarations in the initial forms.  It parses the declarations and
+;; returns the remaining forms followed by the parsed declarations.
+;; The list allowed-dcls specifies what kinds of declarations are
+;; allowed. Error messages are given if any other kind of declaration
+;; is found. Each allowed-dcl must be one of the symbols declared
+;; special below.
 (cl:defun decode-dcls (forms allowed-dcls)
   (cl:let ((doc nil) (ignores nil) (types nil) (props nil)
            (opts nil) (off-line-ports nil) (no-complaints nil)
@@ -1888,73 +1969,74 @@
               (T (setq no-complaints (nconc no-complaints (list d)))))))
     (values-list (cons forms (mapcar #'symbol-value allowed-dcls)))))
 
-;                         ---- MERGING A GRAPH ----
+;;;;                         ---- MERGING A GRAPH ----
 
-;This proceeds in several phases
-; (1) check for series/non-series type conflicts.  This operates in
-;     one of two different ways depending on the value of
-;     *SERIES-IMPLICIT-MAP*.  If this control variable is non-nil then:
-;     (a) If a frag that does not process any series at all 
-;         (i.e., came from totally non-series stuff in the source) receives
-;         a series for any of its inputs, then it was implicitly mapped
-;         by isolate-non-series. (Note, if the output is not connected to 
-;         anything, it is marked as being forced to run.)
-;     (b) If a non-series is supplied where a series is expected, we
-;         coerce it into an infinite series of the single value.
-;     Whether or not *SERIES-IMPLICIT-MAP* is non-nil we then:
-;     (a) if a series is supplied where a non-series is expected,
-;         issue a restriction violation warning.
-;         It would not be in the spirit of things to create a physical series.
-;         And would be very hard to boot.
-;     (b) if a non-series is supplied where a series is expected,
-;         assume that this non-series item is really a physical series and
-;         add a physical interface.  (Note this cannot happen when
-;         *SERIES-IMPLICIT-MAP* is non-nil.)
-; (2) Do substitutions to get rid of trivial frags representing constant values and
-;     references to variables.
-; (2.5) get rid of dead code.
-; (3) Scan the graph to find places where the expression can be split because it is
-;     in disconnected places or there is an isolated dflow touching a non-series
-;     or off-line port.  If the graph cannot be split, then it consists solely of
-;     dflow connecting on-line ports.  A list structure is created showing all of
-;     the split points that will be merged in the next step.
-; (4) The structure created above is evaluated doing a sequence of merge steps
-;     that reduces the whole expression to a single frag.
+;;; This proceeds in several phases
+;;;  (1) check for series/non-series type conflicts.  This operates in
+;;;      one of two different ways depending on the value of
+;;;      *SERIES-IMPLICIT-MAP*.  If this control variable is non-nil then:
+;;;      (a) If a frag that does not process any series at all 
+;;;          (i.e., came from totally non-series stuff in the source) receives
+;;;          a series for any of its inputs, then it was implicitly mapped
+;;;          by isolate-non-series. (Note, if the output is not connected to 
+;;;          anything, it is marked as being forced to run.)
+;;;      (b) If a non-series is supplied where a series is expected, we
+;;;          coerce it into an infinite series of the single value.
+;;;      Whether or not *SERIES-IMPLICIT-MAP* is non-nil we then:
+;;;      (a) if a series is supplied where a non-series is expected,
+;;;          issue a restriction violation warning.
+;;;          It would not be in the spirit of things to create a physical series.
+;;;          And would be very hard to boot.
+;;;      (b) if a non-series is supplied where a series is expected,
+;;;          assume that this non-series item is really a physical series and
+;;;          add a physical interface.  (Note this cannot happen when
+;;;          *SERIES-IMPLICIT-MAP* is non-nil.)
+;;;  (2) Do substitutions to get rid of trivial frags representing constant values and
+;;;      references to variables.
+;;;  (2.5) get rid of dead code.
+;;;  (3) Scan the graph to find places where the expression can be split because it is
+;;;      in disconnected places or there is an isolated dflow touching a non-series
+;;;      or off-line port.  If the graph cannot be split, then it consists solely of
+;;;      dflow connecting on-line ports.  A list structure is created showing all of
+;;;      the split points that will be merged in the next step.
+;;;  (4) The structure created above is evaluated doing a sequence of merge steps
+;;;      that reduces the whole expression to a single frag.
+;;;
+;;; since implicit mapping is a bit tricky, but quite possibly the
+;;; must useful single part of the series macro package, it deserves a
+;;; few words.  To understand what happens, some initial definitions
+;;; are necessary.  First, a compile-time-known series function is one
+;;; of the predefiend series functions or a function DEFUNed with an
+;;; optimizable-series-function declaration. (There may be lots of
+;;; other functions around manipulating series, but that is not
+;;; relevant to the implicit mapping that is going on here.) A
+;;; compile-time-known series value is a series output of a
+;;; compile-time-known series function or such an output bound to a
+;;; variable by one of the forms below.  A compile-time-known series
+;;; input is a series input of a compile-time-known series function.
+;;;
+;;; Every non-compile-time-known function that receives a
+;;; compile-time-known series value as an input is mapped.  Note that
+;;; once a non-compile-time-known function is mapped, the result is a
+;;; compile-time-known series function this may cause ;more mapping to
+;;; occur. Special forms are never mapped.  This is flagged as an
+;;; error if it appears that it needs to be done.  Note that
+;;; non-series functions that appear in a context where their value is
+;;; not used, are flagged to indicate that they must be run anyway.
+;;; This carries through it they are mapped.
+;;;
+;;; In addition to the above, any non-series value that appears where
+;;; a series is expected is automatically converted into an infinite
+;;; series of that value.  If you side-effects are involved, you might
+;;; want multiple evaluation.  However, you will have to specifically
+;;; indicate this using map-fn or something.  (This may not be the
+;;; best default in many ways, but it is the only way to make things
+;;; come out the same without depending on the exact syntactic form of
+;;; the input.  For instance note that INCF expands into a let in some
+;;; lisps and this would force the let to be in a separate expression
+;;; even though it does not look like it at first glance.)
 
-;since implicit mapping is a bit tricky, but quite possibly the must useful
-;single part of the series macro package, it deserves a few words.  To
-;understand what happens, some initial definitions are necessary.  First, a
-;compile-time-known series function is one of the predefiend series functions
-;or a function DEFUNed with an optimizable-series-function declaration.
-;(There may be lots of other functions around manipulating series, but that
-;is not relevant to the implicit mapping that is going on here.) A
-;compile-time-known series value is a series output of a compile-time-known
-;series function or such an output bound to a variable by one of the forms
-;below.  A compile-time-known series input is a series input of a
-;compile-time-known series function.
-
-;Every non-compile-time-known function that receives a compile-time-known
-;series value as an input is mapped.  Note that once a
-;non-compile-time-known function is mapped, the result is a
-;compile-time-known series function this may cause ;more mapping to occur.
-;Special forms are never mapped.  This is flagged as an error if it
-;appears that it needs to be done.  Note that non-series functions
-;that appear in a context where their value is not used, are flagged
-;to indicate that they must be run anyway.  This carries through it
-;they are mapped.
-
-;In addition to the above, any non-series value that appears where
-;a series is expected is automatically converted into an infinite series
-;of that value.  If you side-effects are involved, you might want multiple
-;evaluation.  However, you will have to specifically indicate this
-;using map-fn or something.  (This may not be the best default in many
-;ways, but it is the only way to make things come out the same without
-;depending on the exact syntactic form of the input.  For instance
-;note that INCF expands into a let in some lisps and this would force
-;the let to be in a separate expression even though it does not look
-;like it at first glance.)
-
-;As an example of all the above consider the following.
+;;; As an example of all the above consider the following.
 #|
 (let* ((x (car (scan '((1) (2) (3)))))
        (y (1+ x))
@@ -1963,7 +2045,7 @@
   (print z)
   (collect (list x (catenate #Z(a) (gensym)))))
 |#
-;is equivalent to
+;;; is equivalent to
 #|
 (let* ((x (#Mcar (scan '((1) (2) (3)))))
        (y (#M1+ x))
@@ -1973,14 +2055,15 @@
   (collect (#Mlist x (catenate #Z(a) (series (gensym))))))
 |#
 
-;Note that compile-time-known series functions are never mapped.
-;Therefore (collect (collect (scan (scan x)))) is not equivalent to
-;(collect (mapping ((y (scan x))) (collect (scan y)))).  You have to
-;write the latter if you want it.  Also while series/non-series conflicts
-;are less likely to arise, there is no guarantee that the
-;restrictions will be satisfied after implicit mapping is applied.
+;;; Note that compile-time-known series functions are never
+;;; mapped. Therefore (collect (collect (scan (scan x)))) is not
+;;; equivalent to (collect (mapping ((y (scan x))) (collect (scan
+;;; y)))).  You have to write the latter if you want it.  Also while
+;;; series/non-series conflicts are less likely to arise, there is no
+;;; guarantee that the restrictions will be satisfied after implicit
+;;; mapping is applied.
 
-;               (1) CHECK-FOR SERIES/NON-SERIES CONFLICTS.
+;;;;               (1) CHECK-FOR SERIES/NON-SERIES CONFLICTS.
 
 (defunique (series-coerce do-coercion) (a)
   (when (off-line-spot a)
@@ -2031,7 +2114,7 @@
                  (cdr (nxts (car (rets f)))))
         (add-dummy-source-frag f)))))
 
-;                     (2) DO SUBSTITUTIONS
+;;;;                     (2) DO SUBSTITUTIONS
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
@@ -2053,11 +2136,12 @@
 
 ) ; end of eval-when
 
-;;This is VERY conservative.  Note if you substitute variables too freely,
-;;you can run into troubles with binding scopes and setqs of the variables
-;;in other places, but just using temporary vars is guaranteed to have the
-;;right semantics all of the time.  Any decent compiler will then minimize
-;;the number of variables actually used at run time.
+;; This is VERY conservative.  Note if you substitute variables too
+;; freely, you can run into troubles with binding scopes and setqs of
+;; the variables in other places, but just using temporary vars is
+;; guaranteed to have the right semantics all of the time.  Any decent
+;; compiler will then minimize the number of variables actually used
+;; at run time.
 (defunique (do-substitution mergify) (&aux code ret killable)
   (dofrags (f)
     (when (and (= (length (rets f)) 1)
@@ -2086,7 +2170,7 @@
               (T (setq killable nil))))
       (if killable (-frag f)))))
 
-;                     (2.5) KILL DEAD CODE
+;;;;                     (2.5) KILL DEAD CODE
 
 (defunique (reap-frag kill-dead-code) (frag)
   (dolist (a (args frag))
@@ -2104,21 +2188,23 @@
       (reap-frag f)))
   (setq *graph* (nreverse *graph*)))
 
-;                           (3) DO SPLITTING
+;;;;                           (3) DO SPLITTING
 
-;;;Splitting cuts up the graph at all of the correct places, and creates a
-;;;lisp expression which, when evaluated will merge everything together.
-;;;Things area done this way so that all of the splitting will happen
-;;;before any of the merging.  This makes error messages better and allows
-;;;all the right code motion to happen easily.
+;;; Splitting cuts up the graph at all of the correct places, and
+;;; creates a lisp expression which, when evaluated will merge
+;;; everything together. Things area done this way so that all of the
+;;; splitting will happen before any of the merging.  This makes error
+;;; messages better and allows all the right code motion to happen
+;;; easily.
 
-;;This splits the graph by dividing it into two parts (part1 and part2)
-;;so that to-follow is in part1, there is no data flow from part2 to
-;;part1 and all of the data flow from part1 to part2 satisfies the
-;;predicate CROSSABLE.
-;;  The splitting is done by marker propagation (using the marker 2).
-;;The algorithm used has the effect of minimizing part1, which among
-;;other things, guarantees that it is fully connected.
+;; This splits the graph by dividing it into two parts (part1 and
+;; part2) so that to-follow is in part1, there is no data flow from
+;; part2 to part1 and all of the data flow from part1 to part2
+;; satisfies the predicate CROSSABLE.
+;;
+;; The splitting is done by marker propagation (using the marker
+;; 2). The algorithm used has the effect of minimizing part1, which
+;; among other things, guarantees that it is fully connected.
 (cl:defun split-after (frag crossable)
   (mark 2 frag)
   (cl:let ((to-follow (list frag)))
@@ -2141,29 +2227,32 @@
     (reset-marks 0)
     (values (nreverse part1) (nreverse part2))))
 
-;This finds internal non-series dflows and splits the graph at that point.
-;It may be necessary to cut more than one dflow when splitting.  Therefore,
-;no matter how we do things, it will always be possible that either of the
-;parts will have more non-series dflow in it.  To see this, note the
-;following example:
+;;; This finds internal non-series dflows and splits the graph at that
+;;; point. It may be necessary to cut more than one dflow when
+;;; splitting.  Therefore, no matter how we do things, it will always
+;;; be possible that either of the parts will have more non-series
+;;; dflow in it.  To see this, note the following example:
 #|(let ((e (scan x)))
     (values (foo (reverse (collect e)))
             (collect-last e (car (bar y))))) |#
-;  The order of frags on the graph is going to be scan, collect, reverse, foo,
-;bar, car, collect-last.  If you start on either the first frag, or the first
-;non-series dflow, or the last frag, or the last dflow, there are going to be
-;another non-series dflow in each half.  (Note starting from the front, the
-;non-series dflow from car to collect-last is going to be pulled into the
-;first part.  And in general, starting from the front puts lots of non-series
-;dflow in the second part.)
-;  The best we can do is construct one part so that it is known that that part
-;is connected.  The method used here ensures that the first part is
-;connected by minimizing it.
-;  Note there is an implicit assumption here that making a cut through
-;a bundle of isolated non-series dflows cannot converted a
-;non-isolated one into an isolated one.  If this could happen, we
-;would fail to detect some problems, and the overall theory would be
-;overly strict.
+;;; The order of frags on the graph is going to be scan, collect,
+;;; reverse, foo, bar, car, collect-last.  If you start on either the
+;;; first frag, or the first non-series dflow, or the last frag, or
+;;; the last dflow, there are going to be another non-series dflow in
+;;; each half.  (Note starting from the front, the non-series dflow
+;;; from car to collect-last is going to be pulled into the first
+;;; part.  And in general, starting from the front puts lots of
+;;; non-series dflow in the second part.)
+;;;
+;;; The best we can do is construct one part so that it is known that
+;;; that part is connected.  The method used here ensures that the
+;;; first part is connected by minimizing it.
+;;;
+;;; Note there is an implicit assumption here that making a cut
+;;; through a bundle of isolated non-series dflows cannot converted a
+;;; non-isolated one into an isolated one.  If this could happen, we
+;;; would fail to detect some problems, and the overall theory would
+;;; be overly strict.
 
 (defunique (do-non-series-dflow-split non-series-dflow-split) (ret arg)
   (cl:let ((frag1 (fr ret))
@@ -2203,11 +2292,12 @@
       *graph*)))
 
 
-;We have to do non-dflow splitting and non-series-dflow-splitting separately
-;in order to get error messages about non-isolated non-series dflow right.
-;This breaks the expression up at points where there is no data flow
-;between the subexpressions.  Since the size of part1 is minimized it is
-;known that part1 must be fully connected.
+;; We have to do non-dflow splitting and non-series-dflow-splitting
+;; separately in order to get error messages about non-isolated
+;; non-series dflow right. This breaks the expression up at points
+;; where there is no data flow between the subexpressions.  Since the
+;; size of part1 is minimized it is known that part1 must be fully
+;; connected.
 
 (cl:defun disconnected-split (*graph*)
   (doing-splitting1
@@ -2221,26 +2311,31 @@
                                 (cdr part2)
                                 (list part2))))))))
 
-;  The following breaks the expression up at all the points where there is no series
-;data flow between the subexpressions.  Non-series port isolation
-;guarantees that this split is possible, cutting only non-series dflows.
-;(If there is no data flow, you might not have to cut any data flow.)  If
-;*graph* is a complete expression (i.e., one that does not have any series
-;inputs or outputs overall), then the subexpressions cannot have external
-;series inputs or outputs.
-;  Non-series splitting typically breaks the expression up into a large
-;number of fragments.  Great care is taken to make sure that these
-;fragments will be reassembled without changing their order.  This is
-;important so that the user's side-effects will look reasonable.  Careful
-;attention has to be paid to the dflow constraints when figuring out where
-;to put the series subexpressions.  They are put where the last fn in them
-;suggests, within the limits of dflow.
-;  Note that the only way the user can write something that has some
-;side-effects is to write a side-effect expression that turns into a
-;non-series-computation (via isolate-non-series) or to write something in a
-;functional argument to a higher-order series function.  the functions here
-;make things come out pretty well in the first case; there is not much
-;anybody could do about the second case.
+;; The following breaks the expression up at all the points where
+;; there is no series data flow between the subexpressions.
+;; Non-series port isolation guarantees that this split is possible,
+;; cutting only non-series dflows. (If there is no data flow, you
+;; might not have to cut any data flow.)  If *graph* is a complete
+;; expression (i.e., one that does not have any series inputs or
+;; outputs overall), then the subexpressions cannot have external
+;; series inputs or outputs.
+;;
+;; Non-series splitting typically breaks the expression up into a
+;; large number of fragments.  Great care is taken to make sure that
+;; these fragments will be reassembled without changing their order.
+;; This is important so that the user's side-effects will look
+;; reasonable.  Careful attention has to be paid to the dflow
+;; constraints when figuring out where to put the series
+;; subexpressions.  They are put where the last fn in them suggests,
+;; within the limits of dflow.
+;;
+;; Note that the only way the user can write something that has some
+;; side-effects is to write a side-effect expression that turns into a
+;; non-series-computation (via isolate-non-series) or to write
+;; something in a functional argument to a higher-order series
+;; function.  the functions here make things come out pretty well in
+;; the first case; there is not much anybody could do about the second
+;; case.
 
 (definline order-num (frags)
   (position (car (last frags)) *graph*))
@@ -2265,47 +2360,53 @@
         (T (list form))))
 
 
-;At this next stage, we split based on off-line ports.  (Note that all
-;non-series splitting must be totally complete at this time.)  Several
-;other things are important to keep in mind.  First, whenever we split on
-;an off-line output that has more than one dflow from it to on-line ports,
-;we insert a dummy identity frag so that there will be only one dflow from
-;the off-line port to on-line ports (the multiple dflows come from the
-;output of the dummy frag).  There are three benefits to this.  First,
-;doing this allows us to make the split cutting only one dflow arc.  This
-;guarantees that both parts remain connected and therefore we don't have to
-;call disconnected-split again.
-;  Second, when checking for isolation when doing splitting at the
-;same time, we need to have the property that doing a split cannot
-;cause a non-isolated arc to become isolated.  If we cut more than one
-;series dflow when splitting we could make something else be isolated.
-;Consider the program below.
+;; At this next stage, we split based on off-line ports.  (Note that all
+;; non-series splitting must be totally complete at this time.)  Several
+;; other things are important to keep in mind.  First, whenever we split on
+;; an off-line output that has more than one dflow from it to on-line ports,
+;; we insert a dummy identity frag so that there will be only one dflow from
+;; the off-line port to on-line ports (the multiple dflows come from the
+;; output of the dummy frag).  There are three benefits to this.  First,
+;; doing this allows us to make the split cutting only one dflow arc.  This
+;; guarantees that both parts remain connected and therefore we don't have to
+;; call disconnected-split again.
+;;
+;; Second, when checking for isolation when doing splitting at the
+;; same time, we need to have the property that doing a split cannot
+;; cause a non-isolated arc to become isolated.  If we cut more than
+;; one series dflow when splitting we could make something else be
+;; isolated. Consider the program below.
 #|(let ((e (split #'plusp (scan x))))
     (collect (#M+ e (f (g e))))) |#
-;Note that the offline output of split is isolated, but neither the
-;input of f or the output of g is isolated.  If you cut both dflows
-;from the split when doing a split, these two ports look isolated in
-;the part they are in.
-;  Third, the dummy frag helps keep things straight during later
-;merging.  The key problem is that if there is more than one
-;on-line destination port, then we must make sure that
-;they stay on-line, because they may not be isolated.  The dummy frag
-;essentially records the requirement that the destinations must keep
-;in synchrony.
-;  Note that when splitting, things will come out exactly the same no
-;matter which part is minimized, because the whole expression is
-;connected and there is no non-series dflow.  As a result, there
-;cannot be more than one way to split the expression---Every function
-;must be forced to one half or the other.
-;  By the same argument used with regard to non-series dflow, either
-;part can still have off-line ports in it that have not been split on.
-;  Note that even if the whole does not have any external series
-;ports, the two pieces can.  At least one will be off-line, the other
-;can be on-line.  Note that if the splitting is being done based on an
-;off-line input, then the output in part one can be used in more than
-;one place.  In particular, it can be used by another off-line input
-;which is now still in part1.  This forces complex merging cases
-;to be handled.
+;; Note that the offline output of split is isolated, but neither the
+;; input of f or the output of g is isolated.  If you cut both dflows
+;; from the split when doing a split, these two ports look isolated in
+;; the part they are in.
+;;
+;; Third, the dummy frag helps keep things straight during later
+;; merging.  The key problem is that if there is more than one on-line
+;; destination port, then we must make sure that they stay on-line,
+;; because they may not be isolated.  The dummy frag essentially
+;; records the requirement that the destinations must keep in
+;; synchrony.
+;;
+;; Note that when splitting, things will come out exactly the same no
+;; matter which part is minimized, because the whole expression is
+;; connected and there is no non-series dflow.  As a result, there
+;; cannot be more than one way to split the expression---Every
+;; function must be forced to one half or the other.
+;;
+;; By the same argument used with regard to non-series dflow, either
+;; part can still have off-line ports in it that have not been split
+;; on.
+;;
+;; Note that even if the whole does not have any external series
+;; ports, the two pieces can.  At least one will be off-line, the
+;; other can be on-line.  Note that if the splitting is being done
+;; based on an off-line input, then the output in part one can be used
+;; in more than one place.  In particular, it can be used by another
+;; off-line input which is now still in part1.  This forces complex
+;; merging cases to be handled.
 
 (defunique (insert-off-line-dummy-frag off-line-split) (ret args)
   (cl:let* ((var (new-var 'oo))
@@ -2371,102 +2472,124 @@
   (non-series-split *graph*))
 
 
-;                         (4) DO MERGING
+;;;;                         (4) DO MERGING
 
-;  The merging of frags into a single frag follows the pattern of splitting
-;determined above.  At the leaves of the tree of splits are subexpressions where
-;some number of frags are connected solely by on-line series data flow.  All these
-;frags are combined into a single frag in one step.  As long as every termination
-;point is connected to every output point, this is a trivial operation.  If not,
-;flags and such have to be inserted to ensure that the result will have the
-;property that all of the outputs are produced as soon as ANY input runs
-;out of elements.
-;  After this is done, things proceed by doing two different kinds of mergings
-;based on the two different types of splitting.  One case is particularly
-;simple.  Merging frags connect by non-series data flow or no data flow at
-;all, is trivial.
-;  Merging frags connected by series dflow touching at least one off-line
-;port is where the key difficulties lie.  There are three areas of trouble.
-;First, things have to be carefully arranged so that termination will work out
-;right in situations where not every termination point is connected to every
-;output.  Second, if an off-line output is connected to an off-line input,
-;one of the frags has to be turned inside out.
-;  Third, operations concerning these issues and even the simple cases of
-;off-line merging can convert extraneous on-line ports (one not directly
-;participating in the merging) into off-line ports.
-;  (One issue here is that we must be sure that this port is isolated.
-;We know it is, because it cannot be an extraneous port on the frag unless it is
-;either a port on the expression as a whole (and therefore touched by no
-;dflow) or touched by isolated dflow.)
-;  When conversion to off-line happens as part of the internal course of
-;events, it indicates that the code is going to get messy, but need not
-;concern the user.  (In fact, the code may even be quite efficient, it will
-;just look like a real mess.)  Note that if you are just writing a simple
-;series expression that neither reads nor writes a series as a whole, there
-;will be no externally visible series ports, and you need not worry about
-;this issue.
-;  However, when you are defining a new series functions, there are external
-;series ports.  Given that on-line ports are much more usable than off-line
-;ones, it is unfortunate that doing odd things with the termination (for
-;example) can make all your ports be off-line.
+;;; The merging of frags into a single frag follows the pattern of
+;;; splitting determined above.  At the leaves of the tree of splits
+;;; are subexpressions where some number of frags are connected solely
+;;; by on-line series data flow.  All these frags are combined into a
+;;; single frag in one step.  As long as every termination point is
+;;; connected to every output point, this is a trivial operation.  If
+;;; not, flags and such have to be inserted to ensure that the result
+;;; will have the property that all of the outputs are produced as
+;;; soon as ANY input runs out of elements.
+;;;
+;;; After this is done, things proceed by doing two different kinds of
+;;; mergings based on the two different types of splitting.  One case
+;;; is particularly simple.  Merging frags connect by non-series data
+;;; flow or no data flow at all, is trivial.
+;;;
+;;; Merging frags connected by series dflow touching at least one
+;;; off-line port is where the key difficulties lie.  There are three
+;;; areas of trouble. First, things have to be carefully arranged so
+;;; that termination will work out right in situations where not every
+;;; termination point is connected to every output.  Second, if an
+;;; off-line output is connected to an off-line input, one of the
+;;; frags has to be turned inside out.
+;;;
+;;; Third, operations concerning these issues and even the simple
+;;; cases of off-line merging can convert extraneous on-line ports
+;;; (one not directly participating in the merging) into off-line
+;;; ports.
+;;;
+;;; (One issue here is that we must be sure that this port is
+;;; isolated. We know it is, because it cannot be an extraneous port
+;;; on the frag unless it is either a port on the expression as a
+;;; whole (and therefore touched by no dflow) or touched by isolated
+;;; dflow.)
+;;;
+;;; When conversion to off-line happens as part of the internal course
+;;; of events, it indicates that the code is going to get messy, but
+;;; need not concern the user.  (In fact, the code may even be quite
+;;; efficient, it will just look like a real mess.)  Note that if you
+;;; are just writing a simple series expression that neither reads nor
+;;; writes a series as a whole, there will be no externally visible
+;;; series ports, and you need not worry about this issue.
+;;;
+;;; However, when you are defining a new series functions, there are
+;;; external series ports.  Given that on-line ports are much more
+;;; usable than off-line ones, it is unfortunate that doing odd things
+;;; with the termination (for example) can make all your ports be
+;;; off-line.
+;;;
+;;; Two cases are always simple.  If an extraneous input or output
+;;; carries a non-series value, then there is never a problem.  If it
+;;; is an input than it must be available from the very start of
+;;; computation and therefore will always be readable no matter how
+;;; the frags are combined.  If the port is an output, then it does
+;;; not need to be available until after everything is done, and the
+;;; strongly connected check insures that it will be eventually
+;;; computed.
+;;;
+;;; Things are also basically simple if an extraneous input or output
+;;; is off-line.  In this situation, a specific marker says exactly
+;;; where connected computation should be put, and this marker will
+;;; always end up in an appropriate place no matter how the fragments
+;;; are combined. The only thing which requires care is making sure
+;;; that these markers stay at top level.
+;;;
+;;; One problem case, however, is that it is possible for an off-line
+;;; output to be used by an off-line input.  This can cause a splitting
+;;; to happen that ends up in a situation where an off-line output is used
+;;; both internally and externally.  If so, the output has to be
+;;; preserved the first time it is used so that it can be used again.
+;;;
+;;; On the other hand, if an extraneous input or output is on-line,
+;;; significant complexities can arise.  If an extraneous port is
+;;; on-line then it may have to be changed into an off-line
+;;; port. Fortunately, things are arranged so that a graph is never
+;;; split by breaking an on-line to on-line data flow.  However, an
+;;; on-line port can be on one end of a broken data flow.
+;;; Nevertheless, most instances of extraneous on-line ports come from
+;;; weird lambda-series bodies. Except in simple situations extraneous
+;;; on-line ports are not supported unless they come from complete
+;;; expressions.
+;;;
+;;; Consider the simplest mergings first.
+;;;
+;;; Two frags are connected by non-series dflow (or no dflow). (When
+;;; processing complete series expressions it will always be the case
+;;; that both frags are non-series frags.  Further, the way splitting
+;;; happens guarantees that any series ports are direct ports of the
+;;; expression as a whole.)
+;;;
+;;; Merging is trivial as long as at least one of the frags is
+;;; non-series.  If one has series ports, it can be left totally
+;;; alone.  The other can be placed entirely in the prolog (if it is
+;;; first) or epilog.
+;;;
+;;; If both frags are series frags, things are complex.  You must
+;;; evaluate the first one first and completely to get the non-series
+;;; output(s) (if any) that are used by the second.  This will force
+;;; the first frag to make all its outputs normally.  Then you have to
+;;; evaluate the other one.  To do this, one frag or the other has to
+;;; be severely distorted.  This process will make all of the series
+;;; ports on the modified frag be off-line.
+;;;
+;;; The program below converts the first frag into a tight loop that
+;;; runs in the beginning of the body.  (This is essential to preserve
+;;; the invariant that off-line-spots are only in bodies, but it makes
+;;; a real mess and forces all the series inputs off-line.  Also note
+;;; the way the prolog of the other frag has to be moved.)  (Note that
+;;; the off-line ports created are isolated, because they are on the
+;;; outside of the expression as a whole.)
 
-;  Two cases are always simple.  If an extraneous input or output
-;carries a non-series value, then there is never a problem.  If it is
-;an input than it must be available from the very start of computation
-;and therefore will always be readable no matter how the frags are
-;combined.  If the port is an output, then it does not need to be
-;available until after everything is done, and the strongly connected
-;check insures that it will be eventually computed.
-;  Things are also basically simple if an extraneous input or output is
-;off-line.  In this situation, a specific marker says exactly where
-;connected computation should be put, and this marker will always end
-;up in an appropriate place no matter how the fragments are combined.
-;The only thing which requires care is making sure that these
-;markers stay at top level.
 
-;  One problem case, however, is that it is possible for an off-line
-;output to be used by an off-line input.  This can cause a splitting
-;to happen that ends up in a situation where an off-line output is used
-;both internally and externally.  If so, the output has to be
-;preserved the first time it is used so that it can be used again.
-;  On the other hand, if an extraneous input or output is on-line,
-;significant complexities can arise.  If an extraneous port is
-;on-line then it may have to be changed into an off-line port.
-;Fortunately, things are arranged so that a graph is never split by
-;breaking an on-line to on-line data flow.  However, an on-line port
-;can be on one end of a broken data flow.  Nevertheless, most
-;instances of extraneous on-line ports come from weird lambda-series bodies.
-;Except in simple situations extraneous on-line ports are not
-;supported unless they come from complete expressions.
-
-;    Consider the simplest mergings first.
-
-;  Two frags are connected by non-series dflow (or no dflow).
-;(When processing complete series expressions it will always be the case that
-;both frags are non-series frags.  Further, the way splitting happens
-;guarantees that any series ports are direct ports of the expression as a whole.)
-;  Merging is trivial as long as at least one of the frags is non-series.  If
-;one has series ports, it can be left totally alone.  The other can be placed
-;entirely in the prolog (if it is first) or epilog.
-;  If both frags are series frags, things are complex.  You must evaluate
-;the first one first and completely to get the non-series output(s) (if
-;any) that are used by the second.  This will force the first frag to make
-;all its outputs normally.  Then you have to evaluate the other one.  To do
-;this, one frag or the other has to be severely distorted.  This process
-;will make all of the series ports on the modified frag be off-line.
-;  The program below converts the first frag into a tight loop that runs in
-;the beginning of the body.  (This is essential to preserve the invariant that
-;off-line-spots are only in bodies, but it makes a real mess and forces all
-;the series inputs off-line.  Also note the way the prolog of the other frag
-;has to be moved.)  (Note that the off-line ports created are
-;isolated, because they are on the outside of the expression as a whole.)
-
-
-;;This is used for the variable renaming part of all kinds of dflow.  Rets
-;;must be saved either if they have no dflow from them (they are outputs of
-;;the whole top level expression) or if there is a dflow to a frag that is not
-;;currently being dealt with.  The functional argument specifies which dflow
-;;are which.
+;; This is used for the variable renaming part of all kinds of dflow.
+;; Rets must be saved either if they have no dflow from them (they are
+;; outputs of the whole top level expression) or if there is a dflow
+;; to a frag that is not currently being dealt with.  The functional
+;; argument specifies which dflow are which.
 (cl:defun handle-dflow (source handle-this-dflow)
   (dolist (ret (rets source))
     (cl:let ((ret-killable (not (null (nxts ret)))))
@@ -2517,65 +2640,82 @@
     (loop (if (null frags) (return frag))
           (setq frag (non-series-merge frag (pop frags))))))
 
-;  A graph of many frags is connected solely by on-line data flow.
-;(Here, even when operating on complete series expressions, it is expected
-;that there are extraneous series inputs and outputs, and that
-;internally used series ports can be used outside as well.  However, every
-;external use must be isolated.)
-;  Here things are in general simple, and everything can just be merged
-;together in an order compatible with the dflow and everything will be fine
-;and all of the extraneous ports will be left alone.
-;  However, if there are any termination points that are not connected to
-;every output point, we have a problem.  Things have to be altered so
-;that these termination points don't prematurely stop things they should not
-;stop.  This is done by inserting flags that delay termination until the
-;correct time.  This is done as follows.
-;  (1) find each termination point and output point.  Test each termination
-;point to see whether it is total (i.e., is connected to every output and
-;therefore calls for stopping everything.)  Total termination points can act
-;by simply branching to END when they trigger.
-;  If a termination point is not total, then a flag has to be gensymed
-;corresponding to it and the point has to be changed so that it sets the flag
-;(which starts with a value of NIL) to T instead of branching when exit
-;occures.  For non-total termination points that are series inputs, this
-;means that the input will have to become an off-line port that catches
-;termination.
-;  (2) for each non-total termination point we have to figure out what frags
-;it controls.  First, frags the termination point has data flow to are forced
-;to stop when it stops.  Second, once EVERY output a frag has data flow to
-;has been completed, the frag can stop too.
-;  (In addition, we must note that once every frag has stopped, the loop as a
-;whole should stop.  If there is at least one total termination point and
-;there is at least one output point that is controlled only by total termination
-;points, then we don't have to do anything special.  When a total termination
-;point stops everything stops and we always have to continue computing as
-;long as none of the total termination points have stopped.  However, if the
-;above is not the case, we have to add a new termination test that checks to
-;see if all of the outputs have completed, and stop everything.)
-;  (2a) follow the dflow from each non-total termination point and note that
-;the termination point itself, and every frag you reach must stop as soon as
-;the termination point does.  This is done by adding FLAG into the list of
-;control flags for each frag.  (This list is an implicit OR that specifies
-;when to STOP executing the frag)
-;  (2b) Start at each output point and get the set of flags that control it.
-;Follow the dflow backward from each output point and note what frags feed
-;into it.  Once this is done, create a new entry
-; (AND (OR . output-flag-set1) (OR . output-flag-set2) ...)
-;in the list of control flags.
-;  The above can be done in two highly efficient marking sweeps.  The first
-;of which also determines whether there are any non-total termination points
-;we have to worry about.
-;  Finally, we simplify each of the control expressions and do the
-;merging inserting the correct tests of flags.  (I could think about
-;sorting the frags as much as possible consistent with dflow so that
-;adjacent frags have the same expressions, however, this might be bad with
-;respect to side-effects.)
+;;; A graph of many frags is connected solely by on-line data
+;;; flow. (Here, even when operating on complete series expressions,
+;;; it is expected that there are extraneous series inputs and
+;;; outputs, and that internally used series ports can be used outside
+;;; as well.  However, every external use must be isolated.)
+;;;
+;;; Here things are in general simple, and everything can just be
+;;; merged together in an order compatible with the dflow and
+;;; everything will be fine and all of the extraneous ports will be
+;;; left alone.
+;;;
+;;; However, if there are any termination points that are not
+;;; connected to every output point, we have a problem.  Things have
+;;; to be altered so that these termination points don't prematurely
+;;; stop things they should not stop.  This is done by inserting flags
+;;; that delay termination until the correct time.  This is done as
+;;; follows.
+;;;
+;;; (1) find each termination point and output point.  Test each
+;;; termination point to see whether it is total (i.e., is connected
+;;; to every output and therefore calls for stopping everything.)
+;;; Total termination points can act by simply branching to END when
+;;; they trigger.
+;;;
+;;; If a termination point is not total, then a flag has to be
+;;; gensymed corresponding to it and the point has to be changed so
+;;; that it sets the flag (which starts with a value of NIL) to T
+;;; instead of branching when exit occures.  For non-total termination
+;;; points that are series inputs, this means that the input will have
+;;; to become an off-line port that catches termination.
+;;;
+;;; (2) for each non-total termination point we have to figure out
+;;; what frags it controls.  First, frags the termination point has
+;;; data flow to are forced to stop when it stops.  Second, once EVERY
+;;; output a frag has data flow to has been completed, the frag can
+;;; stop too.
+;;;
+;;; (In addition, we must note that once every frag has stopped, the
+;;; loop as a whole should stop.  If there is at least one total
+;;; termination point and there is at least one output point that is
+;;; controlled only by total termination points, then we don't have to
+;;; do anything special.  When a total termination point stops
+;;; everything stops and we always have to continue computing as long
+;;; as none of the total termination points have stopped.  However, if
+;;; the above is not the case, we have to add a new termination test
+;;; that checks to see if all of the outputs have completed, and stop
+;;; everything.)
+;;;
+;;; (2a) follow the dflow from each non-total termination point and
+;;; note that the termination point itself, and every frag you reach
+;;; must stop as soon as the termination point does.  This is done by
+;;; adding FLAG into the list of control flags for each frag.  (This
+;;; list is an implicit OR that specifies when to STOP executing the
+;;; frag)
+;;;
+;;; (2b) Start at each output point and get the set of flags that
+;;; control it. Follow the dflow backward from each output point and
+;;; note what frags feed into it.  Once this is done, create a new
+;;; entry (AND (OR . output-flag-set1) (OR . output-flag-set2) ...) in
+;;; the list of control flags.
+;;;
+;;; The above can be done in two highly efficient marking sweeps.  The
+;;; first of which also determines whether there are any non-total
+;;; termination points we have to worry about.
+;;;
+;;; Finally, we simplify each of the control expressions and do the
+;;; merging inserting the correct tests of flags.  (I could think
+;;; about sorting the frags as much as possible consistent with dflow
+;;; so that adjacent frags have the same expressions, however, this
+;;; might be bad with respect to side-effects.)
 
-;flag meanings
-;1- marks region of interest.
-;2- marks places to start output point sweep.
-;4- marks places to start termination point sweep.
-;4- mark individual output points and termination points.
+;;; flag meanings
+;;; 1- marks region of interest.
+;;; 2- marks places to start output point sweep.
+;;; 4- marks places to start termination point sweep.
+;;; 4- mark individual output points and termination points.
 
 (defunique (make-set-flag-rather-than-terminate check-termination) (frag)
   (cl:let* ((B (new-var 'bb))
@@ -2591,7 +2731,7 @@
     (setf (body frag) (nconc (body frag) `((go ,C) ,B (setq ,flag T) ,C)))
     flag))
 
-;;the challenge here is making as simple a test as possible
+;; the challenge here is making as simple a test as possible
 (cl:defun make-test (and-of-ors)
   (if (null and-of-ors)
       T
@@ -2616,8 +2756,8 @@
             ((null (cdr top-level-or)) (car top-level-or))
             (T `(or . ,(nreverse top-level-or)))))))
 
-;;this function assumes that on-line-merge will merge frags in the order they
-;;are on *graph*.
+;; this function assumes that on-line-merge will merge frags in the
+;; order they are on *graph*.
 (defunique (check-termination on-line-merge) (*graph*)
   (block nil
     (cl:let ((counter 8.) (all-term-counters 0)
@@ -2644,7 +2784,7 @@
           (setq all-term-counters (+ all-term-counters counter))
           (setq counter (* 2 counter))))
 
-;;;first sweep to test connection of terms to outputs.
+;;; first sweep to test connection of terms to outputs.
       (dofrags (f 5)                                ; 5 = 1+4
         (cl:let ((current-marks (logandc1 2 (marks f)))) ;strips out 2 bit
           (dolist (a (all-nxts f))
@@ -2658,14 +2798,14 @@
               (pushnew tentry problem-terminations)))))
       (if (null problem-terminations) (return nil))
 
-;;;make the flags and get them initialized
+;;; make the flags and get them initialized
      (dolist (tentry problem-terminations)
        (cl:let ((flag (make-set-flag-rather-than-terminate (cadr tentry))))
          (dolist (oentry outputs)
            (when (marked-p (car tentry) (cadr oentry))
              (push flag (cddr oentry))))))
 
-;;;second sweep to test connection of everything to outputs.
+;;; second sweep to test connection of everything to outputs.
       (cl:let ((*graph* (reverse *graph*)))
         (dofrags (f 3)                                       ; 3 = 1+2
           (cl:let ((current-marks (logandc1 4 (marks f)))) ;strips out 4 bit
@@ -2676,7 +2816,7 @@
       (when all-terminated
         (push `(if ,all-terminated (go ,END)) (body (car *graph*))))
 
-;;;add conditionalization to each frag
+;;; add conditionalization to each frag
       (setq conditions
             (mapcar #'(lambda (f)
                         (make-test
@@ -2685,7 +2825,8 @@
                                                      (marked-p (car e) f))
                                                  outputs))))
                     *graph*))
-      ;could do some sorting here based on similarity between conditions.
+      ;; could do some sorting here based on similarity between
+      ;; conditions.
       (dotimes (i (length *graph*))
         (cl:let ((condition (elt conditions i))
                  (frag (elt *graph* i)))
@@ -2714,102 +2855,134 @@
       (reset-marks 0)
       (maybe-de-series frag))))
 
-;  Two frags are connected by dflow touching at least one off-line port.
-;(Even in complete expressions, there can be extraneous series
-;ports.  (e.g., going to other subexpressions created in other splits.)
-;However, any dflow touching these ports must be isolated.)
-;Note that if the output port is on-line there may be other dflow starting on
-;it other than the one in question.
-;  The first difficulty in this case involves termination.  With regard to the
-;second frag, there is no problem.  If the second frag is the first to stop,
-;then it must have produced all its outputs.  If the first frag is the first to
-;stop, then it must have produced all its outputs which either means that the
-;second must also stop, or the second will catch the termination of the first.
-;  Further there is no trouble with the first frag as long as either (1) the
-;second frag has no termination points other than the one in question (i.e.,
-;has no series inputs without off-line-exits other than possibly the
-;one in question and cannot by itself terminate) or (2) the first frag does
-;not have any output points other than the one in question (i.e., has no
-;other outputs, and does not have the must-run flag set) and this output is
-;not used anywhere other than by the input in question.  In case (1) running
-;the second frag forces the complete running of the first frag.  In case (2),
-;it does not matter if the first frag is run completely or not.
-;  If neither of the cases above applies, we have to do some hard work.  We
-;know that the destination frag is a termination point and either, (a) the
-;source frag has a non-series output or has the must-run flag set or (b)
-;there is data flow from series outputs of the source frag to more than one
-;place (i.e., either fan out from one, or dflow from two different ones).
-;  In case (a) things are simple, we just have to change the destination
-;frag so that it always reads all of the elements of the input in question.
-;This can be done by catching the termination of the frag caused by other
-;things, and using a flag to force execution to continue until the input
-;runs out.  This transformation causes all the other series ports to become
-;off-line.
-;  Case (b) is more complex, the source frag might not be able to terminate
-;at all, and even if it can, it might not terminate soon enough.  We must
-;look at all of the destinations of dflow from it (not just the one we are
-;looking at now) and see which ones of them are termination points.  What
-;we want is for the source to terminate exactly when all of the
-;destinations terminate (if ever).  If at least one of the destinations is
-;not a termination point, then we can proceed exactly as in case (a).  If
-;none of them are, then we can still proceed the same, but we have to add a
-;test to the first frag that causes termination as soon as all of the
-;destinations have stopped.  This requires flags to be set in the destinations.
-;  (Note that we could probably use simpler frags and things if we figured
-;out all the places where we were going to have to do this before merging
-;the on-line subexpressions in the first place.  However, this would make the
-;code more complex and is not worth doing given that it is rather unlikely
-;for series expressions to have more than one output in any case.  Note that
-;the prior version of this macro package just outlawed every problematical
-;case.  Doing things with more efficiency is a possible future research
-;direction.)
-
-;  The second difficulty involves actually doing the merging.
-;  A- The ret is off-line and the arg is on-line
-;There are two basic ways in which this can be handled.
-; A1- The most straightforward way is to insert the arg frag into the
-;off-line-spot in the ret-frag.  This is very simple and allows on-line inputs
-;and outputs of the ret-frag to remain unchanged.  However, on-line inputs and
-;outputs of the arg-frag are forced to become off-line.
-; A2- The ret-frag is turned inside out and converted into an enumerator, which
-;has on-line data flow to the arg-frag.  This requires the use of a flag
-;variable, and the making off-line of any on-line inputs or outputs of the
-;ret-frag.  However, it allows any extraneous inputs and outputs of the arg-frag
-;to remain unchanged.
-; If either of the two frags has no extraneous on-line ports, then the
-;appropriate combination method above is used and everything works out great.
-;If they both have extraneous on-line ports, then which every one has fewer of
-;these ports has them changed to off-line ports and the appropriate process
-;above is then applied.
-;  In either case, special care has to be taken to insure that the off-line
-;output will still exist if it is used some place other than in the arg-frag.
-;(It is possible that it will exist, but will get changed to on-line.  This does
-;not cause confusion since the input it is connected to must be
-;off-line--otherwise there would be only one dflow from the output.)
-
-;  B- The ret is on-line and the arg is off-line.  This case is closely
-;analogous to the one above.  Again, there are two basic ways to proceed.
-; B1- The most straightforward way is to insert the ret frag into the
-;off-line-spot in the arg-frag.  This has the feature that it is very simple and
-;allows all on-line inputs and outputs of the arg-frag to remain unchanged.
-;However, on-line inputs and outputs of the ret-frag are forced to become
-;off-line.
-; B2- The arg-frag is turned inside out and converted into a reducer which
-;receives on-line data flow from the ret-frag.  This requires the use of a flag
-;variable, and it forces off-line any extraneous on-line inputs or outputs of
-;the arg-frag.  However, it allows any extraneous inputs and outputs of the
-;ret-frag to remain unchanged.
-; If either of the two frags has no extraneous ports, then the appropriate
-;combination method above is used and everything works out great.  If the both
-;have extraneous ports then whichever has fewer has them changed to off-line and
-;things proceed as above.
-;  C- the ret and arg are both off-line.  Here it is not possible to
-;simultaneously substitute the frags into each other.  However, it is possible
-;to combine them after A2 is applied to the ret-frag or B2 is applied to the
-;arg-frag.  Again this presents two options and it is possible to preserve
-;either the extraneous ports of the ret-frag or the arg-frag, but not both.
-;  Note we have to be prepared for the general case more often than you might
-;expect, because the combination process can cause ports to become off-line.
+;;; Two frags are connected by dflow touching at least one off-line
+;;; port. (Even in complete expressions, there can be extraneous
+;;; series ports.  (e.g., going to other subexpressions created in
+;;; other splits.) However, any dflow touching these ports must be
+;;; isolated.) Note that if the output port is on-line there may be
+;;; other dflow starting on it other than the one in question.
+;;;
+;;; The first difficulty in this case involves termination.  With
+;;; regard to the second frag, there is no problem.  If the second
+;;; frag is the first to stop, then it must have produced all its
+;;; outputs.  If the first frag is the first to stop, then it must
+;;; have produced all its outputs which either means that the second
+;;; must also stop, or the second will catch the termination of the
+;;; first.
+;;;
+;;; Further there is no trouble with the first frag as long as either
+;;; (1) the second frag has no termination points other than the one
+;;; in question (i.e., has no series inputs without off-line-exits
+;;; other than possibly the one in question and cannot by itself
+;;; terminate) or (2) the first frag does not have any output points
+;;; other than the one in question (i.e., has no other outputs, and
+;;; does not have the must-run flag set) and this output is not used
+;;; anywhere other than by the input in question.  In case (1) running
+;;; the second frag forces the complete running of the first frag.  In
+;;; case (2), it does not matter if the first frag is run completely
+;;; or not.
+;;;
+;;; If neither of the cases above applies, we have to do some hard
+;;; work.  We know that the destination frag is a termination point
+;;; and either, (a) the source frag has a non-series output or has the
+;;; must-run flag set or (b) there is data flow from series outputs of
+;;; the source frag to more than one place (i.e., either fan out from
+;;; one, or dflow from two different ones).
+;;;
+;;; In case (a) things are simple, we just have to change the
+;;; destination frag so that it always reads all of the elements of
+;;; the input in question. This can be done by catching the
+;;; termination of the frag caused by other things, and using a flag
+;;; to force execution to continue until the input runs out.  This
+;;; transformation causes all the other series ports to become
+;;; off-line.
+;;;
+;;; Case (b) is more complex, the source frag might not be able to
+;;; terminate at all, and even if it can, it might not terminate soon
+;;; enough.  We must look at all of the destinations of dflow from it
+;;; (not just the one we are looking at now) and see which ones of
+;;; them are termination points.  What we want is for the source to
+;;; terminate exactly when all of the destinations terminate (if
+;;; ever).  If at least one of the destinations is not a termination
+;;; point, then we can proceed exactly as in case (a).  If none of
+;;; them are, then we can still proceed the same, but we have to add a
+;;; test to the first frag that causes termination as soon as all of
+;;; the destinations have stopped.  This requires flags to be set in
+;;; the destinations.
+;;;
+;;; (Note that we could probably use simpler frags and things if we
+;;; figured out all the places where we were going to have to do this
+;;; before merging the on-line subexpressions in the first place.
+;;; However, this would make the code more complex and is not worth
+;;; doing given that it is rather unlikely for series expressions to
+;;; have more than one output in any case.  Note that the prior
+;;; version of this macro package just outlawed every problematical
+;;; case.  Doing things with more efficiency is a possible future
+;;; research direction.)
+;;;
+;;; The second difficulty involves actually doing the merging.
+;;;
+;;;   A- The ret is off-line and the arg is on-line There are two
+;;;   basic ways in which this can be handled.
+;;;
+;;;  A1- The most straightforward way is to insert the arg frag into
+;;;  the off-line-spot in the ret-frag.  This is very simple and
+;;;  allows on-line inputs and outputs of the ret-frag to remain
+;;;  unchanged.  However, on-line inputs and outputs of the arg-frag
+;;;  are forced to become off-line.
+;;;
+;;;  A2- The ret-frag is turned inside out and converted into an
+;;;  enumerator, which has on-line data flow to the arg-frag.  This
+;;;  requires the use of a flag variable, and the making off-line of
+;;;  any on-line inputs or outputs of the ret-frag.  However, it
+;;;  allows any extraneous inputs and outputs of the arg-frag to
+;;;  remain unchanged.
+;;;
+;;;  If either of the two frags has no extraneous on-line ports, then
+;;;  the appropriate combination method above is used and everything
+;;;  works out great. If they both have extraneous on-line ports, then
+;;;  which every one has fewer of these ports has them changed to
+;;;  off-line ports and the appropriate process above is then applied.
+;;;
+;;; In either case, special care has to be taken to insure that the
+;;; off-line output will still exist if it is used some place other
+;;; than in the arg-frag. (It is possible that it will exist, but will
+;;; get changed to on-line.  This does not cause confusion since the
+;;; input it is connected to must be off-line--otherwise there would
+;;; be only one dflow from the output.)
+;;;
+;;;   B- The ret is on-line and the arg is off-line.  This case is
+;;;   closely analogous to the one above.  Again, there are two basic
+;;;   ways to proceed.
+;;;
+;;;  B1- The most straightforward way is to insert the ret frag into
+;;;  the off-line-spot in the arg-frag.  This has the feature that it
+;;;  is very simple and allows all on-line inputs and outputs of the
+;;;  arg-frag to remain unchanged. However, on-line inputs and outputs
+;;;  of the ret-frag are forced to become off-line.
+;;;
+;;;  B2- The arg-frag is turned inside out and converted into a
+;;;  reducer which receives on-line data flow from the ret-frag.  This
+;;;  requires the use of a flag variable, and it forces off-line any
+;;;  extraneous on-line inputs or outputs of the arg-frag.  However,
+;;;  it allows any extraneous inputs and outputs of the ret-frag to
+;;;  remain unchanged.
+;;;
+;;; If either of the two frags has no extraneous ports, then the
+;;; appropriate combination method above is used and everything works
+;;; out great.  If the both have extraneous ports then whichever has
+;;; fewer has them changed to off-line and things proceed as above.
+;;;
+;;;   C- the ret and arg are both off-line.  Here it is not possible
+;;;   to simultaneously substitute the frags into each other.
+;;;   However, it is possible to combine them after A2 is applied to
+;;;   the ret-frag or B2 is applied to the arg-frag.  Again this
+;;;   presents two options and it is possible to preserve either the
+;;;   extraneous ports of the ret-frag or the arg-frag, but not both.
+;;;
+;;; Note we have to be prepared for the general case more often than
+;;; you might expect, because the combination process can cause ports
+;;; to become off-line.
 
 (cl:defun some-other-termination (arg)
   (or (active-terminator-p (fr arg))
@@ -2818,8 +2991,6 @@
                                 (series-var-p a)
                                 (not (off-line-exit a))))
                        (args (fr arg))))))
-
-;;(eval-when (eval load compile)
 
 (cl:defun find-on-line (syms)
   (do ((s syms (cdr s)) (r nil))
@@ -2934,7 +3105,6 @@
     (setf (body arg-frag)
           (nsubst-inline (body ret-frag) (off-line-spot arg) (body arg-frag)))
     (setf (body ret-frag) nil)))
-;;) ;end of eval-when
 
 (cl:defun off-line-merge (ret-frag ret arg-frag arg)
   (when (and (some-other-termination arg)
@@ -2973,10 +3143,11 @@
                       (substitute-in-input ret arg))))))
   (maybe-de-series (merge-frags ret-frag arg-frag)))
 
-;                        TURNING A FRAG INTO CODE
+;;;;                        TURNING A FRAG INTO CODE
 
-;this takes a non-series frag and makes it into a garden variety chunk of code.
-;It assumes that it will never be called on a frag with any inputs.
+;;; this takes a non-series frag and makes it into a garden variety
+;;; chunk of code. It assumes that it will never be called on a frag
+;;; with any inputs.
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
@@ -3133,9 +3304,7 @@
                (T
                 (values 'sequence nil T))))))
 
-;this tries to get a correct init in situations where NIL won't do.
-;it assumes that like maclisp, all that could really matter is whether
-;something is a fixnum, or float.
+;;; This tries to get a correct init in situations where NIL won't do.
 
 ;; This function converts a type to a "canonical" type.  Mainly meant
 ;; to handle things that have been deftype'd.  We want to convert that
@@ -3258,7 +3427,7 @@
         (cons value (current-alter-info gen))
        value))
 
-  ;;alter-info has priority
+  ;; alter-info has priority
   (cl:defun out-value (ret alter-prop flag-off-line?)
     (cl:let* ((var (var ret))
               (alter-info (cdr (assoc var (alterable (fr ret))))))
@@ -3272,8 +3441,8 @@
                             ,(subst alter '*alt* (car alter-info)))))
                     (alter-prop `(alter-fn ,(car alter-prop)))))))
 
-  ;;This is used to allow a fragment to accept a physical series in lieu of
-  ;;one computed be another frag.
+  ;; This is used to allow a fragment to accept a physical series in
+  ;; lieu of one computed be another frag.
   (cl:defun add-physical-interface (arg)
     (cl:let ((frag (fr arg))
              (var (var arg))
@@ -3298,10 +3467,11 @@
       generator))
 
 
-  ;;This turns a series output into a non-series output returning a physical series.
-  ;;(Note this assumes that if alterability is being propogated, the corresponding
-  ;;input has already been changed using add-physical-interface.  Alter-prop is a
-  ;;cons of the new input var (a physical series) and the var holding the generator.)
+  ;; This turns a series output into a non-series output returning a
+  ;; physical series. (Note this assumes that if alterability is being
+  ;; propogated, the corresponding input has already been changed
+  ;; using add-physical-interface.  Alter-prop is a cons of the new
+  ;; input var (a physical series) and the var holding the generator.)
 
   (cl:defun add-physical-out-interface (ret alter-prop)
     (cl:let* ((frag (fr ret))
@@ -3326,11 +3496,14 @@
           (push new-epilog-code (epilog frag))
           frag))))
 
-;This is used when optimization is not possible.
-;It makes one main physical frag that computes the series returned by frag.
-;(If there is more than one output, then several subsidiary frags have to be
-; created to pick the right values out.)
-;It assumes that actual-args must be a list of variables.
+  ;; This is used when optimization is not possible.
+  ;;
+  ;; It makes one main physical frag that computes the series returned
+  ;; by frag. (If there is more than one output, then several
+  ;; subsidiary frags have to be created to pick the right values
+  ;; out.)
+  ;;
+  ;; It assumes that actual-args must be a list of variables.
 
   
   (defunique (precompute-frag->physical frag->physical) (frag alter-prop-alist)
@@ -3595,14 +3768,15 @@
       (get 'cl:defun 'zwei:definition-function-spec-parser))
 
 
-;                          ---- GATHERERS ----
+;;;;                          ---- GATHERERS ----
 
-;The following functions support gatherers. No optimization ever applies to
-;gatherers except in PRODUCING and GATHERING.  A gatherer is a function of
-;two arguments.  If the second argument is NIL, the first argument is added
-;into the accumulator of the gatherer.  If the second argument is not NIL, the
-;accumulated result is returned.  It is an error to call the gatherer again
-;after the accumulated result has been returned.
+;;; The following functions support gatherers. No optimization ever
+;;; applies to gatherers except in PRODUCING and GATHERING.  A
+;;; gatherer is a function of two arguments.  If the second argument
+;;; is NIL, the first argument is added into the accumulator of the
+;;; gatherer.  If the second argument is not NIL, the accumulated
+;;; result is returned.  It is an error to call the gatherer again
+;;; after the accumulated result has been returned.
 
 (cl:defun next-out (gatherer item)
   (cl:funcall gatherer item nil)
@@ -3611,8 +3785,8 @@
 (cl:defun result-of (gatherer)
   (cl:funcall gatherer nil t))
 
-;;this assumes the frag is a one-in one-out collector and
-;;that if there are wrappers, they are only relevant to the epilog.
+;; this assumes the frag is a one-in one-out collector and that if
+;; there are wrappers, they are only relevant to the epilog.
 (cl:defun gathererify (frag)
   (when (off-line-spot (car (args frag)))
     (convert-to-reducer (car (args frag))))
@@ -3690,7 +3864,7 @@
       (setq body (cl:funcall (eval wrp) body)))
     body))
 
-;                  ---- SERIES FUNCTION LIBRARY ----
+;;;;                  ---- SERIES FUNCTION LIBRARY ----
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
@@ -3776,8 +3950,8 @@
                (setf (gethash call *series-expression-cache*) cached-value))
              cached-value))))
 
-;this forms are useful for making code that comes out one way in the
-;body and another way in the optimizer
+;; this forms are useful for making code that comes out one way in the
+;; body and another way in the optimizer
 
 (defmacro opt-non-opt (f1 f2)
   (if *optimize-series-expressions* f1 f2))
@@ -3812,12 +3986,13 @@
                       (mapcar #'car (car stuff))))))
 
 
-;the next few things are optimizers that hang on standard symbols.
-
-;;Note the cludging we have to do when the first var is a let-series var.
-;;This is necessary in case this value is going to have to be a return value as well.
-;;We really should have done something better about specifing free variable outputs
-;;so that this mess would not be necessary.
+;; The next few things are optimizers that hang on standard symbols.
+;;
+;; Note the cludging we have to do when the first var is a let-series
+;; var. This is necessary in case this value is going to have to be a
+;; return value as well. We really should have done something better
+;; about specifing free variable outputs so that this mess would not
+;; be necessary.
 (cl:defun my-multi-setq (vars value form)
   (cl:let* ((type (if (null (cdr vars))
 		      t
@@ -4033,19 +4208,20 @@
 (setf (get 'cl:let* 'series-optimizer) (get 'let* 'series-optimizer))
 (setf (get 'cl:let* 'returns-series) (get 'let* 'returns-series))
 
-;Next we have the definitions of the basic higher order functions.
+;; Next we have the definitions of the basic higher order functions.
 
 (declaim (special *state*))
 
-;Helping functions
+;; Helping functions
 
 (cl:defun list-of-next (at-end list-of-generators)
  (mapcar #'(lambda (g) (do-next-in g at-end)) list-of-generators))
 
 ;; HELPER
-;;If function is not a simple quoted function, then a non-series input is
-;;added to frag, and a parameter is added to params so that the function
-;;will get processed right.
+;;
+;; If function is not a simple quoted function, then a non-series
+;; input is added to frag, and a parameter is added to params so that
+;; the function will get processed right.
 (cl:defun handle-fn-arg (frag function params)
   (when (not (and (eq-car function 'function)
                   (or (symbolp (cadr function))
@@ -4063,15 +4239,15 @@
   (values function params))
 
 ;; HELPER
-;;This makes code for `(multiple-value-setq ,out-vars (funcall ,fn ,@ in-vars)).
-;;It always returns a list of a single statement.  Also,
-;;any free references to series::let vars are made
-;;non-series inputs of frag and hooked up to the right
-;;things.  (Note macro expansion has to be done in a
-;;nested context so that nested series expressions will be ok.)
-;;(Note also that this has to bypass what usually happens when macroexpanding
-;;function quoted things.  Things should be sructured differently so that this
-;;is not necessary.)
+;;
+;; This makes code for `(multiple-value-setq ,out-vars (funcall ,fn ,@
+;; in-vars)). It always returns a list of a single statement.  Also,
+;; any free references to series::let vars are made non-series inputs
+;; of frag and hooked up to the right things.  (Note macro expansion
+;; has to be done in a nested context so that nested series
+;; expressions will be ok.) (Note also that this has to bypass what
+;; usually happens when macroexpanding function quoted things.  Things
+;; should be sructured differently so that this is not necessary.)
 (cl:defun handle-fn-call (frag out-vars fn in-vars &optional (last? nil))
   (declare (type list out-vars)
            (type list in-vars))
@@ -4259,7 +4435,7 @@ TYPE."
              (new-test (state) (apply test state)))
         (cl:funcall fn T #'new-init #'new-step #'new-test)))))
 
-;;needed because collect is a macro
+;; needed because collect is a macro
 (cl:defun basic-collect-list (items)
   (compiler-let ((*optimize-series-expressions* nil))
     (fragL ((items T)) ((result)) ((result list)) ()
@@ -4297,7 +4473,7 @@ TYPE."
   (apply #'collect-fn-opt nil type inits function args)
  :trigger T)
 
-;hint to users: to avoid inits, add an extra init that acts like a flag.
+;;; Hint to users: to avoid inits, add an extra init that acts like a flag.
 
 ;; API
 (defS collecting-fn (type inits function &rest args)
@@ -4379,7 +4555,7 @@ TYPE."
   :optimizer
   (scan-fn-opt nil T type init step test))
 
-;various easy ways of doing mapping
+;;; various easy ways of doing mapping
 
 ;; CODEGEN
 (cl:defun mapit (type fn args)
@@ -4390,7 +4566,7 @@ TYPE."
                        ((null a) (return l)))))
       `(map-fn ',type (function (lambda ,vars (,fn ,@ vars))) ,@ args))))
 
-;put on #M
+;; put on #M
 (cl:defun abbreviated-map-fn-reader (stream subchar arg)
     (declare (ignore stream subchar))
   (case arg
@@ -4449,7 +4625,7 @@ TYPE."
 #+symbolics(setf (gethash 'mapping zwei:*lisp-indentation-offset-hash-table*)
                  '(1 1))
 
-;only used when optimization not possible.
+;; only used when optimization not possible.
 (defmacro mapping-mac (var-value-list &body body)
   (setq var-value-list (mapcar #'(lambda (p) (normalize-pair p t)) var-value-list))
   (cond ((every #'(lambda (p) (null (cdar p))) var-value-list)
@@ -4698,9 +4874,10 @@ TYPE."
   `(go ,END))
 
 
-;This turns a producing form into a frag that fits the requirements of a frag well
-;enough that we can call FRAG->PHYSICAL on it.  The key to this is that we only
-;keep the series inputs and outputs, and we know exactly where they can be used.
+;; This turns a producing form into a frag that fits the requirements
+;; of a frag well enough that we can call FRAG->PHYSICAL on it.  The
+;; key to this is that we only keep the series inputs and outputs, and
+;; we know exactly where they can be used.
 
 (defmacro non-opt-producing (output-list input-list &body body)
   (cl:let ((series-inputs (validate-producing output-list input-list body)))
@@ -4736,18 +4913,18 @@ TYPE."
         `(cl:let ,input-list
            ,(frag->physical frag series-inputs (some #'consp output-list)))))))
 
-;The alter form found probably refers to vars which are not OLD itself.
-;For this to be OK, we must be sure that these variables must never be
-;renamed.  To ensure that, we must ensure that none of these variables are
-;ever inputs.  (Aux variables are not renamed and return variables are not
-;renamed as long as they are not also inputs.)  This requires care on the
-;part of all standard functions that are alterable (i.e. scan) and
-;particularly in to-alter which would be much easier to write if it just
-;passed the inputs through.
-
-;This is ok because outputs never get renamed.  Also
-;the input old to the frag most likely never gets used, but this
-;makes sure that the dflow is logically correct.
+;; The alter form found probably refers to vars which are not OLD
+;; itself. For this to be OK, we must be sure that these variables
+;; must never be renamed.  To ensure that, we must ensure that none of
+;; these variables are ever inputs.  (Aux variables are not renamed
+;; and return variables are not renamed as long as they are not also
+;; inputs.)  This requires care on the part of all standard functions
+;; that are alterable (i.e. scan) and particularly in to-alter which
+;; would be much easier to write if it just passed the inputs through.
+;;
+;; This is ok because outputs never get renamed.  Also the input old
+;; to the frag most likely never gets used, but this makes sure that
+;; the dflow is logically correct.
 
 (cl:defun find-alter-form (ret)
   (cl:let* ((v (var ret))
@@ -4762,7 +4939,7 @@ TYPE."
 (defS alter (destinations items)
     "Alters the values in DESTINATIONS to be ITEMS."
   (fragL ((destinations) (items T)) ((result))
-         ((gen (optional generator)) ; Given that generator inherits from LIST, this should be removed when the CMUCL bug is fixed.
+         ((gen (null-or generator)) ; Given that generator inherits from LIST, this should be removed when the CMUCL bug is fixed.
           (result null)) ()
          ((setq gen (generator destinations)) (setq result nil))
          ((do-next-in gen #'(lambda () (go END)) items)) () ())
@@ -4830,7 +5007,7 @@ TYPE."
                      (setq lst (nconc lst lst)))
                     ((setq items (car lst)) (setq lst (cdr lst))) () ())))))
 
-;put on #Z
+;; put on #Z
 (cl:defun series-reader (stream subchar arg)
     (declare (ignore subchar arg))
   `(literal-series ',(read stream T nil T)))
@@ -4977,7 +5154,7 @@ TYPE."
     (multiple-value-setq (type limit *type*) (decode-seq-type (non-optq seq-type)))
     (cond ((member type '(list bag))
            (fragL ((seq)) ((elements T))
-                  ((elements (optional *type*))
+                  ((elements (null-or *type*))
                    (listptr list) (parent list))
                   ((elements (setf (car parent) *alt*) parent))
                   ((setq listptr seq))
@@ -4987,7 +5164,7 @@ TYPE."
                    (setq listptr (cdr listptr))) () ()))
           (limit
            (fragL ((seq) (limit)) ((elements T))
-                  ((elements  (optional *type*))
+                  ((elements  (null-or *type*))
                    (temp T) 
                    (index fixnum))
                   ((elements (setf (aref temp index) *alt*) temp index))
@@ -4997,7 +5174,7 @@ TYPE."
                    (setq elements (aref seq index))) () ()))
           ((not (eq type 'sequence)) ;some kind of vector
            (fragL ((seq)) ((elements T))
-                  ((elements (optional *type*))
+                  ((elements (null-or *type*))
                    (limit fixnum)
                    (temp T) 
                    (index fixnum))
@@ -5007,7 +5184,7 @@ TYPE."
                    (if (not (< index limit)) (go END))
                    (setq elements (aref seq index))) () ()))
           (T (fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
-                    ((elements (optional *type*))
+                    ((elements (null-or *type*))
                      (limit fixnum)
                      (temp T) 
                      (index fixnum))
@@ -5048,7 +5225,7 @@ TYPE."
       (declare (ignore limit))
     (cond ((member type '(list bag))
            (fragL ((seq)) ((elements T))
-                  ((elements (optional *type*))
+                  ((elements (null-or *type*))
                    (listptr list) (parent list))
                   ((elements (setf (car parent) *alt*) parent))
                   ((setq listptr seq))
@@ -5057,14 +5234,14 @@ TYPE."
                    (setq listptr (cdr listptr))) () ()))
           ((not (eq type 'sequence)) ;some kind of vector
            (fragL ((seq)) ((elements T))
-                  ((elements (optional *type*))
+                  ((elements (null-or *type*))
                    (temp T) (index fixnum))
                   ((elements (setf (aref temp index) *alt*) temp index))
                   ((setq index -1) (setq temp seq))
                   ((incf index)
                    (setq elements (aref seq index))) () ()))
           (T (fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
-                    ((elements (optional *type*))
+                    ((elements (null-or *type*))
                      (temp T) (index fixnum))
                     ((elements (setf (elt temp index) *alt*) temp index))
                     ((setq index -1) (setq temp seq))
@@ -5483,7 +5660,7 @@ SCAN-FILE, except we read from an existing stream."
                     (setq items items1) (setq need1 1))
                    (T (setq items items2) (setq need2 1)))) () ()))
 
-; Concatenation
+;;; Concatenation
 
 (defS catenate2 (items1 items2) ""
   (fragL ((items1 T -X- F) (items2 T -Y-)) ((items T))
@@ -5505,7 +5682,7 @@ SCAN-FILE, except we read from an existing stream."
       `(catenate2 ,items1 (catenate ,items2 ,@ more-items))
       `(catenate2 ,items1 ,items2)))
 
-; Splitting
+;;; Splitting
 
 ;; HELPER
 (cl:defun image-of-with-datum (g datum)
@@ -5627,7 +5804,7 @@ SCAN-FILE, except we read from an existing stream."
                            (T (setq count ,(1- n))))) () ()))
                (list items)))))))
 
-;seq-type must be a subtype of SEQUENCE or BAG.
+;; seq-type must be a subtype of SEQUENCE or BAG.
 
 ;; API
 (defS collect (seq-type &optional (items nil items-p))
@@ -5675,7 +5852,7 @@ SCAN-FILE, except we read from an existing stream."
                             (list *type* el-type '(*))
                             (list *type* el-type)))
            (fragL ((seq-type) (items T)) ((seq)) 
-                  ((seq (optional *type*))
+                  ((seq (null-or *type*))
                    (lst list)) ()
                   ((setq lst nil))
                   ((setq lst (cons items lst)))
@@ -5684,7 +5861,7 @@ SCAN-FILE, except we read from an existing stream."
                      (do ((i (1- num) (1- i))) ((minusp i))
                        (setf (aref seq i) (pop lst))))) ()))
           (T (fragL ((seq-type) (items T)) ((seq))
-                    ((seq T) (limit (optional fixnum)) (lst list)) ()
+                    ((seq T) (limit (null-or fixnum)) (lst list)) ()
                     ((setq lst nil)
                      (multiple-value-bind (x y)
                          (decode-seq-type (list 'quote seq-type))
@@ -5747,7 +5924,7 @@ SCAN-FILE, except we read from an existing stream."
 (defS collect-file (name items &optional (printer #'print))
     "Prints the elements of ITEMS into a file."
   (fragL ((name) (items T) (printer)) ((out)) 
-         ((out (optional (member T)))
+         ((out (null-or (member T)))
           (lst list)) ()
          ((setq lst nil) (setq out T))
          ((setq lst (cons items lst)))
@@ -5759,7 +5936,7 @@ SCAN-FILE, except we read from an existing stream."
   (funcall-literal-frag
     (cl:let ((file (new-var 'outfile)))
       `((((items T) (printer)) ((out)) 
-         ((out (optional (member T)))) ()
+         ((out (null-or (member T)))) ()
          ((setq out T)) ((cl:funcall printer items ,file)) ()
          (#'(lambda (c)
               (list 'with-open-file '(,file ,name :direction :output) c))))
@@ -5808,7 +5985,7 @@ SCAN-FILE, except we read from an existing stream."
 (defS collect-last (items &optional (default nil))
     "Returns the last element of ITEMS."
   (fragL ((items T) (default)) ((item))
-         ((item (optional (series-element-type items)))) ()
+         ((item (null-or (series-element-type items)))) ()
          ((setq item default))
          ((setq item items)) () ())
  :trigger T)
@@ -5816,7 +5993,7 @@ SCAN-FILE, except we read from an existing stream."
 ;; API
 (defS collect-first (items &optional (default nil))
     "Returns the first element of ITEMS."
-  (fragL ((items T) (default)) ((item)) ((item (optional (series-element-type items)))) ()
+  (fragL ((items T) (default)) ((item)) ((item (null-or (series-element-type items)))) ()
          ((setq item default))
          ((setq item items) (go END)) () ())
  :trigger T)
@@ -5826,7 +6003,7 @@ SCAN-FILE, except we read from an existing stream."
     "Returns the nth element of ITEMS."
   (fragL ((n) (items T) (default)) ((item))
          ((counter fixnum)
-          (item (optional (series-element-type items)))) ()
+          (item (null-or (series-element-type items)))) ()
          ((setq item default) (setq counter n))
          ((when (zerop counter) (setq item items) (go END))
           (decf counter)) () ())
@@ -5849,7 +6026,7 @@ SCAN-FILE, except we read from an existing stream."
 ;; API
 (defS collect-length (items) "Returns the number of elements in ITEMS."
   (fragL ((items T)) ((number)) 
-         ((number (optional fixnum))) ()
+         ((number (null-or fixnum))) ()
          ((setq number 0)) ((incf number)) () ())
  :trigger T)
 
@@ -5862,7 +6039,7 @@ SCAN-FILE, except we read from an existing stream."
  :optimizer
   (funcall-literal-frag
     `((((numbers T)) ((sum)) 
-       ((sum (optional ,(must-be-quoted type)))) ()
+       ((sum (null-or ,(must-be-quoted type)))) ()
        ((setq sum ,(coerce 0 (must-be-quoted type))))
        ((setq sum (+ sum numbers))) () ())
       ,numbers))
@@ -5878,7 +6055,7 @@ SCAN-FILE, except we read from an existing stream."
   :optimizer
   (funcall-literal-frag
    `((((numbers T)) ((res)) 
-      ((res (optional ,(must-be-quoted type)))) ()
+      ((res (null-or ,(must-be-quoted type)))) ()
       ((setq res ,(coerce 1 (must-be-quoted type))))
       ((setq res (* res numbers))) () ())
      ,numbers))
@@ -5891,7 +6068,7 @@ SCAN-FILE, except we read from an existing stream."
   (if items-p
       (fragL ((numbers T) (items T) (default)) ((result))
              ((number T)
-              (result (optional (series-element-type items)))) ()
+              (result (null-or (series-element-type items)))) ()
              ((setq number nil))
              ((if (or (null number) (< number numbers))
                   (setq number numbers result items)))
@@ -5909,7 +6086,7 @@ SCAN-FILE, except we read from an existing stream."
   (if items-p
       (fragL ((numbers T) (items T) (default)) ((result))
              ((number T) 
-              (result (optional (series-element-type items)))) ()
+              (result (null-or (series-element-type items)))) ()
              ((setq number nil))
              ((if (or (null number) (> number numbers))
                   (setq number numbers result items)))
@@ -5923,10 +6100,10 @@ SCAN-FILE, except we read from an existing stream."
 
 (pushnew :series *features*)
 
-;#+:excl
-;(setf excl:*cltl1-in-package-compatibility-p* nil)
-;#+:excl
-;(setf comp:*cltl1-compile-file-toplevel-compatibility-p* nil)
+;;#+:excl
+;;(setf excl:*cltl1-in-package-compatibility-p* nil)
+;;#+:excl
+;;(setf comp:*cltl1-compile-file-toplevel-compatibility-p* nil)
 
 ;;; A note on types.  Things are set up so that every aux variable
 ;;; (except the variable that is necessary when a non-series input is
