@@ -8,12 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.57 2000/03/06 12:11:53 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.58 2000/03/06 12:33:14 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.58  2000/03/06 12:33:14  matomira
+;;;; Simplified inserted aux var initialization.
+;;;;
 ;;;; Revision 1.57  2000/03/06 12:11:53  matomira
 ;;;; Fixed declaration handling in GATHERING.
 ;;;;
@@ -3200,8 +3203,7 @@
       (when (and (not (eq a arg)) (not (off-line-exit a)))
         (setf (off-line-exit a) B)))
     (nsubst B END (body frag))
-    (push `(,flag T) (aux frag))
-    (push `(setq ,flag nil) (prolog frag))
+    (push `(,flag T nil) (aux frag))
     (setf (body frag)
           (nsubst-inline (if (not (off-line-exit arg))
                            `((go ,C) ,B ,@(if cnt `((if (null ,flag) (decf ,cnt))))
@@ -3241,8 +3243,7 @@
                 (flag (new-var 'fl))
                 (M (new-var 'm))
                 (N (new-var 'n)))
-      (push (list flag '(member T nil)) (aux frag))
-      (push `(setq ,flag nil) (prolog frag))
+      (push (list flag 'boolean nil) (aux frag))
       (setf (body frag)
             `((if (null ,flag) (go ,M))
           ,N ,@(cdr tail)
@@ -3287,8 +3288,7 @@
               (not (every #'some-other-termination destinations)))
           (make-read-arg-completely arg)
         (cl:let ((cnt (new-var 'cnt)))
-          (push `(,cnt T) (aux ret-frag))
-          (push `(setq ,cnt ,(length destinations)) (prolog ret-frag))
+          (push `(,cnt T ,(length destinations)) (aux ret-frag))
           (push `(if (zerop ,cnt) (go ,end)) (body ret-frag))
           (dolist (a destinations)
             (make-read-arg-completely a cnt))))))
@@ -3652,9 +3652,8 @@
           (setf (var ret) new-out)
           (setf (series-var-p ret) nil)
           (setf (off-line-spot ret) nil)
-          (push (list new-list 'list) (aux frag))
+          (push (list new-list 'list '()) (aux frag))
           (push (list new-out 'series) (aux frag))
-          (push `(setq ,new-list '()) (prolog frag))
           (if (not off-line-spot)
               (setf (body frag) (nconc (body frag) new-body-code))
             (setf (body frag)
@@ -3735,8 +3734,7 @@
           (push out-value out-values)
           (push alterer alterers)))
       (when flag
-        (push `(setq ,flag -1) (prolog frag))
-        (push (list flag 'fixnum) (aux frag))
+        (push (list flag 'fixnum -1) (aux frag))
         (push label (body frag)))
       (dotimes (i n)
         (cond ((off-line-spot (nth i (rets frag)))
@@ -4770,8 +4768,7 @@ TYPE."
                               (go ,END))))
                   ,output-expr ,step-code))
                 (cl:let ((done (new-var 'd)))
-            (push (list done '(member T nil)) (aux frag))
-            (push `(setq ,done nil) (prolog frag))
+            (push (list done 'boolean nil) (aux frag))
             (setf (body frag)
                   `((if ,done (go ,END))
                     ,(car (handle-fn-call frag (list done) test state-vars t))
@@ -5081,8 +5078,8 @@ TYPE."
 ;; This is only called from optimize-producing
 (cl:defun protect-from-setq (in type)
   (cl:let ((frag (fr in))
-             (var (var in))
-             (new (new-var 'in)))
+	   (var (var in))
+	   (new (new-var 'in)))
     (push (list var type) (aux (fr in)))
     (coerce-to-type type in) ;why am I doing this?
     (cond ((not (series-var-p in))
