@@ -40,9 +40,13 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.15 2000/03/28 10:23:49 matomira Exp $
+;;;; $Id: s-test.lisp,v 1.16 2000/06/26 18:17:14 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.16  2000/06/26 18:17:14  rtoy
+;;;; Add a test to catch the bug that (collect 'vector (scan '(1 2 3)))
+;;;; was returning the result in reverse order.
+;;;;
 ;;;; Revision 1.15  2000/03/28 10:23:49  matomira
 ;;;; polycall et all are now tail recursive.
 ;;;; LETIFICATION WORKS COMPLETELY!!
@@ -2359,6 +2363,14 @@
 				     (scan (list *str*))))
 	    0))
   *str*)
+
+;;; Some simple consistency tests.  (Some of these were broken by
+;;; changes in series, so we include them here to prevent these from
+;;; happening again!)
+
+(defok 1000 (ton (coerce (collect 'vector (scan '(1 2 3))) 'list))
+  (1 2 3))
+
 ;;; New GATHERING tests
 
 (defok 5000
