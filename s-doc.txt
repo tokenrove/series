@@ -1,0 +1,1708 @@
+;This is the 09/02/92 version of the on-line documentation for
+;Richard C. Waters' Series macro package.
+
+;------------------------------------------------------------------------
+
+;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
+
+;Permission to use, copy, modify, and distribute this software and its
+;documentation for any purpose and without fee is hereby granted,
+;provided that this copyright and permission notice appear in all
+;copies and supporting documentation, and that the name of M.I.T. not
+;be used in advertising or publicity pertaining to distribution of the
+;software without specific, written prior permission. M.I.T. makes no
+;representations about the suitability of this software for any
+;purpose.  It is provided "as is" without express or implied warranty.
+
+;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
+;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+;    SOFTWARE.
+
+;------------------------------------------------------------------------
+
+                         Installing Series
+
+The functions and forms discussed in this manual are defined in the
+package "SERIES".  To make these names easily accessible, you must use
+the package "SERIES".  The most convenient way to do this is to call
+the function SERIES::INSTALL, which also sets up some additional
+features of the series macro package.  The examples in this documentation
+assume that the form (SERIES::INSTALL) has been evaluated.
+
+SERIES::INSTALL &key (:pkg *package*) (:macro T) (:shadow T) (:remove nil)
+
+Calling this function sets up Series for use in the package :PKG.  The
+argument :PKG can either be a package, a package name, or a symbol
+whose name is the name of a package.  It defaults to the current
+package.
+
+The package "SERIES" is used in :PKG.  If :MACRO is not NIL, the #
+macro character syntax #Z and #M is set up.  If :SHADOW is not NIL,
+the symbols SERIES::LET, SERIES::LET*, SERIES::MULTIPLE-VALUE-BIND,
+SERIES::FUNCALL, and SERIES::DEFUN are shadowing imported into :PKG.
+These forms are identical to their standard counterparts, except that
+they support various features of the Series macro package.  When
+shadowing is not done, you have to explicitly use SERIES::LET,
+SERIES::LET*, and SERIES::MULTIPLE-VALUE-BIND when binding series in
+an expression you want optimized; SERIES::FUNCALL when funcalling a
+series function you want optimized; and SERIES::DEFUN when defining a
+series function with the declaration OPTIMIZABLE-SERIES-FUNCTION.
+
+If :REMOVE is not NIL, the effects of having previously
+installed the Series macro package are undone.  In particular, the package is
+unused and any shadowing is undone.  However, any changes to the readtable
+are left in place.
+
+                    The Series Macro Package
+
+Series combine aspects of sequences, streams, and loops.  Like sequences,
+series represent totally ordered multi-sets.  In addition, the series
+functions have the same flavor as the sequence functions---namely, they
+operate on whole series, rather than extracting elements to be processed by
+other functions.  For instance, the series expression below computes the
+sum of the positive elements in a list.
+
+(COLLECT-SUM (CHOOSE-IF #'PLUSP (SCAN '(1 -2 3 -4)))) => 4
+
+Like streams, series can represent unbounded sets of elements and are
+supported by lazy evaluation: Each element of a series is not computed
+until it is needed.  For instance, the series expression below returns a
+list of the first five even natural numbers and their sum.  The call on
+SCAN-RANGE returns a series of all the even natural numbers.  However,
+since no elements beyond the first five are ever used, no elements beyond
+the first five are ever computed.
+
+(LET ((X (SUBSERIES (SCAN-RANGE :FROM 0 :BY 2) 0 5))) 
+  (VALUES (COLLECT X) (COLLECT-SUM X))) => (0 2 4 6 8) and 20
+
+Like sequences and unlike streams, the act of accessing the elements of a
+series does not alter the series.  For instance, both users of X above
+receive the same elements.
+
+A totally ordered multi-set of elements can be represented in a loop by the
+successive values of a variable.  This is extremely efficient, because it
+avoids the need to store the elements as a group in any kind of data
+structure.  In most situations, series expressions achieve this same high
+level of efficiency, because they are automatically transformed into loops
+before being evaluated or compiled.  For instance, the first expression
+above is transformed into a loop like the following.
+
+(LET ((SUM 0)) 
+  (DOLIST (I '(1 -2  3 -4) SUM) 
+    (IF (PLUSP I) (SETQ SUM (+ SUM I))))) => 4
+
+A wide variety of algorithms can be expressed clearly and succinctly using
+series expressions.  In particular, at least 90 percent of the loops
+programmers typically write can be replaced by series expressions that are
+much easier to understand and modify, and just as efficient.   From this
+perspective, the key feature of series is that they are supported by a rich
+set of functions.  These functions more or less correspond to the union of
+the operations provided by the sequence functions, the LOOP clauses, and
+the vector operations of APL.
+
+Unfortunately, some series expressions cannot be transformed into loops.
+This matters, because while transformable series expressions are much more
+efficient than equivalent expressions involving sequences or streams,
+non-transformable series expressions are much less efficient.  Whenever a
+problem comes up that blocks the transformation of a series expression, a
+warning message is issued.  Based on the information in the message, it is
+usually easy to provide an efficient fix for the problem.
+
+Fortunately, most series expressions can be transformed into loops.  In
+particular, pure expressions (ones that do not store series in variables)
+can always be transformed.  As a result, the best approach for programmers
+to take is to simply write series expressions without worrying about
+transformability.  When problems come up, they can be ignored (since they
+cannot lead to the computation of incorrect results) or dealt with on an
+individual basis.
+
+                         Series Functions
+
+Throughout this chapter the notation S[j] is used to denote the jth element
+of the series S.  As in a list or vector, the first element of a series has
+the subscript zero.
+
+The # macro character syntax #Z(...) denotes a series that contains the
+elements of LIST.  This syntax is also used when printing series.
+
+(CHOOSE-IF #'SYMBOLP #Z(A 2 B)) => #Z(A B)
+
+Series are self-evaluating objects and the series data type is disjoint
+from all other types.
+
+
+SERIES                                                     [Type specifier]
+
+The type specifier (SERIES ELEMENT-TYPE) denotes the set of series whose
+elements are all members of the type ELEMENT-TYPE.
+
+
+SERIES ARG &rest ARGS                                            [Function]
+
+The function SERIES returns an unbounded series that endlessly repeats the
+values of the arguments.  The second example below shows the preferred
+method for constructing a bounded series.
+
+(SERIES 'B 'C) => #Z(B C B C B C ...) 
+(SCAN (LIST 'A 'B 'C)) => #Z(A B C)
+
+
+                            Scanners
+
+Scanners create series outputs based on non-series inputs.  They either
+operate based on some formula (for example, scanning a range of integers)
+or enumerate the elements in an aggregate data structure (for example,
+scanning the elements in a list).
+
+
+SCAN-RANGE &key (:START 0) (:BY 1) (:TYPE 'NUMBER)               [Function]
+                :UPTO :BELOW :DOWNTO :ABOVE :LENGTH
+
+The function SCAN-RANGE returns a series of numbers starting with the
+:START argument (default integer 0) and counting up by the :BY argument
+(default integer 1).  The :TYPE argument (default NUMBER) is a type
+specifier indicating the type of numbers in the series produced.  The :TYPE
+argument must be a (not necessarily proper) subtype of NUMBER.  The :START
+and :BY arguments must be of that type.
+
+One of the last five arguments may be used to specify the kind of end test
+to be used; these are called TERMINATION ARGUMENTS.  If :UPTO is specified,
+counting continues only so long as the numbers generated are less than or
+equal to :UPTO.  If :BELOW is specified, counting continues only so long
+as the numbers generated are less than :BELOW.  If :DOWNTO is specified,
+counting continues only so long as the numbers generated are greater than
+or equal to :DOWNTO.  If :ABOVE is specified, counting continues only so
+long as the numbers generated are greater than :ABOVE.  If :LENGTH is
+specified, it must be a non-negative integer and the output series has this
+length.
+
+If none of the termination arguments are specified, the output has
+unbounded length.  If more than one termination argument is specified, it
+is an error.
+
+(SCAN-RANGE :UPTO 4) => #Z(0 1 2 3 4) 
+(SCAN-RANGE :FROM 1 :BY -1 :ABOVE -4) => #Z(1 0 -1 -2 -3) 
+(SCAN-RANGE :FROM .5 :BY .1 :TYPE 'FLOAT) => #Z(.5 .6 .7 ...) 
+(SCAN-RANGE) => #Z(0 1 2 3 4 5 6 ...)
+
+
+SCAN {TYPE} SEQUENCE                                             [Function]
+
+SCAN returns a series containing the elements of SEQUENCE in order.  The
+TYPE argument is a type specifier indicating the type of sequence to be
+scanned; it must be a (not necessarily proper) subtype of SEQUENCE.  If
+TYPE is omitted, it defaults to LIST.
+
+If the SEQUENCE is a list, it must be a proper list ending in NIL.
+Scanning is significantly more efficient if it can be determined at compile
+time whether TYPE is a subtype of LIST or VECTOR and for vectors what the
+length of the vector is.
+
+(SCAN '(A B C)) => #Z(A B C) 
+(SCAN 'STRING "BAR") => #Z(#\B #\A #\R)
+
+
+SCAN-SUBLISTS LIST                                               [Function]
+
+SCAN-SUBLISTS returns a series containing the successive sublists of LIST.
+The LIST must be a proper list ending in NIL.
+
+(SCAN-SUBLISTS '(A B C)) => #Z((A B C) (B C) (C))
+
+
+SCAN-MULTIPLE TYPE FIRST-SEQUENCE &rest MORE-SEQUENCES           [Function]
+
+Several sequences can be scanned at once by using several calls on SCAN.
+Each call on SCAN will test to see when its sequence runs out of elements
+and execution will stop as soon as any of the sequences are exhausted.
+Although very robust, this approach to scanning can be a significant source
+of inefficiency.  In situations where it is known in advance which sequence
+is the shortest, SCAN-MULTIPLE can be used to obtain the same results more
+rapidly.
+  
+SCAN-MULTIPLE is similar to SCAN except that several sequences can be
+scanned at once.  If there are N sequence inputs, SCAN-MULTIPLE returns N
+series containing the elements of these sequences.  It must be the case
+that none of the sequence inputs is shorter than the first sequence.  All
+of the output series are the same length as the first input sequence.
+Extra elements in the other input sequences are ignored.  Using
+SCAN-MULTIPLE is more efficient than using multiple instances of SCAN,
+because SCAN-MULTIPLE only has to check for the first input running out of
+elements.
+
+If TYPE is of the form (VALUES t1 ... tm), then there must be M sequence
+inputs and the ith sequence must have type ti.  Otherwise there can be any
+number of sequence inputs, each of which must have type TYPE.
+
+(MULTIPLE-VALUE-BIND (DATA WEIGHTS) 
+    (SCAN-MULTIPLE 'LIST '(1 6 3 2 8) '(2 3 3 3 2)) 
+  (COLLECT (MAP-FN T #'* DATA WEIGHTS))) 
+ => (2 18 9 6 16)
+
+
+SCAN-LISTS-OF-LISTS LISTS-OF-LISTS &optional LEAF-TEST           [Function]
+SCAN-LISTS-OF-LISTS-FRINGE LISTS-OF-LISTS &optional LEAF-TEST    [Function]
+
+The argument LISTS-OF-LISTS is viewed as an n-ary tree where each internal
+node is a non-empty list and the elements of the list are the children of
+the node.  SCAN-LISTS-OF-LISTS and SCAN-LISTS-OF-LISTS-FRINGE each scan
+LISTS-OF-LISTS in preorder and return a series of its nodes.
+SCAN-LISTS-OF-LISTS returns every node in the tree.
+SCAN-LISTS-OF-LISTS-FRINGE returns only the leaf nodes.
+
+The scan proceeds as follows.  The argument LISTS-OF-LISTS can be any Lisp
+object.  If LISTS-OF-LISTS is an atom or satisfies the predicate LEAF-TEST
+(if present), it is a leaf node.  (The predicate can count on only being
+applied to conses.) Otherwise, LISTS-OF-LISTS is a (not necessarily proper)
+list.  The first element of LISTS-OF-LISTS is recursively scanned in full,
+followed by the second and so on until a non-cons cdr is encountered.
+Whether or not this final cdr is NIL, it is ignored.
+
+(SCAN-LISTS-OF-LISTS '((2) (NIL))) => #Z(((2) (NIL)) (2) 2 (NIL) NIL) 
+(SCAN-LISTS-OF-LISTS-FRINGE '((2) (NIL))) => #Z(2 NIL) 
+(SCAN-LISTS-OF-LISTS-FRINGE '((2) (NIL)) 
+                            #'(LAMBDA (E) (NUMBERP (CAR E)))) 
+ => #Z((2) NIL)
+
+
+SCAN-ALIST ALIST &optional (TEST #'EQL)                          [Function]
+SCAN-PLIST PLIST                                                 [Function]
+SCAN-HASH TABLE                                                  [Function]
+
+When given an association list, a property list, or a hash table
+(respectively), each of these functions produces two outputs:  a series of
+keys K and a series of the corresponding values V.  Each key in the input
+appears exactly once in the output, even if it appears more than once in
+the input.  (The TEST argument of SCAN-ALIST specifies the equality test
+between keys; it defaults to EQL.)  The two outputs have the same length.
+Each V[j] is the value returned by the appropriate accessing function
+(CDR-of-ASSOC, GETF, or GETHASH, respectively) when given K[j].  SCAN-ALIST
+and SCAN-PLIST scan keys in the order they appear in the underlying
+structure.  SCAN-HASH scans keys in no particular order.
+
+(SCAN-PLIST '(A 1 B 3)) => #Z(A B) AND #Z(1 3) 
+(SCAN-ALIST '((A . 1) NIL (A . 3) (B . 2))) 
+ => #Z(A B) AND #Z(1 2)
+
+
+SCAN-SYMBOLS &optional (PACKAGE *PACKAGE*)                       [Function]
+
+SCAN-SYMBOLS returns a series, in no particular order, and possibly
+containing duplicates, of the symbols accessible in PACKAGE (which defaults
+to the current package).
+
+
+SCAN-FILE FILE-NAME &optional (READER #'READ)                    [Function]
+
+SCAN-FILE opens the file named by the string FILE-NAME and applies the
+function READER to it repeatedly until the end of the file is reached.
+READER must accept the standard input function arguments INPUT-STREAM,
+EOF-ERROR-P, and EOF-VALUE as its arguments.  (For instance, READER can be
+READ, READ-PRESERVING-WHITE-SPACE, READ-LINE, or READ-CHAR.) If omitted,
+READER defaults to READ.  SCAN-FILE returns a series of the values returned
+by READER, up to but not including the value returned when the end of the
+file is reached.  The file is correctly closed, even if an abort occurs.
+
+
+SCAN-FN TYPE INIT STEP &optional TEST                            [Function]
+
+The higher-order function SCAN-FN supports the general concept of scanning.
+The TYPE argument is a type specifier, which specifies the type of values
+returned by INIT and STEP.  The VALUES type specifier can be used for this
+argument to indicate multiple types; however, TYPE cannot indicate zero
+values.  If TYPE indicates M types t1, ..., tm, then SCAN-FN returns M
+series T1, ..., TM where TI has the type (SERIES ti).  The arguments INIT,
+STEP, and TEST are functions.
+
+The INIT must be of type (FUNCTION () (VALUES t1 ... tm)).
+
+The STEP must be of type (FUNCTION (t1 ... tm) (VALUES t1 ... tm)).
+
+The TEST (if present) must be of type (FUNCTION (t1 ... tm) T).
+
+The elements of the TI are computed as follows:
+
+(VALUES T1[0] ... TM[0]) = (FUNCALL INIT) 
+(VALUES T1[j] ... TM[j]) = (FUNCALL STEP T1[j-1] ... TM[j-1])
+
+
+The outputs all have the same length.  If there is no TEST, the outputs
+have unbounded length.  If there is a TEST, the outputs consist of the
+elements up to, but not including, the first elements (with index J, say)
+for which the following termination test is not NIL.
+
+(FUNCALL TEST T1[j] ... TM[j])
+
+It is guaranteed that STEP will not be applied to the elements that pass
+this termination test.
+
+If any of INIT, STEP, and TEST have side effects when invoked, they can
+count on being called in the order indicated by the equations above, with
+TEST called just before STEP on each cycle.  However, due to the lazy
+evaluation nature of series, these functions will not be called until their
+outputs are actually used (if ever).  In addition, no assumptions can be
+made about the relative order of evaluation of these calls with regard to
+execution in other parts of a given series expression.  The first example
+below scans down a list stepping two elements at a time.  The second
+example generates two unbounded series: the integers counting up from 1 and
+the sequence of partial sums of the first I integers.
+
+(SCAN-FN T #'(LAMBDA () '(A B C D)) #'CDDR #'NULL) => #Z((A B C D) (C D)) 
+(SCAN-FN '(VALUES INTEGER INTEGER) 
+         #'(LAMBDA () (VALUES 1 0)) 
+         #'(LAMBDA (I SUM) (VALUES (+ I 1) (+ SUM I)))) 
+ => #Z(1 2 3 4 ...) AND #Z(0 1 3 6 ...)
+
+
+SCAN-FN-INCLUSIVE TYPE INIT STEP TEST                            [Function]
+
+The higher-order function SCAN-FN-INCLUSIVE is the same as SCAN-FN except
+that the first set of elements for which TEST returns a non-null value is
+included in the output.  As with SCAN-FN, it is guaranteed that STEP will
+not be applied to the elements for which TEST is non-null.
+
+
+                              Mapping
+
+By far the most common kind of series operation is mapping.  In cognizance
+of this fact, four different ways are provided for specifying mapping:  one
+fundamental form (MAP-FN) and three shorthand forms that are more
+convenient in particular common situations.
+
+
+MAP-FN TYPE FUNCTION &rest SERIES-INPUTS                         [Function]
+
+The higher-order function MAP-FN supports the general concept of mapping.
+The TYPE argument is a type specifier, which specifies the type of values
+returned by FUNCTION.  The VALUES construct can be used to indicate
+multiple types; however, TYPE cannot indicate zero values.  If TYPE
+indicates M types t1, ..., tm, then MAP-FN returns M series T1, ..., TM
+where TI has the type (SERIES ti).  The argument FUNCTION is a function.
+The remaining arguments (if any) are all series.  Let these series be S1,
+..., SN and suppose that SI has the type (SERIES si).
+
+The FUNCTION must be of type (FUNCTION (s1 ... sn) (VALUES t1 ... tm))
+
+The length of each output is the same as the length of the shortest input.
+If there are no bounded series inputs, the outputs are unbounded.  The
+elements of the TI are the results of applying FUNCTION to the
+corresponding elements of the series inputs.
+
+(VALUES T1[j] ... TM[j]) = (FUNCALL FUNCTION S1[j] ... SN[j])
+
+If FUNCTION has side effects, it can count on being called first on the
+SI[0], then on the SI[1], and so on.  However, due to the lazy evaluation
+nature of series, FUNCTION will not be called on any group of input
+elements until the result is actually used (if ever).  In addition, no
+assumptions can be made about the relative order of evaluation of the calls
+on FUNCTION with regard to execution in other parts of a given series
+expression.
+
+(MAP-FN 'INTEGER #'+ #Z(1 2 3) #Z(4 5)) => #Z(5 7) 
+(MAP-FN T #'GENSYM) => #Z(#:G3 #:G4 #:G5 ...) 
+(MAP-FN '(VALUES INTEGER RATIONAL) #'FLOOR #Z(1/4 9/5 12/3)) 
+ => #Z(0 1 4) AND #Z(1/4 4/5 0)
+
+
+The # macro character syntax #M makes it easy to specify uses of MAP-FN
+where TYPE is T and the FUNCTION is a named function.  The notation
+(#MFUNCTION ...) is an abbreviation for (MAP-FN T #'FUNCTION ...).  The
+form FUNCTION can be the printed representation of any Lisp object.  The
+notation #MFUNCTION can only appear in the function position of a list.
+
+(COLLECT (#M1+ (SCAN '(1 2 3)))) => (2 3 4)
+
+
+
+MAPPING ({({VAR | ({VAR}*)} VALUE)}*) {DECLARATION}* {FORM}*        [Macro]
+
+The macro mapping makes it easy to specify uses of map-fn where TYPE is T
+and the function a literal LAMBDA.  The syntax of mapping is analogous to
+that of LET.  The binding list specifies zero or more variables that are
+bound in parallel to successive values of series.  The VALUE part of each
+pair is an expression that must produce a series.  The DECLARATIONS and
+FORMS are treated as the body of a LAMBDA expression that is mapped over
+the series values.  A series of the first values returned by this LAMBDA
+expression is returned as the result of MAPPING.
+
+(MAPPING ((X R) (Y S)) ...) == (MAP-FN T #'(LAMBDA (X Y) ...) R S) 
+(MAPPING ((X (SCAN '(2 -2 3)))) 
+  (EXPT (ABS X) 3)) => #Z(8 8 27)
+
+The form MAPPING supports a special syntax that facilitates the use of
+series functions returning multiple values.  Instead of being a single
+variable, the variable part of a var-value-pair can be a list of variables.
+This list is treated the same way as the first argument to
+MULTIPLE-VALUE-BIND and can be used to access the elements of multiple
+series returned by a series function.
+
+(MAPPING (((I V) (SCAN-PLIST '(A 1 B 2)))) 
+  (LIST I V)) 
+ => #Z((A 1) (B 2))
+
+
+ITERATE ({({VAR | ({VAR}*)} VALUE)}*) {DECLARATION}* {FORM}*        [Macro]
+
+The form ITERATE is the same as MAPPING, except that after mapping the
+FORMS over the VALUES, the results are discarded and NIL is returned.
+
+(LET ((ITEM (SCAN '((1) (-2) (3))))) 
+  (ITERATE ((X (#MCAR ITEM))) 
+    (IF (PLUSP X) (PRIN1 X)))) 
+ => NIL (after printing ``13'')
+
+
+To a first approximation, ITERATE and MAPPING differ in the same way as
+MAPC and MAPCAR.  In particular, like MAPC, ITERATE is intended to be used
+in situations where the FORMS are being evaluated for side effect rather
+than their results.  However, due to the lazy evaluation semantics of
+series, the difference between ITERATE and MAPPING is more than just a
+question of efficiency.
+
+If MAPCAR is used in a situation where the output is not used, time is
+wasted unnecessarily creating the output list.  However, if MAPPING is used
+in a situation where the output is not used, no computation is performed,
+because series elements are not computed until they are used.  Thus ITERATE
+can be thought of as a declaration that the indicated computation is to be
+performed even though the output is not used for anything.
+
+                  Truncation and Other Simple Transducers
+
+Transducers compute series from series and form the heart of most series
+expressions.  Mapping is by far the most common transducer.   This section
+presents a number of additional simple transducers.
+
+
+COTRUNCATE &rest SERIES-INPUTS                                   [Function]
+UNTIL BOOLS &rest SERIES-INPUTS                                  [Function]
+UNTIL-IF PRED &rest SERIES-INPUTS                                [Function]
+
+Each of these functions accepts one or more series inputs S1, ..., SN as
+its &REST argument and returns N series outputs T1, ..., TN that contain
+the same elements in the same order---that is, TI[j]=SI[j].  Let K be the
+length of the shortest input SI.  COTRUNCATE truncates the series so that
+each output has length K.  Let K' be the position of the first element in
+the boolean series BOOLS that is not NIL or, if every element is NIL, the
+length of BOOLS.  UNTIL truncates the series so that each output has length
+(MIN K K').  Let K'' be the position of the first element in S1 such that
+(PRED S1[K'']) is not NIL or, if there is no such element, the length of
+S1.  UNTIL-IF truncates the series so that each output has length (MIN K K'').
+
+(COTRUNCATE #Z(1 2 -3 4) #Z(A B C)) => #Z(1 2 -3) and #Z(A B C) 
+(UNTIL #Z(NIL NIL T NIL) #Z(1 2 -3 4) #Z(A B C)) => #Z(1 2) and #Z(A B) 
+(UNTIL-IF #'MINUSP #Z(1 2 -3 4) #Z(A B C)) => #Z(1 2) and #Z(A B)
+
+
+PREVIOUS ITEMS &optional (DEFAULT NIL) (AMOUNT 1)                [Function]
+
+The series returned by PREVIOUS is the same as the input series ITEMS
+except that it is shifted to the right by the positive integer AMOUNT.  The
+shifting is done by inserting AMOUNT copies of DEFAULT before ITEMS and
+discarding AMOUNT elements from the end of ITEMS.
+ 
+(PREVIOUS #Z(10 11 12) 0) => #Z(0 10 11)
+
+
+LATCH ITEMS &key :AFTER :BEFORE :PRE :POST                       [Function]
+
+The series returned by LATCH is the same as the input series ITEMS except
+that some of the elements are replaced by other values.  LATCH acts like a
+LATCH electronic circuit component.  Each input element causes the creation
+of a corresponding output element.  After a specified number of non-null
+input elements have been encountered, the latch is triggered and the output
+mode is permanently changed.
+
+The :AFTER and :BEFORE arguments specify the latch point.  The latch point
+is just after the :AFTER-th non-null element in ITEMS or just before the
+:BEFORE-th non-null element.  If neither :AFTER nor :BEFORE is specified,
+an :AFTER of 1 is assumed.  If both are specified, it is an error.
+
+If a :PRE is specified, every element prior to the latch point is replaced
+by this value.  If a :POST is specified, every element after the latch
+point is replaced by this value.  If neither is specified, a :POST of NIL
+is assumed.
+
+(LATCH #Z(NIL C NIL D E)) => #Z(NIL C NIL NIL NIL) 
+(LATCH #Z(NIL C NIL D E) :BEFORE 2 :POST T) => #Z(NIL C NIL T T)
+
+
+COLLECTING-FN TYPE INIT FUNCTION &rest SERIES-INPUTS             [Function]
+
+The higher-order function COLLECTING-FN supports the general concept of a
+simple transducer with internal state.  The TYPE argument is a type
+specifier, which specifies the type of values returned by FUNCTION.  The
+VALUES construct can be used to indicate multiple types; however, TYPE
+cannot indicate zero values.  If TYPE indicates M types t1, ..., tm, then
+COLLECTING-FN returns M series T1, ..., TM where TI has the type (SERIES
+ti).  The arguments INIT and FUNCTION are functions.  The remaining
+arguments (if any) are all series.  Let these series be S1, ..., SN and
+suppose that SI has the type (SERIES si).
+
+The INIT must be of type (FUNCTION () (VALUES t1 ... tm)).
+
+The FUNCTION must be of type (FUNCTION (t1 ... tm s1 ... sn) (VALUES t1 ... tm))
+
+The length of each output is the same as the length of the shortest input.
+If there are no bounded series inputs, the outputs are unbounded.  The
+elements of the TI are computed as follows:
+
+(VALUES T1[0] ... TM[0]) =
+  (MULTIPLE-VALUE-CALL FUNCTION (FUNCALL  INIT) S1[0] ... SN[0]) 
+
+(VALUES T1[j] ... TM[j]) = 
+  (FUNCALL FUNCTION T1[j-1] ... TM[j-1] S1[j] ... SN[j]) 
+
+If INIT and/or FUNCTION have side effects, they can count on being called
+in the order indicated by the equations above.  However, due to the lazy
+evaluation nature of series, these functions will not be called until their
+outputs are actually used (if ever).  In addition, no assumptions can be
+made about the relative order of evaluation of these calls with regard to
+execution in other parts of a given series expression.  The first example
+below computes a series of partial sums of the numbers in an input series.
+The second example computes two output series: the partial sums of its
+first input and the partial products of its second input.
+
+(COLLECTING-FN 'INTEGER #'(LAMBDA () 0) #'+ #Z(1 2 3)) => #Z(1 3 6) 
+(COLLECTING-FN '(VALUES INTEGER INTEGER) 
+               #'(LAMBDA () (VALUES 0 1)) 
+               #'(LAMBDA (SUM PROD X Y) 
+                   (VALUES (+ SUM X) (* PROD Y))) 
+               #Z(4 6 8)  
+               #Z(1 2 3)) 
+ => #Z(4 10 18) AND #Z(1 2 6)
+
+
+
+                 Conditional and Other Complex Transducers
+
+This section presents a number of complex transducers, including ones that
+support conditional computation.
+
+
+CHOOSE BOOLS &optional (ITEMS BOOLS)                             [Function]
+CHOOSE-IF PRED ITEMS                                             [Function]
+
+Each of these functions takes in a series of elements (ITEMS) and returns a
+series containing the same elements in the same order, but with some
+elements removed.  CHOOSE removes ITEMS[j] if BOOLS[j] is NIL or J is
+beyond the end of BOOLS.  If ITEMS is omitted, CHOOSE returns the non-null
+elements of BOOLS.  CHOOSE-IF removes ITEMS[j] if (PRED ITEMS[j]) is NIL.
+
+(CHOOSE #Z(T NIL T NIL) #Z(A B C D)) => #Z(A C) 
+(COLLECT-SUM (CHOOSE-IF #'PLUSP #Z(-1 2 -3 4))) => 6
+
+
+EXPAND BOOLS ITEMS &optional (DEFAULT NIL)                       [Function]
+
+EXPAND is a quasi-inverse of CHOOSE.  The output contains the elements of
+the input series ITEMS spread out into the positions specified by the
+non-null elements in BOOLS---that is, ITEMS[j] is in the position occupied
+by the jth non-null element in BOOLS.  The other positions in the output
+are occupied by DEFAULT.  The output stops as soon as BOOLS runs out of
+elements or a non-null element in BOOLS is encountered for which there is
+no corresponding element in ITEMS.
+
+(EXPAND #Z(NIL T NIL T T) #Z(A B C)) => #Z(NIL A NIL B C) 
+(EXPAND #Z(NIL T NIL T T) #Z(A)) => #Z(NIL A NIL)
+
+
+SPLIT ITEMS &rest TEST-SERIES-INPUTS                             [Function]
+SPLIT-IF ITEMS &rest TEST-PREDICATES                             [Function]
+
+These functions are like CHOOSE and CHOOSE-IF except that instead of
+producing one restricted output, they partition the input series ITEMS
+between several outputs.  If there are N test inputs following ITEMS, then
+there are N+1 outputs.  Each input element is placed in exactly one output
+series, depending on the outcome of a sequence of tests.  If the element
+ITEMS[j] fails the first K-1 tests and passes the kth test, it is put in
+the kth output.  If ITEMS[j] fails every test, it is placed in the last
+output.  In addition, all output stops as soon as any series input runs out
+of elements.  The test inputs to SPLIT are series of values; ITEMS[j]
+passes the kth test if the jth element of the kth test-series is not NIL.
+The test inputs to SPLIT-IF are predicates; ITEMS[j] passes the kth test if
+the kth test predicate returns non-null when applied to ITEMS[j].
+
+(SPLIT #Z(-1 2 3 -4) #Z(T NIL NIL T)) => #Z(-1 -4) and #Z(2 3) 
+(MULTIPLE-VALUE-BIND (+X -X) (SPLIT-IF  #Z(-1 2 3 -4) #'PLUSP) 
+  (VALUES (COLLECT-SUM +X) (COLLECT-SUM -X))) 
+ => 5 and -5
+
+
+CATENATE &rest SERIES-INPUTS                                     [Function]
+
+CATENATE combines two or more series into one long series by appending them
+end to end.  The length of the output is the sum of the lengths of the
+inputs.
+
+(CATENATE #Z(B C) #Z() #Z(D)) => #Z(B C D)
+
+
+SUBSERIES ITEMS START &optional BELOW                            [Function]
+
+SUBSERIES returns a series containing the elements of the input series
+ITEMS indexed by the non-negative integers from START up to, but not
+including, BELOW.  If BELOW is omitted or greater than the length of ITEMS,
+the output goes all of the way to the end of ITEMS.
+
+(SUBSERIES #Z(A B C D) 1) => #Z(B C D) 
+(SUBSERIES #Z(A B C D) 1 3) => #Z(B C)
+
+
+POSITIONS BOOLS                                                  [Function]
+
+POSITIONS returns a series of the indices of the non-null elements in the
+series input BOOLS.
+
+(POSITIONS #Z(T NIL T 44)) => #Z(0 2 3)
+
+
+MASK MONOTONIC-INDICES                                           [Function]
+
+MASK is a quasi-inverse of POSITIONS.  The series input MONOTONIC-INDICES
+must be a strictly increasing series of non-negative integers.  The output,
+which is always unbounded, contains T in the positions specified by
+MONOTONIC-INDICES and NIL everywhere else.
+
+(MASK #Z()) => #Z(NIL NIL ...) 
+(MASK #Z(0 2 3)) => #Z(T NIL T T NIL NIL ...) 
+(MASK (POSITIONS #Z(NIL A NIL B NIL))) => #Z(NIL T NIL T NIL ...)
+
+
+MINGLE ITEMS1 ITEMS2 COMPARATOR                                  [Function]
+
+The series returned by MINGLE contains all and only the elements of the two
+input series.  The length of the output is the sum of the lengths of the
+inputs and is unbounded if either input is unbounded.  The order of the
+elements remains unchanged; however, the elements from the two inputs are
+stably intermixed under the control of the COMPARATOR.
+
+The COMPARATOR must accept two arguments and return non-null if and only if
+its first argument is strictly less than its second argument (in some
+appropriate sense).  At each step, the COMPARATOR is used to compare the
+current elements in the two series.  If the current element from ITEMS2 is
+strictly less than the current element from ITEMS1, the current element is
+removed from ITEMS2 and transferred to the output.  Otherwise, the next
+output element comes from ITEMS1.
+
+(MINGLE #Z(1 3 7 9) #Z(4 5 8) #'<) => #Z(1 3 4 5 7 8 9) 
+(MINGLE #Z(1 7 3 9) #Z(4 5 8) #'<) => #Z(1 4 5 7 3 8 9)
+
+
+CHUNK M N ITEMS                                                  [Function]
+
+This function has the effect of breaking up the input series ITEMS into
+(possibly overlapping) chunks of length M.  The starting positions of
+successive chunks differ by N.  The inputs M and N must both be positive
+integers.
+
+CHUNK produces M output series.  The ith chunk consists of the ith elements
+of the M outputs.  Suppose that the length of ITEMS is L.  The length of
+each output is the floor of 1+(L-M)/N.  The ith element of the kth output
+is the (i*n+k)th element of ITEMS (i and k counting from zero).
+
+The first example below shows CHUNK being used to compute a moving average.
+The second example shows CHUNK being used to convert a property list into
+an association list.
+
+(MAPPING (((XI XI+1 XI+2) (CHUNK 3 1 #Z(1 5 3 4 5 6))))  
+  (/ (+ XI XI+1 XI+2) 3)) => #Z(3 4 4 5)
+(COLLECT 
+  (MAPPING (((PROP VAL) (CHUNK 2 2 (SCAN '(A 2 B 5 C 8))))) 
+    (CONS PROP VAL))) => ((A . 2) (B . 5) (C . 8))
+
+
+                              Collectors
+
+Collectors produce non-series outputs based on series inputs.  They either
+create a summary value based on some formula (the sum, for example) or
+collect the elements of a series in an aggregate data structure (such as a
+list).
+
+
+COLLECT-FIRST ITEMS &optional (DEFAULT NIL)                      [Function]
+COLLECT-LAST ITEMS &optional (DEFAULT NIL)                       [Function]
+COLLECT-NTH N ITEMS &optional (DEFAULT NIL)                      [Function]
+
+Given a series ITEMS, these functions return the first element, the last
+element, and the Nth element, respectively.  If ITEMS has no elements (or
+no Nth element), DEFAULT is returned.  If DEFAULT is not specified, then
+NIL is used for DEFAULT.
+
+(COLLECT-FIRST #Z() 'Z) => Z 
+(COLLECT-LAST #Z(A B C)) => C 
+(COLLECT-NTH 1 #Z(A B C)) => B
+
+
+COLLECT-LENGTH ITEMS                                             [Function]
+
+COLLECT-LENGTH returns the number of elements in a series.
+
+(COLLECT-LENGTH #Z(A B C)) => 3
+
+
+COLLECT-SUM NUMBERS &optional (TYPE 'NUMBER)                     [Function]
+
+COLLECT-SUM returns the sum of the elements in a series of numbers.  The
+TYPE is a type specifier that indicates the type of sum to be created.  If
+TYPE is not specified, then NUMBER is used for the TYPE.  If there are no
+elements in the input, a zero (of the appropriate type) is returned.
+
+(COLLECT-SUM #Z(1.1 1.2 1.3)) => 3.6 
+(COLLECT-SUM #Z() 'COMPLEX) => #C(0 0)
+
+
+COLLECT-MAX NUMBERS                                              [Function]
+COLLECT-MIN NUMBERS                                              [Function]
+
+Given a series of non-complex numbers, these functions compute the maximum
+element and the minimum element, respectively.  If there are no elements in
+the input, NIL is returned.
+
+(COLLECT-MAX #Z(2 1 4 3)) => 4 
+(COLLECT-MIN #Z(1.2 1.1 1.4 1.3)) => 1.1 
+(COLLECT-MIN #Z()) => NIL
+
+
+COLLECT-AND BOOLS                                                [Function]
+
+COLLECT-AND returns the AND of the elements in a series.  As with the macro
+AND, NIL is returned if any element of BOOLS is NIL.  Otherwise, the last
+element of BOOLS is returned.  The value T is returned if there are no
+elements in BOOLS.
+
+(COLLECT-AND #Z(A B C)) => C 
+(COLLECT-AND #Z(A NIL C)) => NIL
+
+
+COLLECT-OR BOOLS                                                 [Function]
+
+COLLECT-OR returns the OR of the elements in a series.  As with the macro
+OR, NIL is returned if every element of BOOLS is NIL.  Otherwise, the first
+non-null element of BOOLS is returned.  The value NIL is returned if there
+are no elements in BOOLS.
+
+(COLLECT-OR #Z(NIL B C)) => B 
+(COLLECT-OR #Z()) => NIL
+
+
+COLLECT ITEMS                                                    [Function]
+COLLECT TYPE ITEMS                                               [Function]
+
+COLLECT returns a sequence containing the elements of the series ITEMS.
+The TYPE is a type specifier indicating the type of sequence to be created.
+It must be either a proper subtype of SEQUENCE or the symbol BAG.  If TYPE
+is omitted, it defaults to LIST.  (This function exhibits an argument
+pattern that is unusual for Common Lisp:  an ``optional'' argument
+preceding a required argument.  This pattern cannot be expressed in the
+usual manner with &OPTIONAL.  It is indicated above by two definition
+lines, showing the two possible argument patterns.)
+
+If the TYPE is BAG, a list is created with the elements in whatever order
+can be most efficiently obtained.  Otherwise, the order of the elements in
+the sequence is the same as the order in ITEMS.  If TYPE specifies a length
+(that is, of a vector) this length must be greater than or equal to the
+length of ITEMS.
+
+The nth element of ITEMS is placed in the nth slot of the sequence
+produced.  Any unneeded slots are left in their initial state.  Collecting
+is significantly more efficient if it can be determined at compile time
+whether TYPE is a subtype of LIST or VECTOR and for vectors what the length
+of the vector is.
+
+(COLLECT #Z(A B C)) => (A B C) 
+(COLLECT 'BAG #Z(A B C)) => (C A B) or (B A C) or ... 
+(COLLECT '(VECTOR INTEGER 3) #Z(1 2 3)) => #(1 2 3)
+
+
+COLLECT-APPEND SEQUENCES                                         [Function]
+COLLECT-APPEND TYPE SEQUENCES                                    [Function]
+
+Given a series of sequences, COLLECT-APPEND returns a new sequence by
+concatenating these sequences together in order.  The TYPE is a type
+specifier indicating the type of sequence created and must be a proper
+subtype of SEQUENCE.  If TYPE is omitted, it defaults to LIST.  (This
+function exhibits an argument pattern that is unusual for Common Lisp:  an
+``optional'' argument preceding a required argument.  This pattern cannot
+be expressed in the usual manner with &OPTIONAL.  It is indicated above by
+two definition lines, showing the two possible argument patterns.)
+
+It must be possible for every element of every sequence in the input series
+to be an element of a sequence of type TYPE.  The result does not share any
+structure with the sequences in the input.
+
+(COLLECT-APPEND #Z((A B) NIL (C D))) => (A B C D) 
+(COLLECT-APPEND 'STRING #Z("A " "BIG " "CAT")) => "A BIG CAT"
+
+
+COLLECT-NCONC LISTS                                              [Function]
+
+COLLECT-NCONC NCONCs the elements of the series LISTS together in order
+and returns the result.  This is the same as COLLECT-APPEND except that the
+input must be a series of lists, the output is always a list, the
+concatenation is done rapidly by destructively modifying the input
+elements, and therefore the output shares all of its structure with the
+input elements.
+
+
+COLLECT-ALIST KEYS VALUES                                        [Function]
+COLLECT-PLIST KEYS VALUES                                        [Function]
+COLLECT-HASH KEYS VALUES &key :TEST :SIZE :REHASH-SIZE           [Function]
+                              :REHASH-THRESHOLD
+
+Given a series of keys and a series of corresponding values, these
+functions return an association list, a property list, and a hash table,
+respectively.  Following the order of the input, each KEYS[j]/VALUES[j]
+pair is entered into the output so that it overrides all earlier
+associations.  If one of the input series is longer than the other, the
+extra elements are ignored.  The keyword arguments of COLLECT-HASH specify
+attributes of the hash table produced and have the same meanings as the
+arguments to MAKE-HASH-TABLE.
+
+(COLLECT-ALIST #Z(A B C) #Z(1 2)) => ((B . 2) (A . 1)) 
+(COLLECT-HASH #Z() #Z(1 2) :TEST #'EQ) => <an empty hash table>
+
+
+COLLECT-FILE FILE-NAME ITEMS &optional (PRINTER #'PRINT)         [Function]
+
+This creates a file named FILE-NAME and writes the elements of the series
+ITEMS into it using the function PRINTER.  PRINTER must accept two inputs:
+an object and an output stream.  (For instance, PRINTER can be PRINT,
+PRIN1, PRINC, PPRINT, WRITE-CHAR, WRITE-STRING, or WRITE-LINE.)  If
+omitted, PRINTER defaults to PRINT.  The value T is returned.  The file is
+correctly closed, even if an abort occurs.
+
+
+COLLECT-FN TYPE INIT FUNCTION &rest SERIES-INPUTS                [Function]
+
+The higher-order function COLLECT-FN supports the general concept of
+collecting.  It is identical to COLLECTING-FN except that it only returns
+the last element of each series computed.  If there are no elements in
+these series, the values returned by INIT are passed on directly as the
+output of COLLECT-FN.
+
+(COLLECT-FN 'INTEGER #'(LAMBDA () 0) #'+ #Z(1 2 3)) => 6 
+(COLLECT-FN 'INTEGER #'(LAMBDA () 0) #'+ #Z()) => 0
+
+
+                        Alteration of Series
+
+Series that come from scanning data structures such as lists and vectors
+are closely linked to these structures.  The function ALTER can be used to
+modify the underlying data structure with reference to the series derived
+from it. (Conversely, it is possible to modify a series by destructively
+modifying the data structure it is derived from.  However, given the lazy
+evaluation nature of series, the effects of such modifications can be very
+hard to predict.  As a result, this kind of modification is inadvisable.)
+
+
+ALTER DESTINATIONS ITEMS                                         [Function]
+
+ALTER changes the series DESTINATIONS so that it contains the elements in
+the series ITEMS.  More importantly, in the manner of SETF, the data
+structure that underlies DESTINATIONS is changed so that if the series
+DESTINATIONS were to be regenerated, the new values would be obtained.  The
+alteration process stops as soon as either input runs out of elements.  The
+value NIL is always returned. In the example below each negative element in
+a list is replaced with its square.
+
+(LET* ((DATA (LIST 1 -2 3 4 -5 6)) 
+       (X (CHOOSE-IF #'MINUSP (SCAN DATA)))) 
+  (ALTER X (#M* X X)) 
+  DATA) 
+ => (1 4 3 4 25 6)
+
+
+ALTER can only be applied to series that are ALTERABLE.  SCAN,
+SCAN-ALIST, SCAN-MULTIPLE, SCAN-PLIST, and SCAN-LISTS-OF-LISTS-FRINGE
+produce alterable series.  However, the alterability of the output of
+SCAN-LISTS-OF-LISTS-FRINGE is incomplete.  If SCAN-LISTS-OF-LISTS-FRINGE is
+applied to an object that is a leaf, altering the output series does not
+change the object.
+
+In general, the output of a transducer is alterable as long as the elements
+of the output come directly from the elements of an input that is
+alterable.  In particular, the outputs of CHOOSE, CHOOSE-IF, SPLIT,
+SPLIT-IF, COTRUNCATE, UNTIL, UNTIL-IF, and SUBSERIES are alterable as long
+as the corresponding inputs are alterable.
+
+
+TO-ALTER ITEMS ALTER-FN &rest ARGS                               [Function]
+
+Given a series ITEMS, TO-ALTER returns an alterable series A containing
+the same elements.  The argument ALTER-FN is a function.  The remaining
+arguments are all series.  Let these series be S1, ..., SN.  If there are N
+arguments after ALTER-FN, ALTER-FN must accept N+1 inputs.  If (ALTER A B)
+is later encountered, (MAP-FN T ALTER-FN B S1 ... SN) is implicitly
+evaluated.  For each element in B, ALTER-FN should make appropriate changes
+in the data structure underlying A.
+
+As an example, consider the following definition of a series function that
+scans the elements of a list.  Alteration is performed by changing cons
+cells in the list being scanned.
+
+(DEFUN SCAN-LIST (LIST) 
+  (DECLARE (OPTIMIZABLE-SERIES-FUNCTION)) 
+  (LET ((SUBLISTS (SCAN-SUBLISTS LIST))) 
+    (TO-ALTER (#MCAR SUBLISTS) 
+              #'(LAMBDA (NEW PARENT) (SETF (CAR PARENT) NEW)) 
+              SUBLISTS)))
+
+
+                             Optimization
+
+Series expressions are transformed into loops by pipelining them---the
+computation is converted from a form where entire series are computed one
+after the other to a form where the series are incrementally computed in
+parallel.  In the resulting loop, each individual element is computed just
+once, used, and then discarded before the next element is computed.  For
+this pipelining to be possible, a number of restrictions have to be
+satisfied.  Before looking at these restrictions, it is useful to consider
+a related issue.
+
+The composition of two series functions cannot be pipelined unless the
+destination function consumes series elements in the same order that the
+source function produces them.  Taken together, the series functions
+guarantee that this will always be true, because they all follow the same
+fixed processing order.  In particular, they are all `preorder'
+functions---they process the elements of their series inputs and outputs in
+ascending order starting with the first element.  Further, while it is easy
+for users to define new series functions, it is impossible to define one
+that is not preorder.
+
+It turns out that most series operations can easily be implemented in a
+preorder fashion, the most notable exceptions being reversal and sorting.
+As a result, little is lost by outlawing non-preorder series functions.  If
+some non-preorder operation has to be applied to a series, the series can
+be collected into a list or vector and the operation applied to this new
+data structure.  (This is inefficient, but no less efficient than what
+would be required if non-preorder series functions were supported.)
+
+
+                         Basic Restrictions
+
+The transformation of series expressions into loops is required to occur at
+some time before compiled code is actually run.  Optimization may or may
+not be applied to interpreted code.  If any of the restrictions described
+below are violated, optimization is not possible.  In this situation, a
+warning message is issued at the time optimization is attempted and the
+code is left unoptimized.  This is not a fatal error and does not prevent
+the correct results from being computed.  However, given the large
+improvements in efficiency to be gained, it is well worth fixing any
+violations that occur.  This is usually easy to do.
+
+
+*SUPPRESS-SERIES-WARNINGS*                                       [Variable]
+
+If this variable is set (or bound) to anything other than its default value
+of NIL, warnings about conditions that block the optimization of series
+expressions are suppressed.
+
+
+Before discussing the restrictions on series expressions, it is useful to
+define precisely what is meant by the term SERIES EXPRESSION.  This term is
+semantic rather than syntactic in nature.  Given a program, imagine it
+converted from Lisp code into a data flow graph.  In a data flow graph,
+functions are represented as boxes, and both control flow and data flow are
+represented as arrows between the boxes.  Constructs such as LET and SETQ
+are converted into patterns of data flow arcs.  Control constructs such as
+IF and LOOP are converted into patterns of control flow arcs.  Suppose
+further, that all loops have been converted into tail recursions so that
+the graph is acyclic.
+
+A series expression is a subgraph of the data flow graph for a program that
+contains a group of interacting series functions.  More specifically, given
+a call F on a series function, the series expression E containing it is
+defined as follows.  E contains F.  Every function using a series created
+by a function in E is in E.  Every function computing a series used by a
+function in E is in E.  Finally, suppose that two functions G and H are in
+E and that there is a data flow path consisting of series and/or non-series
+data flow arcs from G to H.  Every function touched by this path (be it a
+series function or not) is in E.
+
+FOR OPTIMIZATION TO BE POSSIBLE, SERIES EXPRESSIONS HAVE TO BE STATICALLY
+ANALYZABLE.  As with most other optimization processes, a series expression
+cannot be transformed into a loop at compile time, unless it can be
+determined at compile time exactly what computation is being performed.
+This places a number of relatively minor limits on what can be written.
+For example, for optimization to be possible the type arguments to
+higher-order functions such as MAP-FN and COLLECTING-FN have to be quoted
+constants.  Similarly, the numeric arguments to CHUNK have to be constants.
+In addition, if FUNCALL is used to call a series function, the function
+called has to be of the form (FUNCTION ...).
+
+FOR OPTIMIZATION TO BE POSSIBLE, EVERY SERIES CREATED WITHIN A SERIES
+EXPRESSION MUST BE USED SOLELY INSIDE THE EXPRESSION.  (If a series is
+transmitted outside of the expression that creates it, it has to be
+physically represented as a whole.  This is incompatible with the
+transformations required to pipeline the creating expression.) To avoid
+this problem, a series must not be returned as a result of a series
+expressions as a whole, assigned to a free variable, assigned to a special
+variable, or stored in a data structure.  A corollary of the last point is
+that when defining new optimizable series functions, series cannot be
+passed into &REST arguments.  Further, optimization is blocked if a series
+is passed as an argument to an ordinary Lisp function.  Series can only be
+passed to the predefined series functions and to new series functions
+defined using the declaration OPTIMIZABLE-SERIES-FUNCTION.
+
+FOR OPTIMIZATION TO BE POSSIBLE, SERIES EXPRESSIONS MUST CORRESPOND TO
+STRAIGHT LINE COMPUTATIONS.  That is to say, the data flow graph
+corresponding to a series expression cannot contain any conditional
+branches.  (Complex control flow is incompatible with pipelining.)
+Optimization is possible in the presence of standard straight-line forms
+such as PROGN, FUNCALL, SETQ, LAMBDA, LET, LET*, and MULTIPLE-VALUE-BIND as
+long as none of the variables bound are special.  There is also no problem
+with macros as long as they expand into series functions and straight-line
+forms.  However, optimization is blocked by forms that specify complex
+control flow (i.e., conditionals IF, COND, etc., looping constructs LOOP,
+DO, etc., or branching constructs TAGBODY, GO, CATCH, etc.).
+
+In the first example below, optimization is blocked, because the IF form is
+inside of the series expression.  However, in the second example,
+optimization is possible, because although the IF feeds data to the series
+expression, it is not inside the corresponding subgraph.  Both of the
+expressions below produce the same value, however, the second one is much
+more efficient.
+
+(COLLECT (IF FLAG (SCAN X) (SCAN Y)))  ;warning message issued 
+(COLLECT (SCAN (IF FLAG X Y))) 
+
+
+                         Constraint Cycles
+
+Even if a series expression satisfies all of the restrictions above, it
+still may not be possible to transform the expression into a loop.  The
+sole remaining problem is that if a series is used in two places, the two
+uses may place incompatible constraints on the times at which series
+elements should be produced.
+
+The series expression below shows a situation where this problem arises.
+The expression creates a series X of the elements in a list. It then
+creates a normalized series by dividing each element of X by the sum of the
+elements in X.  Finally, the expression returns the maximum of the
+normalized elements.
+
+(LET ((X (SCAN '(1 2 5 2))))           ; warning message issued 
+  (COLLECT-MAX (#M/ X (SERIES (COLLECT-SUM X))))) => 1/2
+
+
+The two uses of X in the expression place contradictory constraints on the
+way pipelined evaluation must proceed.  COLLECT-SUM requires that all of
+the elements of X be produced before the sum can be returned and SERIES
+requires that its input be available before it can start to produce its
+output.  However, #M/ requires that the first element of X be available at
+the same time as the first element of the output of SERIES.  For pipelining
+to work, this implies that the first element of the output of SERIES (and
+therefore the output of COLLECT-SUM) must be available before the second
+element of X is produced.  Unfortunately, this is impossible.
+
+The essence of the inconsistency above is the cycle of constraints used in
+the argument.  This in turn stems from a cycle in the data flow graph
+underlying the expression (see Figure 1).  In Figure 1, function calls are
+represented by boxes and data flow is represented by arrows.  Simple arrows
+indicate the flow of series values and cross hatched arrows indicate the
+flow of non-series values.
+
+  |------|   /------------------------------->|-------|      |------|
+ -| scan |---     |------|      |------|      |  #M/  |----->| max  |-
+  |------|   \--->| sum  |+++++>|series|----->|-------|      |------|
+                  |------|      |------|  
+
+        Figure 1: A Constraint Cycle in a Series Expression
+
+Given a data flow graph corresponding to a series expression, a CONSTRAINT
+CYCLE is a closed loop of data flow arcs that can be traversed in such a
+way that each arc is traversed exactly once and no non-series arc is
+traversed backwards.  (Series data flow arcs can be traversed in either
+direction.)  A constraint cycle is said to PASS THROUGH an input or output
+port when exactly one of the arcs in the cycle touches the port.  In Figure
+1, the data flow arcs touching SCAN, SUM, SERIES, and #M/ form a constraint
+cycle.  Note that if the output of SCAN were not a series, this loop would
+not be a constraint cycle, because there would be no valid way to traverse
+it.  Also note that while the constraint cycle passes through all the other
+ports it touches, it does not pass through the output of SCAN.
+
+Whenever a constraint cycle passes through a non-series output, an argument
+analogous to the one above can be constructed and therefore pipelining is
+impossible.  When this situation arises, a warning message is issued
+identifying the problematical port and the cycle passing through it.  For
+instance, the warning triggered by the example above states that the
+constraint cycle associated with SCAN, COLLECT-SUM, SERIES, and #M/ passes
+through the non-series output of COLLECT-SUM.
+
+Given this kind of detailed information, it is easy to alleviate the
+problem.  To start with, every cycle must contain at least one function
+that has two series data flows leaving it.  At worst, the cycle can be
+broken by duplicating this function (and any functions computing series
+used by it).  For instance, the example above can be rewritten as shown
+below.
+
+(LET ((X (SCAN '(1 2 5 2))) 
+      (SUM (COLLECT-SUM (SCAN '(1 2 5 2))))) 
+  (COLLECT-MAX (#M/ X (SERIES SUM)))) 
+ => 1/2
+
+
+It would be easy enough to automatically apply code copying to break
+problematical constraint cycles.  However, this is not done for two
+reasons.  First, there is considerable virtue in maintaining the property
+that each function in a series expression turns into one piece of
+computation in the loop produced.  Users can be confident that series
+expressions that look simple and efficient actually are simple and
+efficient.  Second, with a little creativity, constraint problems can often
+be resolved in ways that are much more efficient than copying code.  In the
+example above, the conflict can be eliminated efficiently by interchanging
+the operation of computing the maximum with the operation of normalizing an
+element.
+
+(LET ((X (SCAN '(1 2 5 2)))) 
+  (/ (COLLECT-MAX X) (COLLECT-SUM X))) => 1/2
+
+
+The restriction that optimizable series expressions cannot contain
+constraint cycles that pass through non-series outputs places limitations
+on the qualitative character of optimizable series expressions.  In
+particular, they all must have the general form of creating some number of
+series using scanners, computing various intermediate series using
+transducers, and then computing one or more summary results using
+collectors.  The output of a collector cannot be used in the intermediate
+computation unless it is the output of a separate subexpression.
+
+It is worthy of note that the last expression above fixes the constraint
+conflict by moving the non-series output out of the cycle, rather than by
+breaking the cycle.  This illustrates the fact that constraint cycles that
+do not pass through non-series outputs do not necessarily cause problems.
+They cause problems only if they pass through OFF-LINE ports.
+
+A series input port or series output port of a series function is ON-LINE
+if and only if it is processed in lock step with all the other on-line
+ports as follows:  The initial element of each on-line input is read, then
+the initial element of each on-line output is written, then the second
+element of each on-line input is read, then the second element of each
+on-line output is written, and so on.  Ports that are not on-line are
+off-line.  If all of the series ports of a function are on-line, the
+function is said to be on-line; otherwise, it is off-line.  (The above
+extends the standard definition of the term `on-line' so that it applies to
+individual ports as well as whole functions.)
+
+If all of the ports a cycle passes through are on-line, the lock step
+processing of these ports guarantees that there cannot be any conflicts
+between the constraints associated with the cycle.  However, passing
+through an off-line port leads to the same kinds of problems as passing
+through a non-series output.
+
+Most of the series functions are on-line.  In particular, scanners and
+collectors are all on-line as are many transducers.  However, the
+transducers in Section on complex transducers are off-line.  In particular,
+the series inputs of CATENATE, CHOOSE-IF, CHUNK, EXPAND, MASK, MINGLE,
+POSITIONS, and SUBSERIES along with the series outputs of CHOOSE, SPLIT,
+and SPLIT-IF are off-line.
+
+In summary, the fourth and final restriction is that FOR OPTIMIZATION TO BE
+POSSIBLE, A SERIES EXPRESSION CANNOT CONTAIN A CONSTRAINT CYCLE THAT PASSES
+THROUGH A NON-SERIES OUTPUT OR AN OFF-LINE PORT.  Whenever this restriction
+is violated a warning message is issued.  Violations can be fixed either by
+breaking the cycle or restructuring the computation so that the offending
+port is removed from the cycle.
+
+
+                    Defining New Series Functions
+
+New functions operating on series can be defined just as easily as new
+functions operating on any other data type.  However, expressions
+containing these new functions cannot be transformed into loops unless a
+complete analysis of the functions is available.  Among other things, this
+implies that the definition of a new series function must appear before its
+first use.
+
+
+OPTIMIZABLE-SERIES-FUNCTION                         [Declaration specifier]
+
+The declaration specifier (OPTIMIZABLE-SERIES-FUNCTION INTEGER) indicates
+that the function being defined is a series function that needs to be
+analyzed so that it can be optimized when it appears in series expressions.
+(A warning is issued if the function being defined neither takes a series
+as input nor produces a series as output.)  INTEGER (default 1) specifies
+the number of values returned by the function being defined.  (This cannot
+necessarily be determined by local analysis.)  The only place
+OPTIMIZABLE-SERIES-FUNCTION is allowed to appear is in a declaration
+immediately inside a DEFUN.  As an example, the following shows how a
+simplified version of COLLECT-SUM could be defined.
+
+(DEFUN SIMPLE-COLLECT-SUM (NUMBERS) 
+  (DECLARE (OPTIMIZABLE-SERIES-FUNCTION 1)) 
+  (COLLECT-FN 'NUMBER #'(LAMBDA () 0) #'+ NUMBERS))
+
+
+OFF-LINE-PORT                                       [Declaration specifier]
+
+The declaration specifier (OFF-LINE-PORT PORT-SPEC1 PORT-SPEC2 ...)
+specifies that the indicated inputs and outputs are off-line.  This
+declaration specifier is only allowed in a DEFUN that contains the
+declaration OPTIMIZABLE-SERIES-FUNCTION.  Each PORT-SPEC must either be a
+symbol that is one of the inputs of the function or an integer J indicating
+the jth output (counting from zero).  For example, (OFF-LINE-PORT X 1)
+indicates that the input X and the second output are off-line.  Every port
+that is not mentioned in an OFF-LINE-PORT declaration is assumed to be
+on-line.  A warning is issued whenever a port's actual on-line/off-line
+status does not agree with its declared status.  This makes it easier to
+keep track of which ports are off-line and which are not.  Note that
+off-line ports virtually never arise when defining scanners or reducers.
+
+
+                             Declarations
+
+A key feature of Lisp is that variable declarations are strictly optional.
+Nevertheless, it is often the case that they are necessary in situations
+where efficiency matters.  Therefore, it is important that it be POSSIBLE
+for programmers to provide declarations for every variable in a program.
+The transformation of series expressions into loops presents certain
+problems in this regard, because the loops created contain variables not
+evident in the original code.  However, if the information described below
+is supplied by the user, appropriate declarations can be generated for all
+of the loop variables created.
+
+All the explicit variables that are bound in a series expression (for
+example, by a LET that is part of the expression) should be given
+informative declarations making use of the type specifier (SERIES
+ELEMENT-TYPE) where appropriate.
+
+Informative types should be supplied to series functions (such as SCAN and
+MAP-FN) that have type arguments.  When using SCAN it is important to
+specify the type of element in the sequence as well as the sequence itself
+(for example, by using (VECTOR * INTEGER) as opposed to merely VECTOR).
+The form (LIST ELEMENT-TYPE) can be used to specify the type of elements in
+a list.
+
+If it is appropriate to have a type more specific than (SERIES T)
+associated with the output of #M, #Z, SCAN-ALIST, SCAN-FILE, SCAN-HASH,
+SCAN-LISTS-OF-LISTS-FRINGE, SCAN-LISTS-OF-LISTS, SCAN-PLIST, SERIES,
+LATCH, or CATENATE, then the form THE, must be used to specify this type.
+
+Finally, if the expression computing a non-series argument to a series
+variable is neither a variable nor a constant, THE must be used to specify
+the type of its result.
+
+For example, the declarations in the series expressions below are
+sufficient to ensure that every loop variable will have an accurate
+declaration.
+
+(COLLECT-LAST (CHOOSE-IF #'PLUSP (SCAN '(LIST INTEGER) DATA))) 
+
+(COLLECT '(VECTOR * FLOAT) 
+         (MAP-FN 'FLOAT #'/ 
+                 (SERIES (THE INTEGER (CAR DATA))) 
+                 (THE (SERIES INTEGER) (SCAN-FILE F))))
+
+
+The amount of information the user has to provide is reduced by the fact
+that this information can be propagated from place to place.  For instance,
+the variable holding the output of CHOOSE-IF holds a subset of the elements
+held by the input variable.  As a result, it is appropriate for it to have
+the same type.  When defining a new series function, the type specifier
+SERIES-ELEMENT-TYPE can be used to indicate where type propagation should
+occur.
+
+
+SERIES-ELEMENT-TYPE                                        [Type specifier]
+
+The type specifier (SERIES-ELEMENT-TYPE VARIABLE) denotes the type of
+elements in the series held in VARIABLE.  VARIABLE must be a variable
+carrying a series value (for example, a series argument of a series
+function).  SERIES-ELEMENT-TYPE can only be used in three places: in a
+declaration in a LET, MAPPING, PRODUCING, or other binding form in a series
+expression; in a declaration in a DEFUN being used to define a series
+function; or in a type argument to a series function.  As an example,
+consider that COLLECT-LAST could have been defined as follows.  The use of
+SERIES-ELEMENT-TYPE ensures that the internal variable keeping track of the
+most recent item has the correct type.
+
+(DEFUN COLLECT-LAST (ITEMS &OPTIONAL (DEFAULT NIL)) 
+  (DECLARE (OPTIMIZABLE-SERIES-FUNCTION)) 
+  (COLLECT-FN '(SERIES-ELEMENT-TYPE ITEMS) 
+              #'(LAMBDA () DEFAULT) 
+              #'(LAMBDA (OLD NEW) NEW) 
+              ITEMS))
+
+
+                             Primitives
+
+A large number of series functions are provided, because there are a large
+number of useful operations that can be performed on series.  However, this
+functionality can be boiled down to a small number of primitive constructs.
+
+COLLECTING-FN embodies the fundamental idea of series computations that
+utilize internal state.  It can be used as the basis for defining any
+on-line transducer.
+
+UNTIL embodies the fundamental idea of producing a series that is shorter
+than the shortest input series.  In particular, it embodies the idea of
+computing a bounded series from non-series inputs.  Together with
+COLLECTING-FN, UNTIL can be used to define SCAN-FN, which can be used as
+the basis for defining all the other scanners.
+
+COLLECT-LAST embodies the fundamental idea of producing a non-series value
+from a series.  Together with COLLECTING-FN, it can be used to define
+COLLECT-FN, which (with the occasional assistance of UNTIL) can be used as
+the basis for defining all the other collectors.
+
+PRODUCING embodies the fundamental idea of preorder computation.  It can be
+used as the basis for defining all the other series functions, including
+the off-line transducers.
+
+In addition to the above, four primitives are involved with supporting
+various specialized aspects of series functions.  Alterability is supported
+by the function TO-ALTER and the declaration PROPAGATE-ALTERABILITY.  The
+propagation of type information is supported by the type specifier
+SERIES-ELEMENT-TYPE.  The best implementation of certain series functions
+requires the form ENCAPSULATED.
+
+
+PRODUCING OUTPUT-LIST INPUT-LIST {DECLARATION}* {FORM}*             [Macro]
+
+PRODUCING computes and returns a group of series and non-series outputs
+given a group of series and non-series inputs.  The key feature of
+PRODUCING is that some or all of the series inputs and outputs can be
+processed in an off-line way.  To support this, the processing in the body
+(consisting of the FORMS) is performed from the perspective of generators
+and gatherers (see below).  Each series input is converted to a generator
+before being used in the body.  Each series output is associated with a
+gatherer in the body.
+
+The OUTPUT-LIST has the same syntax as the binding list of a LET.  The
+names of the variables must be distinct from each other and from the names
+of the variables in the INPUT-LIST.  If there are N variables in the
+OUTPUT-LIST, PRODUCING computes N outputs.  There must be at least one
+output variable.  The variables act as the names for the outputs and can be
+used in either of two ways.  First, if an output variable has a value
+associated with it in the OUTPUT-LIST, then the variable is treated as
+holding a non-series value.  The variable is initialized to the indicated
+value and can be used in any way desired in the body. The eventual output
+value is whatever value is in the variable when the execution of the body
+terminates.  Second, if an output variable does not have a value associated
+with it in the OUTPUT-LIST, the variable is given as its value a gatherer
+that collects elements.  The only valid way to use the variable in the body
+is in a call on NEXT-OUT.  The output returned is a series containing these
+elements.  If the body never terminates, this series is unbounded.
+
+The INPUT-LIST also has the same syntax as the binding list of a LET.
+The names of the variables must be distinct from each other and the names
+of the variables in the OUTPUT-LIST.  The values can be series or
+non-series.  If the value is not explicitly specified, it defaults to NIL.
+The variables act logically both as inputs and state variables and can be
+used in one of two ways.  First, if an input variable is associated with a
+non-series value, then it is given this value before the evaluation of the
+body begins and can be used in any way desired in the body.   Second, if an
+input variable is associated with a series, then the variable is given a
+generator corresponding to this series as its initial value.  The only
+valid way to use the variable in the body is in a call on NEXT-IN.
+
+There can be declarations at the start of the body.  However, the only
+declarations allowed are IGNORE declarations, type declarations, and
+PROPAGATE-ALTERABILITY declarations (see below).  In particular, it is an
+error for any of the input or output variables to be special.
+
+In conception, the body can contain arbitrary Lisp expressions.  After the
+appropriate generators and gatherers have been set up, the body is executed
+until it terminates.  If the body never terminates, the series outputs (if
+any) are unbounded in length and the non-series outputs (if any) are never
+produced.
+
+Although easy to understand, this view of what can happen in the body
+presents severe difficulties when optimizing (and even when evaluating)
+series expressions that contain calls on PRODUCING.  As a result, several
+limitations are imposed on the form of the body to simplify the processing
+required.
+
+The first limitation is that, exclusive of any declarations, the body must
+have the form (LOOP (TAGBODY ...)).  The following example shows how
+PRODUCING could be used to implement a scanner creating an unbounded series
+of integers.
+
+(PRODUCING (NUMS) ((NUM 0)) 
+  (DECLARE (INTEGER NUM) (TYPE (SERIES INTEGER) NUMS)) 
+  (LOOP 
+    (TAGBODY 
+      (SETQ NUM (1+ NUM)) 
+      (NEXT-OUT NUMS NUM)))) 
+ => #Z(1 2 3 4 ...)
+
+
+The second limitation is that the form TERMINATE-PRODUCING must be used to
+terminate the execution of the body.  Any other method of terminating the
+body (with RETURN, for example) is an error.  The following example shows
+how PRODUCING could be used to implement the operation of summing a series.
+The function TERMINATE-PRODUCING is used to stop the computation when
+NUMBERS runs out of elements.
+
+(PRODUCING ((SUM 0)) ((NUMBERS #Z(1 2 3)) NUM)  
+  (LOOP 
+    (TAGBODY 
+      (SETQ NUM (NEXT-IN NUMBERS (TERMINATE-PRODUCING))) 
+      (SETQ SUM (+ SUM NUM))))) 
+ => 6
+
+
+The third limitation is that calls on NEXT-OUT associated with output
+variables must appear at top level in the TAGBODY in the body.  They cannot
+be nested in other forms.  In addition, an output variable can be the
+destination of at most one call on NEXT-OUT and if it is the destination
+of a NEXT-OUT, it cannot be used in any other way.
+
+If the call on NEXT-OUT for a given output appears in the final part of the
+TAGBODY in the body, after everything other than other calls on NEXT-OUT,
+then the output is an on-line output---a new value is written on every
+cycle of the body.  Otherwise the output is off-line.
+
+The following example shows how PRODUCING could be used to split a series
+into two parts.  Items are read in one at a time and tested.  Depending on
+the test, they are written to one of two outputs.  Note the use of labels
+and branches to keep the calls on NEXT-OUT at top level.  Both outputs are
+off-line.  The first example above shows an on-line output.
+
+(PRODUCING (ITEMS-1 ITEMS-2) ((ITEMS #Z(1 -2 3 -4)) ITEM) 
+  (LOOP 
+    (TAGBODY (SETQ ITEM (NEXT-IN ITEMS (TERMINATE-PRODUCING))) 
+             (IF (NOT (PLUSP ITEM)) (GO D)) 
+             (NEXT-OUT ITEMS-1 ITEM) 
+             (GO F) 
+      D      (NEXT-OUT ITEMS-2 ITEM) 
+      F      ))) 
+ => #Z(1 3) and #Z(-2 -4)
+
+
+The fourth limitation is that the calls on NEXT-IN associated with an input
+variable V must appear at top level in the TAGBODY in the body, nested in
+assignments of the form (SETQ VAR (NEXT-IN V ...)).  They cannot be nested
+in other forms.  In addition, an input variable can be the source for at
+most one call on NEXT-IN and if it is the source for a NEXT-IN, it cannot
+be used in any other way.
+
+If the call on NEXT-IN for a given input has as its sole termination action
+(TERMINATE-PRODUCING) and appears in the initial part of the TAGBODY in the
+body, before anything other than similar calls on NEXT-IN, then the input
+is an on-line input---a new value is read on every cycle of the body.
+Otherwise the input is off-line.
+
+The example below shows how PRODUCING could be used to concatenate two
+series.  To start with, elements are read from the first input series.
+When this runs out, a flag is set and reading begins from the second input.
+Both inputs are off-line.  The example above shows an on-line input.
+
+(PRODUCING (ITEMS) ((ITEM-1 #Z(1 2)) 
+                    (ITEM-2 #Z(3 4)) 
+                    (IN-2 NIL) 
+                    ITEM) 
+  (LOOP 
+    (TAGBODY (IF IN-2 (GO D)) 
+             (SETQ ITEM (NEXT-IN ITEM-1 (SETQ IN-2 T) (GO D))) 
+             (GO F) 
+      D      (SETQ ITEM (NEXT-IN ITEM-2 (TERMINATE-PRODUCING))) 
+      F      (NEXT-OUT ITEMS ITEM)))) 
+ => #Z(1 2 3 4)
+
+
+TERMINATE-PRODUCING                                                 [Macro]
+
+This form (which takes no arguments) is used to terminate execution of (the
+expansion of) the PRODUCING macro.  As with the form GO,
+TERMINATE-PRODUCING does not return any values; rather, control immediately
+leaves the current context.  The form TERMINATE-PRODUCING is allowed to
+appear only in a PRODUCING body and causes the termination of the enclosing
+call on PRODUCING.
+
+
+PROPAGATE-ALTERABILITY                              [Declaration specifier]
+
+The declaration specifier (PROPAGATE-ALTERABILITY INPUT OUTPUT) indicates
+that attempts to alter an element of OUTPUT should be satisfied by altering
+the corresponding element of INPUT.    (The corresponding element of INPUT
+is the one most recently read at the moment when the output element is
+written.)  This declaration can only appear in a call on PRODUCING.  INPUT
+and OUTPUT must be an input and an output of the PRODUCING.  The example
+below shows how the propagation of alterability could be supported in a
+simplified version of UNTIL.
+
+(DEFUN SIMPLE-UNTIL (BOOLS ITEMS) 
+  (DECLARE (OPTIMIZABLE-SERIES-FUNCTION)) 
+  (PRODUCING (Z) ((X BOOLS) (Y ITEMS) BOOL ITEM) 
+    (DECLARE (PROPAGATE-ALTERABILITY Y Z)) 
+    (LOOP 
+      (TAGBODY 
+        (SETQ BOOL (NEXT-IN X (TERMINATE-PRODUCING))) 
+        (SETQ ITEM (NEXT-IN Y (TERMINATE-PRODUCING))) 
+        (IF BOOL (TERMINATE-PRODUCING)) 
+        (NEXT-OUT Z ITEM)))))
+
+
+ENCAPSULATED ENCAPSULATING-FN SCANNER-OR-COLLECTOR                  [Macro]
+
+Some of the features provided by Common Lisp are supported solely by
+encapsulating forms.  For example, there is no way to specify a cleanup
+expression that will always be run, even when an abort occurs, without
+using UNWIND-PROTECT.  ENCAPSULATED makes it possible to take advantage of
+forms such as UNWIND-PROTECT when defining a series function.
+
+ENCAPSULATED specifies a function that places an encapsulating form around
+the computation performed by its second argument.  The first argument must
+be a quoted function that takes a Lisp expression and wraps the appropriate
+encapsulating form around it, returning the resulting code.  The second
+input must be a literal call on SCAN-FN, SCAN-FN-INCLUSIVE, or COLLECT-FN.
+The second argument can count on being evaluated in the scope of the
+encapsulating form.  The values returned by the second argument are
+returned as the values of ENCAPSULATED.  The following shows how
+ENCAPSULATED could be used to define a simplified version of COLLECT-FILE.
+
+(DEFUN COLLECT-FILE-WRAP (FILE NAME BODY) 
+  `(WITH-OPEN-FILE (,FILE ,NAME :DIRECTION :OUTPUT) ,BODY)) 
+
+(DEFMACRO SIMPLE-COLLECT-FILE (NAME ITEMS) 
+  (LET ((FILE (GENSYM))) 
+    `(ENCAPSULATED #'(LAMBDA (BODY) 
+                       (COLLECT-FILE-WRAP ',FILE ',NAME BODY)) 
+                   (COLLECT-FN T #'(LAMBDA () T) 
+                               #'(LAMBDA (STATE ITEM) 
+                                   (PRINT ITEM ,FILE) 
+                                   STATE) 
+                               ,ITEMS))))
+
+
+                        Generators and Gatherers
+
+
+Generators are generalized input streams in the sense of Smalltalk.  A
+generator can produce a potentially unbounded number of elements of any
+type.  Individual elements are not computed until requested by NEXT-IN.
+When an element is taken from a generator, it is removed by side effect.
+Subsequent uses of NEXT-IN obtain later elements.
+
+There is a close relationship between a generator and a series of the
+elements it produces.  In particular, any series can be converted into a
+generator.  As a result, all the scanner functions used for creating series
+can be used to create generators as well.  There is no need to have a
+separate set of functions for creating generators.
+
+Gatherers are generalized output streams.  Elements of any type can be
+entered into a gatherer using NEXT-OUT.  The gatherer combines the elements
+together in time-sequence order into a net result.  This result can be
+retrieved using RESULT-OF.
+
+There is a close relationship between a gatherer and a collector function
+that combines elements in the same way.  In particular, any one-input
+one-output collector can be converted into a gatherer.  As a result, all
+the collectors used for computing summary results from series can be used
+to create gatherers.  There is no need to have a separate set of functions
+for creating gatherers.
+
+
+                              Generators
+
+GENERATOR SERIES                                                 [Function]
+
+Given a series, GENERATOR returns a generator containing the same elements.
+
+
+NEXT-IN GENERATOR {ACTION}*                                         [Macro]
+
+NEXT-IN returns the next element in the generator GENERATOR.  The ACTIONS
+can be any Lisp expressions.  They are evaluated if and only if no more
+elements can be retrieved from GENERATOR.  If there are no more elements
+and no actions, it is an error.  It is also an error to apply NEXT-IN to a
+generator a second time after the generator has run out of elements.  As an
+example of generators, consider the following.
+
+(LET ((X (GENERATOR (SCAN '(1 2 3 4))))) 
+  (WITH-OUTPUT-TO-STRING (S) 
+    (LOOP (PRIN1 (NEXT-IN X (RETURN)) S) 
+          (PRIN1 (NEXT-IN X (RETURN)) S) 
+          (PRINC "," S)))) 
+ => "12,34,"
+
+
+                              Gatherers
+
+GATHERER COLLECTOR                                               [Function]
+
+The COLLECTOR must be a function of type (FUNCTION ((SERIES t1)) t2).
+Given this function, GATHERER returns a gatherer that accepts elements of
+type t1 and returns a final result of type t2.  The method for combining
+elements used by the gatherer is the same as the one used by the COLLECTOR.
+
+
+NEXT-OUT GATHERER ITEM                                           [Function]
+
+Given a gatherer and a value, NEXT-OUT enters the value into the gatherer.
+
+
+RESULT-OF GATHERER                                               [Function]
+
+RESULT-OF retrieves the net result from a gatherer.  RESULT-OF can be
+applied at any time.  However, it is an error to apply RESULT-OF twice to
+the same gatherer or to apply NEXT-OUT to a gatherer once RESULT-OF has
+been applied.
+
+(LET ((G (GATHERER #'COLLECT-SUM))) 
+  (DOLIST (I '(1 2 3 4)) 
+    (NEXT-OUT G I) 
+    (IF (EVENP I) (NEXT-OUT G (* 10 I)))) 
+  (RESULT-OF G)) 
+ => 70
+
+
+GATHERING ({(VAR FN)}*) {FORM}*                                     [Macro]
+
+The first subform must be a list of pairs.  The first element of each pair,
+VAR, must be a variable name.  The second element of each pair, FN, must be
+a form that when wrapped in (FUNCTION ...) is acceptable as an argument to
+GATHERER.  Each symbol is bound to a gatherer constructed from the
+corresponding collector.  The body (consisting of the FORMS) is evaluated
+in the scope of these bindings.  When this evaluation is complete,
+GATHERING returns the RESULT-OF each gatherer.  If there are N pairs in the
+binding list, GATHERING returns N values.  For example:
+
+(DEFUN EXAMP (DATA) 
+  (GATHERING ((X COLLECT) (Y COLLECT-SUM)) 
+    (ITERATE ((I (SCAN DATA))) 
+      (CASE (FIRST I) 
+        (:SLOT (NEXT-OUT X (SECOND I))) 
+        (:PART (DOLIST (J (SECOND I)) (NEXT-OUT X J)))) 
+      (NEXT-OUT Y (THIRD I))))) 
+
+(EXAMP '((:SLOT A 10) (:PART (C D) 40))) => (A C D) and 50
+
+As a further illustration of gatherers, consider the following definition
+for a simplified version of GATHERING that handles only one binding pair.
+
+(DEFMACRO SIMPLE-GATHERING (((VAR COLLECTOR)) &BODY BODY) 
+  `(LET ((,VAR (GATHERER (FUNCTION ,COLLECTOR)))) 
+     ,@BODY 
+     (RESULT-OF ,VAR)))
+
+The full capabilities of GATHERING can be supported in much the same way.
+
+;------------------------------------------------------------------------
+
+;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
+
+;Permission to use, copy, modify, and distribute this software and its
+;documentation for any purpose and without fee is hereby granted,
+;provided that this copyright and permission notice appear in all
+;copies and supporting documentation, and that the name of M.I.T. not
+;be used in advertising or publicity pertaining to distribution of the
+;software without specific, written prior permission. M.I.T. makes no
+;representations about the suitability of this software for any
+;purpose.  It is provided "as is" without express or implied warranty.
+
+;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
+;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+;    SOFTWARE.
+
+;------------------------------------------------------------------------
+
