@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.80 2000/10/10 21:03:12 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.81 2001/04/07 15:35:51 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.81  2001/04/07 15:35:51  rtoy
+;;;; scan-stream didn't work when not optimized, due to a typo.  The core
+;;;; of scan-stream should now be identical to the core of scan-file.
+;;;;
 ;;;; Revision 1.80  2000/10/10 21:03:12  rtoy
 ;;;; Oops.  It's cl:let, not just plain let.
 ;;;;
@@ -7950,9 +7954,9 @@ SCAN-FILE, except we read from an existing stream."
             (loop                
                 (cl:let ((item (cl:funcall reader name nil done)))
 		  (when (eq item done)
-                    (setq lst (cdr lst))
                     (return nil))
-		  (setq lastcons (setf (cdr lastcons) (cons items nil)))))))  
+		  (setq lastcons (setf (cdr lastcons) (cons item nil))))))
+	  (setq lst (cdr lst)))
          ((if (null lst) (go END))
           (setq items (car lst))
           (setq lst (cdr lst)))
