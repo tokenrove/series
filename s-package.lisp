@@ -8,9 +8,14 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.8 2000/09/22 15:58:39 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.9 2001/12/23 16:54:44 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.9  2001/12/23 16:54:44  rtoy
+;;;; Make series support Allegro "modern" lisp with its case-sensitive
+;;;; reader.  Mostly just making every that needs to be lower case actually
+;;;; lower case.  The tests still work.
+;;;;
 ;;;; Revision 1.8  2000/09/22 15:58:39  rtoy
 ;;;; Add support for MCL (from Rainer Joswig).
 ;;;;
@@ -56,62 +61,65 @@
   (unless (find-package "CL")
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
-#+(or :cmu :sbcl)
-(cl:eval-when (load eval compile)
-  (cl:pushnew ':pittsburgh cl:*features*))
-
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro :pittsburgh Genera Harlequin-Common-Lisp CLISP mcl)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro cmu sbcl Genera Harlequin-Common-Lisp CLISP mcl)
 (cl:eval-when (load eval compile)
-  (cl:pushnew ':SERIES-ANSI cl:*features*))
+  (cl:pushnew ':series-ansi cl:*features*))
 
-#+(or Series-ANSI)
-(defpackage "SERIES"
-    (:use "CL")
+#+allegro
+(cl:eval-when(compile load eval)
+  ;; Simple way to figure out if we are running Allegro modern lisp
+  ;; with its case-sensitive reader.
+  (when (find-package "cl")
+    (cl:pushnew ':allegro-modern cl:*features*)))
+
+(defpackage #:series
+    (:use #:cl)
   (:export 
    ;;(2) readmacros (#M and #Z)
 
    ;;(5) declarations and types (note dual meaning of series)
-   "OPTIMIZABLE-SERIES-FUNCTION"  "OFF-LINE-PORT"  ;series
-   "SERIES-ELEMENT-TYPE"  "PROPAGATE-ALTERABILITY"
-   "INDEFINITE-EXTENT"
+   #:optimizable-series-function  #:off-line-port  ;series
+   #:series-element-type  #:propagate-alterability
+   #:indefinite-extent
    
    ;;(10) special functions
-   "ALTER" "TO-ALTER" "ENCAPSULATED" "TERMINATE-PRODUCING"
-   "NEXT-IN" "NEXT-OUT"
-   "GENERATOR" 
-   "GATHERER"  "RESULT-OF" 
-   "GATHER-NEXT" "GATHER-RESULT" "GATHERLET" "GATHERING"
-   "FGATHER-NEXT" "FGATHER-RESULT" "FGATHERLET" "FGATHERING"
+   #:alter #:to-alter #:encapsulated #:terminate-producing
+   #:next-in #:next-out
+   #:generator 
+   #:gatherer  #:result-of 
+   #:gather-next #:gather-result #:gatherlet #:gathering
+   #:fgather-next #:fgather-result #:fgatherlet #:fgathering
 
    ;;(55) main line functions
-   "MAKE-SERIES" "SERIES" "SCAN" "SCAN-MULTIPLE" "SCAN-RANGE"
-   "SCAN-SUBLISTS" "SCAN-FN" "SCAN-FN-INCLUSIVE" "SCAN-LISTS-OF-LISTS"
-   "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-STREAM" "SCAN-HASH" "SCAN-ALIST"
-   "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
-   "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
-   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-STREAM"
-   "COLLECT-SUM" "COLLECT-PRODUCT" "COLLECT-MAX" "COLLECT-MIN"
-   "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
-   "COLLECT-AND" "COLLECT-OR" "PREVIOUS" "MAP-FN" "ITERATE" "MAPPING"
-   "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
-   "CHOOSE" "CHOOSE-IF" "SPREAD" "EXPAND" "MASK" "SUBSERIES" "MINGLE"
-   "CATENATE" "SPLIT" "SPLIT-IF" "PRODUCING" "CHUNK"
+   #:make-series #:series #:scan #:scan-multiple #:scan-range
+   #:scan-sublists #:scan-fn #:scan-fn-inclusive #:scan-lists-of-lists
+   #:scan-lists-of-lists-fringe #:scan-file #:scan-stream #:scan-hash #:scan-alist
+   #:scan-plist #:scan-symbols #:collect-fn #:collect #:collect-append
+   #:collect-nconc #:collect-file #:collect-alist #:collect-plist
+   #:collect-hash #:collect-length #:collect-stream
+   #:collect-sum #:collect-product #:collect-max #:collect-min
+   #:collect-last #:collect-first #:collect-nth
+   #:collect-and #:collect-or #:previous #:map-fn #:iterate #:mapping
+   #:collecting-fn #:cotruncate #:latch #:until #:until-if #:positions
+   #:choose #:choose-if #:spread #:expand #:mask #:subseries #:mingle
+   #:catenate #:split #:split-if #:producing #:chunk
 
    ;;(5) variables
-    "*SERIES-EXPRESSION-CACHE*"
-    "*LAST-SERIES-LOOP*"
-    "*LAST-SERIES-ERROR*"
-    "*SUPPRESS-SERIES-WARNINGS*"
+    #:*series-expression-cache*
+    #:*last-series-loop*
+    #:*last-series-error*
+    #:*suppress-series-warnings*
     )
   (:shadow
-   "LET" "LET*" "MULTIPLE-VALUE-BIND" "FUNCALL" "DEFUN" #+cmu "COLLECT" #+cmu "ITERATE")
+   #:let #:let* #:multiple-value-bind #:funcall #:defun
+   #+cmu "COLLECT" #+cmu "ITERATE")
   #+Harlequin-Common-Lisp
   (:import-from "LISPWORKS" "COMPILER-LET")
   #+Genera
   (:import-from "LISP" "COMPILER-LET")
-  #+Allegro
-  (:import-from "CLTL1" "COMPILER-LET")
+  #+allegro
+  (:import-from #:cltl1 #:compiler-let)
   #+CLISP
   (:import-from "LISP" "COMPILER-LET")
   #+cmu
@@ -120,7 +128,7 @@
   (:import-from "CCL" "COMPILER-LET")
 )
 
-#-(or Series-ANSI)
+#-(or series-ansi)
 (export ;74 total concepts in the interface
   '(;(2) readmacros (#M and #Z)
 
@@ -154,13 +162,13 @@
     *last-series-error*
     *suppress-series-warnings*))
 
-#-(or Series-ANSI)
+#-(or series-ansi)
 (eval-when (compile load eval)
   (in-package "SERIES" :use '("LISP"))
   (shadow '(let let* multiple-value-bind funcall defun eval-when #+cmu collect #+cmu iterate))
 ) ; end of eval-when
 
-#-(or Series-ANSI)
+#-(or series-ansi)
 (cl:eval-when (compile load eval)
   (defmacro eval-when ((&rest times) &body body)
     `(cl:eval-when ,(append

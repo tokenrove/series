@@ -40,9 +40,14 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.20 2001/08/24 14:10:17 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.21 2001/12/23 16:54:44 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.21  2001/12/23 16:54:44  rtoy
+;;;; Make series support Allegro "modern" lisp with its case-sensitive
+;;;; reader.  Mostly just making every that needs to be lower case actually
+;;;; lower case.  The tests still work.
+;;;;
 ;;;; Revision 1.20  2001/08/24 14:10:17  rtoy
 ;;;; Reinstate test 466, but change the bogus &foo to &key.  We're testing
 ;;;; for unsupported lambda options.
@@ -127,7 +132,8 @@
 ;;;;
 
 (series::eval-when (:compile-toplevel :load-toplevel :execute)
-  (in-package "COMMON-LISP-USER")
+  #-allegro-modern (in-package "COMMON-LISP-USER")
+  #+allegro-modern (in-package "common-lisp-user")
 
   #+(and :allegro-version>= (version>= 5 0) (not (version>= 5 1)))
   (defadvice make-sequence :before
@@ -310,7 +316,7 @@
   (setq f (macroexpand f))
   (let ((*print-length* nil) (*print-level* nil) #+symbolics(*print-lines* nil))
     (pprint f))
-  (cond ((Y-or-N-p "continue") f)))
+  (cond ((y-or-n-p "continue") f)))
 
 (defun o ()
   (setq series::*optimize-series-expressions*
@@ -318,13 +324,13 @@
 
 ;This is the standard tester.
 (defvar test-file nil)
-(defvar *compile-tests* T)
+(defvar *compile-tests* t)
 
 (defmacro ton (form) `(test-opt-&-non-opt ',form))
 
 (defun test-opt-&-non-opt (form)
   (loop (if test-file (return nil))
-    (format T "~%Type a string representing a pathname of a scratch disk file: ")
+    (format t "~%Type a string representing a pathname of a scratch disk file: ")
     (setq test-file (read))
     (if (not (stringp test-file)) (setq test-file nil)))
   (let* ((non-opt (test-non-opt form))
@@ -337,7 +343,7 @@
 (defun test-opt (form)
   (setq series:*last-series-loop* nil)
   (let ((series::*series-implicit-map* nil)
-	(series::*optimize-series-expressions* T))
+	(series::*optimize-series-expressions* t))
   (setq form (series::iterative-copy-tree form))
   (if *compile-tests*
       (funcall (compile nil `(lambda () ,form)))
@@ -363,8 +369,8 @@
 (defun test-wrs (form)
   (let ((v nil)
 	(series::*series-implicit-map* nil)
-	(series::*optimize-series-expressions* T)
-	(series::*testing-errors* T))
+	(series::*optimize-series-expressions* t)
+	(series::*testing-errors* t))
     (setq series:*last-series-error* nil)
     (setq series:*last-series-loop* nil)
     (with-output-to-string (*error-output*)
@@ -376,8 +382,8 @@
 (defun test-rrs (form)
   (let ((v nil)
 	(series::*series-implicit-map* nil)
-	(series::*testing-errors* T)
-	(series::*optimize-series-expressions* T)
+	(series::*testing-errors* t)
+	(series::*optimize-series-expressions* t)
 	(*suppress-series-warnings* nil))
     (setq series:*last-series-error* nil)
     (setq series:*last-series-loop* nil)
@@ -390,7 +396,7 @@
 (defun test-ers (form)
   (setq series:*last-series-loop* nil)
   (let* ((series::*series-implicit-map* nil)
-	 (series::*testing-errors* T)
+	 (series::*testing-errors* t)
 	 (opt (catch :testing-errors (test-opt form)))
 	 (non-opt (catch :testing-errors (test-non-opt form))))
    (if (equal non-opt opt) opt
@@ -401,14 +407,14 @@
 (defun test-ers-opt (form)
   (setq series:*last-series-loop* nil)
   (let* ((series::*series-implicit-map* nil)
-	 (series::*testing-errors* T))
+	 (series::*testing-errors* t))
     (catch :testing-errors (test-opt form))))
 
 (defmacro tm (form) `(test-mapping ',form))
 
 (defun test-mapping (form)
   (setq series:*last-series-loop* nil)
-  (let ((series::*series-implicit-map* T)
+  (let ((series::*series-implicit-map* t)
         (*suppress-series-warnings* nil))
     (setq form (series::iterative-copy-tree form))
     (if *compile-tests*
@@ -419,7 +425,7 @@
 (defun decls0 (tree)
   (cond ((not (consp tree)) nil)
 	((eq (car tree) 'declare) tree)
-	(T (do ((l tree (cdr l))) ((not (consp l)) nil)
+	(t (do ((l tree (cdr l))) ((not (consp l)) nil)
 	     (let ((x (decls0 (car l))))
 	       (if x (return x)))))))
 
@@ -455,19 +461,19 @@
 (defok 4 (ton (collect (make-series 'b 'c))) (b c))
 (defok 5 (ton (collect (make-series 'b))) (b))
 
-(defok 6 (ton (collect (#Mcar (scan-fn T #'(lambda () '(a b c)) #'cdr #'null)))) (a b c))
-(defok 7 (ton (collect (#Mcar (scan-fn '(values T) #'(lambda () '(a b c)) #'cdr #'null))))
+(defok 6 (ton (collect (#Mcar (scan-fn t #'(lambda () '(a b c)) #'cdr #'null)))) (a b c))
+(defok 7 (ton (collect (#Mcar (scan-fn '(values t) #'(lambda () '(a b c)) #'cdr #'null))))
   (a b c))
-(defok 8 (ton (collect (#Mcar (scan-fn T #'(lambda () '(a b c))
+(defok 8 (ton (collect (#Mcar (scan-fn t #'(lambda () '(a b c))
 					 'cdr #'(lambda (x) (null x))))))
   (a b c))
 (defok 9 (ton (collect (#M(lambda (x y) (list x (car y)))
 			    #Z(a b c)
-			    (scan-fn T #'(lambda () '(1 2)) #'cdr))))
+			    (scan-fn t #'(lambda () '(1 2)) #'cdr))))
   ((a 1) (b 2) (c nil)))
 (defok 10 (ton (let* ((lst (list 'a 'b 'c)))
 		   (multiple-value-bind (e l)
-		       (scan-fn '(values T T) #'(lambda () (values (car lst) lst))
+		       (scan-fn '(values t t) #'(lambda () (values (car lst) lst))
 				#'(lambda (element parent)
 				    (declare (ignore element))
 				    (values (cadr parent) (cdr parent)))
@@ -479,14 +485,14 @@
 
 (defok 11 (ton (collect
 		  (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
-				(scan-fn T #'(lambda () 0)
+				(scan-fn t #'(lambda () 0)
 					 #'(lambda (sum)
 					     (incf xx)
 					     (+ sum xx))
 					 #'(lambda (x) (> x 10)))))) (0 1 3 6 10))
 (defok 12 (ton (multiple-value-bind (a b)
 		     (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
-				   (scan-fn '(values T T)
+				   (scan-fn '(values t t)
 					    #'(lambda () (values 0 1))
 					    #'(lambda (sum prod)
 						(incf xx)
@@ -495,12 +501,12 @@
 		   (list (collect a) (collect b))))
   ((0 1 3 6 10) (1 1 2 6 24)))
 
-(defok 13 (ton (collect (#Mcar (scan-fn-inclusive T #'(lambda () '(a b c)) #'cdr #'null))))
+(defok 13 (ton (collect (#Mcar (scan-fn-inclusive t #'(lambda () '(a b c)) #'cdr #'null))))
   (a b c nil))
-(defok 14 (ton (collect (#Mcar (scan-fn-inclusive T #'(lambda () ()) #'cdr #'null)))) (nil))
+(defok 14 (ton (collect (#Mcar (scan-fn-inclusive t #'(lambda () ()) #'cdr #'null)))) (nil))
 (defok 15 (ton (let* ((lst (list 1 2 3 -4 5)))
 		   (multiple-value-bind (e l)
-		       (scan-fn-inclusive '(values T T) #'(lambda () (values (car lst) lst))
+		       (scan-fn-inclusive '(values t t) #'(lambda () (values (car lst) lst))
 					  #'(lambda (element parent)
 					      (declare (ignore element))
 					      (values (cadr parent) (cdr parent)))
@@ -512,7 +518,7 @@
 
 (defok 16 (ton (collect
 		  (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
-				(scan-fn-inclusive T #'(lambda () 0)
+				(scan-fn-inclusive t #'(lambda () 0)
 						   #'(lambda (sum)
 						       (incf xx)
 						       (+ sum xx))
@@ -520,7 +526,7 @@
   (0 1 3 6 10 15))
 (defok 17 (ton (multiple-value-bind (a b)
 		     (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
-				   (scan-fn-inclusive '(values T T)
+				   (scan-fn-inclusive '(values t t)
 						      #'(lambda () (values 0 1))
 						      #'(lambda (sum prod)
 							  (incf xx)
@@ -662,7 +668,7 @@
   ((color . brown) (name . fred)))
 
 (defok 81 (ton (progn (collect-first (scan-symbols)) nil)) nil) ;grotesquely weak tests
-(defok 82 (ton (progn (collect-first (scan-symbols (find-package "SERIES"))) nil)) nil)
+(defok 82 (ton (progn (collect-first (scan-symbols (find-package :series))) nil)) nil)
 
 ;scan-file tested in conjunction with collect-file.
 
@@ -673,32 +679,32 @@
 (defok 86 (ton (collect (latch #Z(nil 3 nil 4 5)))) (nil 3 nil nil nil))
 (defok 87 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2))) (nil 3 nil 4 nil))
 (defok 88 (ton (collect (latch #Z(nil 3 nil 4 5) :after 0))) (nil nil nil nil nil))
-(defok 89 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2 :pre 'a))) (A A A A 5))
+(defok 89 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2 :pre 'a))) (a a a a 5))
 (defok 90 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2 :pre 'a :post 'b)))
-  (A A A A B))
-(defok 91 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2 :post 'b))) (nil 3 nil 4 B))
+  (a a a a b))
+(defok 91 (ton (collect (latch #Z(nil 3 nil 4 5) :after 2 :post 'b))) (nil 3 nil 4 b))
 (defok 92 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2))) (nil 3 nil nil nil))
 (defok 93 (ton (collect (latch #Z(nil 3 nil 4 5) :before 0))) (nil nil nil nil nil))
-(defok 94 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2 :pre 'a))) (A A A 4 5))
+(defok 94 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2 :pre 'a))) (a a a 4 5))
 (defok 95 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2 :pre 'a :post 'b)))
-  (A A A B B))
-(defok 96 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2 :post 'b))) (nil 3 nil B B))
+  (a a a b b))
+(defok 96 (ton (collect (latch #Z(nil 3 nil 4 5) :before 2 :post 'b))) (nil 3 nil b b))
 
-(defok 97 (ton (collect (until #Z(nil nil T nil T) #Z(1 2 3)))) (1 2))
+(defok 97 (ton (collect (until #Z(nil nil t nil t) #Z(1 2 3)))) (1 2))
 (defok 98 (ton (multiple-value-bind (x y)
-		     (until #Z(nil nil T nil T) #Z(1 2 3) #Z(a b c d))
+		     (until #Z(nil nil t nil t) #Z(1 2 3) #Z(a b c d))
 		   (list (collect x) (collect y)))) ((1 2) (a b)))
 (defok 99 (ton (multiple-value-bind (x y)
 		     (until #Z(nil nil) #Z(1 2 3) #Z(a b c d))
 		   (list (collect x) (collect y)))) ((1 2) (a b)))
 (defok 100 (ton (multiple-value-bind (x y)
-		      (until #Z(nil nil nil nil T) #Z(1 2 3) #Z(a b c d))
+		      (until #Z(nil nil nil nil t) #Z(1 2 3) #Z(a b c d))
 		    (list (collect x) (collect y)))) ((1 2 3) (a b c)))
 (defok 101 (ton (multiple-value-bind (x y)
-		      (until #Z(nil nil nil nil T) #Z(a b c d) #Z(1 2 3))
+		      (until #Z(nil nil nil nil t) #Z(a b c d) #Z(1 2 3))
 		    (list (collect x) (collect y)))) ((a b c) (1 2 3)))
 (defok 102 (ton (multiple-value-bind (x y z)
-		      (until #Z(nil nil T nil T) #Z(a b c d) #Z(1 2 3) #Z(5 6 7))
+		      (until #Z(nil nil t nil t) #Z(a b c d) #Z(1 2 3) #Z(5 6 7))
 		    (list (collect x) (collect y) (collect z)))) ((a b) (1 2) (5 6)))
 (defok 103 (ton (collect (until #Z() #Z(1 2 3)))) ())
 (defok 104 (ton (let ((x #Z(1 2 3 nil nil)))
@@ -730,20 +736,20 @@
 		      (alter x (#M- x)))
 		    v)) (-1 -2 3))
 
-(defok 113 (ton (collect (map-fn T #'list #Z(1 2 3)))) ((1) (2) (3)))
+(defok 113 (ton (collect (map-fn t #'list #Z(1 2 3)))) ((1) (2) (3)))
 (defok 114 (ton (collect (map-fn 'list #'list #Z(1 2 3)))) ((1) (2) (3)))
 (defok 115 (ton (collect (map-fn '(values list) #'list #Z(1 2 3)))) ((1) (2) (3)))
 (defok 116 (ton (collect (map-fn '(values *) #'list #Z(1 2 3)))) ((1) (2) (3)))
-(defok 117 (ton (collect (map-fn T 'list #Z(1 2 3)))) ((1) (2) (3)))
-(defok 118 (ton (collect (map-fn T #'(lambda (z) (list z)) #Z(1 2 3)))) ((1) (2) (3)))
+(defok 117 (ton (collect (map-fn t 'list #Z(1 2 3)))) ((1) (2) (3)))
+(defok 118 (ton (collect (map-fn t #'(lambda (z) (list z)) #Z(1 2 3)))) ((1) (2) (3)))
 (defok 119 (ton (multiple-value-bind (a b)
 		      (map-fn '(values integer integer) #'(lambda (x) (values x (1+ x)))
 			      #Z(1 2 3))
 		    (collect (#Mlist a b)))) ((1 2) (2 3) (3 4)))
 (defok 120 (ton (let ((z 2))
-		    (collect (map-fn T #'(lambda (x) (+ x z)) #Z(1 2 3))))) (3 4 5))
+		    (collect (map-fn t #'(lambda (x) (+ x z)) #Z(1 2 3))))) (3 4 5))
 (defok 121 (ton (let ((z 2))
-		    (collect (map-fn T #'(lambda (x) (+ x z)) #Z(1 2 3))))) (3 4 5))
+		    (collect (map-fn t #'(lambda (x) (+ x z)) #Z(1 2 3))))) (3 4 5))
 
 (defok 122 (ton (collect (mapping ((e #Z(1 2 3))) (1+ e)))) (2 3 4))
 (defok 123 (ton (collect (mapping (((e f) (scan-plist '(a 1 b 2))))
@@ -762,21 +768,21 @@
 (defok 127 (ton (let ((e #Z((1 2) (3 4))))
 		    (collect (#M(lambda (x) (collect-sum (scan x))) e)))) (3 7))
 
-(defok 128 (ton (collect (collecting-fn T #'(lambda () 0) #'+ #Z(1 2 3)))) (1 3 6))
+(defok 128 (ton (collect (collecting-fn t #'(lambda () 0) #'+ #Z(1 2 3)))) (1 3 6))
 (defok 129 (ton (collect (collecting-fn 'integer #'(lambda () 0) #'+ #Z(1 2 3)))) (1 3 6))
-(defok 130 (ton (collect (collecting-fn T #'(lambda () 0) '+ #Z(1 2 3)))) (1 3 6))
-(defok 131 (ton (collect (collecting-fn T #'(lambda () 0) #'(lambda (s z) (+ s z)) #Z(1 2 3))))
+(defok 130 (ton (collect (collecting-fn t #'(lambda () 0) '+ #Z(1 2 3)))) (1 3 6))
+(defok 131 (ton (collect (collecting-fn t #'(lambda () 0) #'(lambda (s z) (+ s z)) #Z(1 2 3))))
   (1 3 6))
-(defok 132 (ton (collect (collecting-fn '(values T T) #'(lambda () (values nil T))
+(defok 132 (ton (collect (collecting-fn '(values t t) #'(lambda () (values nil t))
 					  #'(lambda (max flag n)
 					      (values (if flag n (max max n)) nil))
 					  #Z(1 4 2)))) (1 4 4))
 (defok 133 (ton (collect 'list
 			   (collecting-fn '(values list integer) #'(lambda () (values nil 0))
 					  #'(lambda (a b x y) (values (cons (list x y b) a) (1+ b)))
-					  #Z(A B C) #Z(1 2 3))))
+					  #Z(a b c) #Z(1 2 3))))
   (((a 1 0)) ((b 2 1) (a 1 0)) ((c 3 2) (b 2 1) (a 1 0))))
-(defok 134 (ton (collect (collecting-fn T #'(lambda () 0) #'- #Z(1 2 3)))) (-1 -3 -6))
+(defok 134 (ton (collect (collecting-fn t #'(lambda () 0) #'- #Z(1 2 3)))) (-1 -3 -6))
 
 (defok 135 (ton (multiple-value-bind (x y) (cotruncate #Z(1 2 3) #Z(4 5))
 		    (list (collect-sum x) (collect-sum y)))) (3 9))
@@ -807,13 +813,13 @@
 		      (alter x (#M- x)))
 		    v)) (1 2 -3))
 
-(defok 146 (ton (collect (positions #Z(a nil 3 nil T nil)))) (0 2 4))
-(defok 147 (ton (let ((x '(3 T nil)))
+(defok 146 (ton (collect (positions #Z(a nil 3 nil t nil)))) (0 2 4))
+(defok 147 (ton (let ((x '(3 t nil)))
 		    (collect (positions (scan  (cons nil x)))))) (1 2))
 (defok 148 (ton (collect (positions #Z(nil nil)))) ())
 
 (defok 149 (ton (collect (subseries (mask #Z()) 0 6))) (nil nil nil nil nil nil))
-(defok 150 (ton (collect (subseries (mask #Z(0 2 4)) 0 6))) (T nil T nil T nil))
+(defok 150 (ton (collect (subseries (mask #Z(0 2 4)) 0 6))) (t nil t nil t nil))
 
 (defok 151 (ton (collect (mingle #Z(1 3 7 9) #Z(4 5 8) #'<))) (1 3 4 5 7 8 9))
 (defok 152 (ton (collect (mingle #Z(4 5 8) #Z(1 3 7 9) #'<))) (1 3 4 5 7 8 9))
@@ -848,9 +854,9 @@
 		      (alter x (#M- x)))
 		    v)) (1 2 3))
 
-(defok 165 (ton (collect (expand #Z(nil T nil T nil) #Z(a b c))))
+(defok 165 (ton (collect (expand #Z(nil t nil t nil) #Z(a b c))))
   (nil a nil b nil))
-(defok 166 (ton (collect (expand #Z(nil T nil T) #Z(a b c) T))) (T a T b))
+(defok 166 (ton (collect (expand #Z(nil t nil t) #Z(a b c) t))) (t a t b))
 
 (defok 167 (ton (collect (spread #Z(1 1) #Z(2 4) -1))) (-1 2 -1 4))
 (defok 168 (ton (collect (spread #Z(0 2 4) #Z(a b)))) (a nil nil b))
@@ -949,7 +955,7 @@
 
 (defok 200 (ton (coerce (collect 'vector #Z(a b c)) 'list)) (a b c))
 (defok 201 (ton (coerce (collect 'vector #Z()) 'list)) ())
-(defok 202 (ton (collect '(simple-string 3) #Z(#\B #\A #\R))) "BAR")
+(defok 202 (ton (collect '(simple-string 3) #Z(#\b #\a #\r))) "bar")
 (defok 203 (ton (coerce (collect '(vector t 3) #Z(a b c)) 'list)) (a b c))
 
 (defok 204 (ton (progn (if (probe-file test-file) (delete-file test-file))
@@ -984,27 +990,27 @@
 (defok 222 (ton (collect-max #Z())) nil)
 (defok 223 (ton (collect-max #Z() #Z(a b c) 4)) 4)
 
-(defok 224 (ton (collect-fn T #'(lambda () 0) #'+ #Z(1 2 3))) 6)
+(defok 224 (ton (collect-fn t #'(lambda () 0) #'+ #Z(1 2 3))) 6)
 (defok 225 (ton (collect-fn 'integer #'(lambda () 0) #'+ #Z(1 2 3))) 6)
 (defok 226 (ton (collect-fn 'integer #'(lambda () 0) #'(lambda (x y) (+ x y)) #Z(1 2 3))) 6)
-(defok 227 (ton (collect-fn T #'(lambda () 0) #'(lambda (&rest args) (apply #'+ args))
+(defok 227 (ton (collect-fn t #'(lambda () 0) #'(lambda (&rest args) (apply #'+ args))
 			      #Z(1 2 3))) 6)
-(defok 228 (ton (collect-fn T #'(lambda () 0) #'- #Z(1 2 3))) -6)
-(defok 229 (ton (collect-fn T #'(lambda () 0) #'+ #Z())) 0)
-(defok 230 (ton (collect-fn T #'(lambda () T) #'+ #Z())) T)
+(defok 228 (ton (collect-fn t #'(lambda () 0) #'- #Z(1 2 3))) -6)
+(defok 229 (ton (collect-fn t #'(lambda () 0) #'+ #Z())) 0)
+(defok 230 (ton (collect-fn t #'(lambda () t) #'+ #Z())) t)
 (defok 231 (ton (multiple-value-list
 		      (collect-fn ' (values list integer) #'(lambda () (values nil 0))
 				    #'(lambda (a b x y) (values (cons (list x y b) a) (1+ b)))
-				    #Z(A B C) #Z(1 2 3))))
+				    #Z(a b c) #Z(1 2 3))))
   (((c 3 2) (b 2 1) (a 1 0)) 3))
 (defok 232 (ton (multiple-value-list
 		      (collect-fn '(values list integer) #'(lambda () (values nil 0))
 				  #'(lambda (a b x y) (values (cons (list x y b) a) (1+ b)))
-				  #Z(A B C) #Z(1 2 3))))
+				  #Z(a b c) #Z(1 2 3))))
   (((c 3 2) (b 2 1) (a 1 0)) 3))
 
 (defok 233 (ton (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
-				(collect-fn T #'(lambda () 0)
+				(collect-fn t #'(lambda () 0)
 					    #'(lambda (sum x)
 						(incf xx)
 						(+ sum x xx))
@@ -1020,22 +1026,22 @@
 
 (defok 235 (ton (collect-first #Z(a b c))) a)
 (defok 236 (ton (collect-first #Z())) nil)
-(defok 237 (ton (collect-first #Z() 'T)) T)
-(defok 238 (ton (collect-first (#Mcar #Z((T) (nil) 4)))) T)
+(defok 237 (ton (collect-first #Z() 't)) t)
+(defok 238 (ton (collect-first (#Mcar #Z((t) (nil) 4)))) t)
 (defok 239 (ton (collect-first (positions (#Mplusp #Z(-3 1 -1 3 -2))))) 1)
 (defok 240 (ton (collect-first (choose #Z(nil t nil) #Z(0 1 -1 3 -2)))) 1)
 
 (defok 241 (ton (collect-nth 1 #Z(a b c))) b)
 (defok 242 (ton (collect-nth 1 #Z())) nil)
-(defok 243 (ton (collect-nth 1 #Z() 'T)) T)
-(defok 244 (ton (collect-nth 1 (#Mcar #Z((T) (nil) 4)))) nil)
+(defok 243 (ton (collect-nth 1 #Z() 't)) t)
+(defok 244 (ton (collect-nth 1 (#Mcar #Z((t) (nil) 4)))) nil)
 
 (defok 245 (ton (collect-and #Z(1 2))) 2)
-(defok 246 (ton (collect-and (#Mcar #Z((T) (nil) 4)))) nil)
-(defok 247 (ton (collect-and #Z())) T)
+(defok 246 (ton (collect-and (#Mcar #Z((t) (nil) 4)))) nil)
+(defok 247 (ton (collect-and #Z())) t)
 
 (defok 248 (ton (collect-or #Z(nil))) nil)
-(defok 249 (ton (collect-or (#Mcar #Z((T) (nil) 4)))) T)
+(defok 249 (ton (collect-or (#Mcar #Z((t) (nil) 4)))) t)
 (defok 250 (ton (collect-or #Z())) nil)
 
 ;this contains tests of the various special forms supported.
@@ -1132,7 +1138,7 @@
 		   (#M(lambda (x) (list x p?)) (scan list)))
 		 (list (collect (foo2 '(1 2 3) 3))
 		       (collect (foo2 '(1 2 3)))))
-  (((1 T) (2 T) (3 T)) ((1 nil) (2 nil) (3 nil))))
+  (((1 t) (2 t) (3 t)) ((1 nil) (2 nil) (3 nil))))
 
 (defok 276 (td (defun foo3 (numbers)
 		   (declare (optimizable-series-function))
@@ -1162,7 +1168,7 @@
   ((a b) (b a)))
 
 (defok 280 (ton (multiple-value-bind (a b)
-		      (#2M(lambda (x) (let ((*package* (find-package "COMMON-LISP-USER")))
+		      (#2M(lambda (x) (let ((*package* (find-package :common-lisp-user)))
 					(intern (string x))))
 			  #Z(x y))
 		    (collect (#Mlist a b)))) ((x :internal) (y :internal)))
@@ -1243,7 +1249,7 @@
 				      (loop
 					  (tagbody
 					     (if done (go D))
-					     (setq item (next-in Nitems1 (setq done T) (go D)))
+					     (setq item (next-in Nitems1 (setq done t) (go D)))
 					     (go F)
 					   D (setq item (next-in Nitems2 (terminate-producing)))
 					     (setq item (1+ item))
@@ -1334,12 +1340,12 @@
   (1 1 2 3 3 4 0))
 (defok 307 (ton (multiple-value-bind (a b) (scan-plist '(k1 2 k2 4))
 		    (list (collect b)
-			  (collect (expand (series nil nil T nil T nil nil nil T)
+			  (collect (expand (series nil nil t nil t nil nil nil t)
 					   a nil)))))
   ((2 4) (nil nil k1 nil k2 nil nil nil)))
 (defok 308 (ton (collect (funcall #'(lambda (x)
 					(multiple-value-bind (a b) (scan-plist x)
-					  (expand #Z(nil nil T nil T nil nil nil T)
+					  (expand #Z(nil nil t nil t nil nil nil t)
 						  a nil)
 					  b))
 				    '(k1 2 k2 4))))
@@ -1374,14 +1380,14 @@
 			  z)))
   (((k1) (k2)) (1)))
 ;mg5
-(defok 316 (ton (multiple-value-bind (A B)
+(defok 316 (ton (multiple-value-bind (a b)
 		      (funcall #'(lambda (x y)
 				   (cotruncate (choose (#Mplusp x) x) (scan y)))
 			       #Z(1 -2 3) '(a b c))
 		    (list (collect a) (collect b))))
   ((1 3) (a b)))
 
-(defok 317 (ton (multiple-value-bind (A B)
+(defok 317 (ton (multiple-value-bind (a b)
 		      (funcall #'(lambda (x y)
 				   (cotruncate (choose (#Mplusp x) x) (scan y)))
 			       #Z(1 -2 3) '(a b c))
@@ -1390,7 +1396,13 @@
 
 ;these are weird tests checking for particular bugs in old versions
 (defok 318 (ton (multiple-value-list
-		      (let ((strings (choose-if #'stringp (scan '(1 2 "COND" 4)))))
+		      (let ((strings (choose-if #'stringp
+						(scan '(1 2
+							#-allegro-modern
+							"COND"
+							#+allegro-modern
+							"cond"
+							4)))))
 			(find-symbol (collect-first strings)))))
   (cond :inherited))
 (defcmukernel 319 (td (defun weighted-sum (numbers weights)
@@ -1681,13 +1693,13 @@
   (to (not (null (member '(type integer x)
 			 (decls (let ((x #Z(1 2 3)))
 				  (declare (type (series integer) x))
-				  (collect-sum x))) :test #'equal)))) T)
+				  (collect-sum x))) :test #'equal)))) t)
 #-:series-letify
 (defok 386
   (to (not (null (member '(type integer x)
 			 (decls (let* ((y #Z(1 2))
 				       (x (the integer (collect-sum y))))
-				  (list x x))) :test #'equal)))) T)
+				  (list x x))) :test #'equal)))) t)
 (defok 387
   (to (not (null (member '(type integer y)
 			 (decls (let* ((y (the (series *) #Z(1 2)))
@@ -1697,7 +1709,7 @@
   (to (not (null (member '(type integer y)
 			 (decls (let* ((y (the (series integer) #Z(1 2)))
 				       (x (collect-sum y)))
-				  (list x x))) :test #'equal)))) T)
+				  (list x x))) :test #'equal)))) t)
 
 ;tests of some otherwise hard to test internal functions
 ;these would probably have to be changed a good deal if there were any
@@ -1708,7 +1720,7 @@
 (defok 391 (ton (series::nsubst-inline nil 2 (list 3 1 2))) (3 1))
 
 (defok 392 (ton (series::active-terminator-p
-		   (series::make-frag :prolog `((if (car x) (go ,series::end)))))) T)
+		   (series::make-frag :prolog `((if (car x) (go ,series::end)))))) t)
 (defok 393 (ton (series::active-terminator-p
 		   (series::make-frag :prolog `((tagbody ,series::end
 						   (if (car x) (go ,series::end))))))) nil)
@@ -1778,7 +1790,7 @@
 			 (let ((g (gatherer #'(lambda (x) (collect-file test-file x)))))
 			   (next-out g 3)
 			   (next-out g 4)
-			   (list (result-of g) (collect (scan-file test-file)))))) (T (3 4)))
+			   (list (result-of g) (collect (scan-file test-file)))))) (t (3 4)))
 (defok 414 (ton (let ((x (gatherer #'(lambda (x) (collect x))))
 		      (y (gatherer #'(lambda (ns) (collect-sum (choose-if #'oddp ns))))))
 		    (dotimes (i 4)
@@ -1794,7 +1806,7 @@
 						 (next-out g 3)
 						 (next-out g 4))
 				      (collect (scan-file test-file)))
-			   (if (probe-file test-file) (delete-file test-file))))) (T (3 4)))
+			   (if (probe-file test-file) (delete-file test-file))))) (t (3 4)))
 (defok 417 (ton (multiple-value-list
 		      (gathering ((x (lambda (x) (collect x)))
 				  (y collect-sum))
@@ -1854,7 +1866,7 @@
 						       (setq xval (next-in xx (go f)))
 						       (if (minusp xval) (terminate-producing))
 						       (go j)
-						     f (setq flag T)
+						     f (setq flag t)
 						     j (next-out a xval))))))))
   ((1 2 3) (1 2 3 3)))
 (defcmukernel 428 (ton (let ((x #Z(1 2 3)))
@@ -1867,7 +1879,7 @@
 						       (setq xval (next-in xx (go f)))
 						       (if (minusp xval) (terminate-producing))
 						       (go j)
-						     f (setq flag T)
+						     f (setq flag t)
 						     j (next-out a xval))))))))
   ((1 2 3) (1 2)))
 (defcmukernel 429 (ton (let ((x #Z(1 2 -3)))
@@ -1880,7 +1892,7 @@
 						       (setq xval (next-in xx (go f)))
 						       (if (minusp xval) (terminate-producing))
 						       (go j)
-						     f (setq flag T)
+						     f (setq flag t)
 						     j (next-out a xval))))))))
   ((1 2 -3) (1 2)))
 
@@ -2076,19 +2088,19 @@
 		   (iterate ((x (series -1 2 3)))
 		     (if (plusp x) (return-from bar x))))) 2 29)
 #-(or allegro clisp)
-(defok 491 (tw (compiler-let ((*suppress-series-warnings* T))
+(defok 491 (tw (compiler-let ((*suppress-series-warnings* t))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
 
 #+clisp
-(defok 491 (tw (ext::compiler-let ((*suppress-series-warnings* T))
+(defok 491 (tw (ext::compiler-let ((*suppress-series-warnings* t))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
 
 #+allegro
-(defok 491 (tw (cltl1::compiler-let ((*suppress-series-warnings* T))
+(defok 491 (tw (cltl1::compiler-let ((*suppress-series-warnings* t))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
@@ -2177,10 +2189,10 @@
 		 (when (not a) (setq a #Z(9 8)))
 		 (list (collect a) (collect z) b))) ((9 8) (1 2) (1 2)) 20)
 (defok 510 (tr (let ((x #Z(1 2)))
-		   (list (if T 3 (scan-range :upto 3))
+		   (list (if t 3 (scan-range :upto 3))
 			 (collect x)))) (3 (1 2)) 20)
 (defok 511 (tr (let ((x #Z(1 2)))
-		   (if T (collect-sum #Z(2 3)) x))) 5 20)
+		   (if t (collect-sum #Z(2 3)) x))) 5 20)
 
 (defok 512 (tr (let* ((e #Z(1 2))
 			(w (collect e)))
@@ -2428,7 +2440,7 @@
 						 (fgather-next g 3)
 						 (fgather-next g 4))
 				      (collect (scan-file test-file)))
-			   (if (probe-file test-file) (delete-file test-file))))) (T (3 4)))
+			   (if (probe-file test-file) (delete-file test-file))))) (t (3 4)))
 (defok 5004 (ton (multiple-value-list
 		      (fgathering ((x (lambda (x) (collect x)))
 				   (y collect-sum))
@@ -2442,15 +2454,15 @@
 ;Permission to use, copy, modify, and distribute this software and its
 ;documentation for any purpose and without fee is hereby granted,
 ;provided that this copyright and permission notice appear in all
-;copies and supporting documentation, and that the name of M.I.T. not
+;copies and supporting documentation, and that the name of M.I.t. not
 ;be used in advertising or publicity pertaining to distribution of the
-;software without specific, written prior permission. M.I.T. makes no
+;software without specific, written prior permission. M.I.t. makes no
 ;representations about the suitability of this software for any
 ;purpose.  It is provided "as is" without express or implied warranty.
 
-;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+;    M.I.t. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
-;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+;    M.I.t. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
 ;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
 ;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
 ;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
