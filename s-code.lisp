@@ -9,11 +9,17 @@
 ;or copied the files a long time ago, you might consider 
 ;copying them from the above web site now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.39 2000/02/02 21:31:44 toy Exp $
+;;;; $Id: s-code.lisp,v 1.40 2000/02/03 17:30:08 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.40  2000/02/03 17:30:08  toy
+;;;; Two major fixes:
+;;;;
+;;;; o Bug in collect (missing set of parens)
+;;;; o Change some defconstants back to defvar.  (Tickles CMUCL inf loop).
+;;;;
 ;;;; Revision 1.39  2000/02/02 21:31:44  toy
 ;;;; Here are the changes that Fernando made.  I (RLT) don't claim to
 ;;;; understand everything that was changed or why.
@@ -961,9 +967,9 @@
 (defmacro deft (name head rest)
   `(setf (get ',name 'scan-template) (make-template ,head ,rest)))
 
-(defconstant *expr-template* (make-template (Q) (E)))
+(defvar *expr-template* (make-template (Q) (E)))
 
-(defconstant *eval-all-template* (make-template () (E)))
+(defvar *eval-all-template* (make-template () (E)))
 
 ;;; Error reporting
 
@@ -2960,12 +2966,12 @@
 	      (dead-aux (clean-code1 suspicious code)))
     (values (remove-if #'(lambda (v) (member (car v) dead-aux)) aux) code)))
 
-  (cl:defun codify-1 (aux code)
-    (multiple-value-setq (aux code) (clean-code aux code))
-    (when aux
-      (cl:let ((dcls (clean-dcls aux)))
-        (if dcls (push `(declare ,@ dcls) code))))
-    `(cl:let ,(mapcar #'aux-init aux) ,@ code))
+(cl:defun codify-1 (aux code)
+  (multiple-value-setq (aux code) (clean-code aux code))
+  (when aux
+    (cl:let ((dcls (clean-dcls aux)))
+      (if dcls (push `(declare ,@ dcls) code))))
+  `(cl:let ,(mapcar #'aux-init aux) ,@ code))
 
 (cl:defun aux-ordering (a b)
   (when (consp a) (setq a (car a)))
@@ -3115,7 +3121,9 @@
 
 
 (cl:defun aux-init (aux)
-  (list (car aux) (init-elem (cadr aux))))
+  (destructuring-bind (var-name var-type)
+      aux
+    (list var-name (init-elem var-type))))
 
 (cl:defun init-elem (type)
   (cl:let ((var-type (canonical-type type)))
@@ -4077,11 +4085,11 @@ TYPE."
 				    args)))))
  :optimizer
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
-	      (params nil)
-	      (frag (make-frag))
-	      (in-vars (n-gensyms (length args) "M-"))
-	      (out-vars (n-gensyms (length types) "ITEMS-"))
-	      (*state* nil))
+	    (params nil)
+	    (frag (make-frag))
+	    (in-vars (n-gensyms (length args) "M-"))
+	    (out-vars (n-gensyms (length types) "ITEMS-"))
+	    (*state* nil))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p T) frag))
     (setf (aux frag) (mapcar #'list out-vars (mapcar #'type-or-list-of-type types))) 
@@ -4902,10 +4910,11 @@ TYPE."
     (when (not seq-p) ;it is actually seq-type that is optional
       (setq seq seq-type)
       (setq seq-type (optq 'list)))
-    (multiple-value-setq (type limit *type*) (decode-seq-type (non-optq seq-type)))
+    (multiple-value-setq (type limit *type*)
+      (decode-seq-type (non-optq seq-type)))
     (cond ((member type '(list bag))
 	   (fragL ((seq)) ((elements T))
-		  ((elements #-:cmu *type* #+:cmu (or *type* null)) 
+		  ((elements *type*) 
 		   (listptr list) (parent list))
 		  ((elements (setf (car parent) *alt*) parent))
 		  ((setq listptr seq))
@@ -4917,7 +4926,7 @@ TYPE."
 	   (fragL ((seq) (limit)) ((elements T))
 		  ((elements #-:cmu *type* #+:cmu (or *type* null)) 
 		   (temp T) 
-		   (index #-:cmu fixnum #+:cmu (or fixnum null)))
+		   (index fixnum))
 		  ((elements (setf (aref temp index) *alt*) temp index))
 		  ((setq index -1) (setq temp seq))
 		  ((incf index)
@@ -4926,9 +4935,9 @@ TYPE."
 	  ((not (eq type 'sequence)) ;some kind of vector
 	   (fragL ((seq)) ((elements T))
 		  ((elements #-:cmu *type* #+:cmu (or *type* null)) 
-		   (limit #-:cmu fixnum #+:cmu (or fixnum null))
+		   (limit fixnum)
 		   (temp T) 
-		   (index #-:cmu fixnum #+:cmu (or fixnum null)))
+		   (index fixnum))
 		  ((elements (setf (aref temp index) *alt*) temp index))
 		  ((setq index -1) (setq limit (length seq)) (setq temp seq))
 		  ((incf index)
@@ -4936,9 +4945,9 @@ TYPE."
 		   (setq elements (aref seq index))) () ()))
 	  (T (fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
 		    ((elements #-:cmu *type* #+:cmu (or *type* null)) 
-		     (limit #-:cmu fixnum #+:cmu (or fixnum null))
+		     (limit fixnum)
 		     (temp T) 
-		     (index #-:cmu fixnum #+:cmu (or fixnum null)))
+		     (index fixnum))
 		    ((elements (setf (elt temp index) *alt*) temp index))
 		    ((setq index -1) (setq limit (length seq)) (setq temp seq))
 		    ((incf index)
@@ -5602,7 +5611,7 @@ SCAN-FILE, except we read from an existing stream."
 			    (list *type* el-type '(*))
 			    (list *type* el-type)))
 	   (fragL ((seq-type) (items T)) ((seq)) 
-		  ((seq #-:cmu *type* #+:cmu (or *type* null)) 
+		  ((seq *type*) 
 		   (lst list)) ()
 		  ((setq lst nil))
 		  ((setq lst (cons items lst)))
@@ -5615,7 +5624,7 @@ SCAN-FILE, except we read from an existing stream."
 		    ((setq lst nil)
 		     (multiple-value-bind (x y)
 		         (decode-seq-type (list 'quote seq-type))
-			 (declare (ignore x))
+		       (declare (ignore x))
 		       (setq limit y))) ; y is not restricted to fixnum!
 		    ((setq lst (cons items lst)))
 		    ((cl:let ((num (length lst)))
@@ -5686,7 +5695,7 @@ SCAN-FILE, except we read from an existing stream."
   (funcall-literal-frag
     (cl:let ((file (new-var 'outfile)))
       `((((items T) (printer)) ((out)) 
-	 ((out #-:cmu (member T) #+:cmu (or (member T) null)))
+	 ((out #-:cmu (member T) #+:cmu (or (member T) null))) ()
 	 ((setq out T)) ((cl:funcall printer items ,file)) ()
 	 (#'(lambda (c)
 	      (list 'with-open-file '(,file ,name :direction :output) c))))
@@ -5741,7 +5750,8 @@ SCAN-FILE, except we read from an existing stream."
 ;; API
 (defS collect-first (items &optional (default nil))
     "Returns the first element of ITEMS."
-  (fragL ((items T) (default)) ((item)) ((item (series-element-type items))) ()
+  (fragL ((items T) (default)) ((item))
+	 ((item (or (series-element-type items) null))) ()
 	 ((setq item default))
 	 ((setq item items) (go END)) () ())
  :trigger T)
@@ -5750,8 +5760,8 @@ SCAN-FILE, except we read from an existing stream."
 (defS collect-nth (n items &optional (default nil))
     "Returns the nth element of ITEMS."
   (fragL ((n) (items T) (default)) ((item))
-	 ((counter #-:cmu fixnum #+cmu (or fixnum null))
-	  (item #-:cmu (series-element-type items) #+:cmu (or (series-element-type items) null))) ()
+	 ((counter  fixnum)
+	  (item (or (series-element-type items) null))) ()
 	 ((setq item default) (setq counter n))
 	 ((when (zerop counter) (setq item items) (go END))
 	  (decf counter)) () ())
