@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.23 1999/04/13 16:51:32 toy Exp $
+;;;; $Id: s-code.lisp,v 1.24 1999/04/15 16:35:54 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.24  1999/04/15 16:35:54  toy
+;;;; In aux-init, the bit-vector entry is actually applicable to all Lisps
+;;;; because bit-vectors would get initialized to #() instead of #*, which
+;;;; is wrong.  Remove the CMU conditionalization.
+;;;;
 ;;;; Revision 1.23  1999/04/13 16:51:32  toy
 ;;;; o  Back up the gensym changes made in 1.21 because CLISP doesn't like
 ;;;;    it.
@@ -3044,7 +3049,6 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name ""))))
-	  #+cmu	; CMUCL converts (vector bit) to bit-vector
 	  ((subtypep var-type 'bit-vector)
 	   (cond ((consp var-type)
 		  (cl:let ((len (second var-type)))
