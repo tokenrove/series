@@ -40,9 +40,16 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.18 2000/09/22 16:01:43 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.19 2001/08/23 22:21:59 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.19  2001/08/23 22:21:59  rtoy
+;;;; o Comment out test 466 because I don't understand what this is really
+;;;;   supposed to test.
+;;;; o Update test 491 for Clisp version 2.27 which has compiler-let in the
+;;;;   EXT package.
+;;;; o Tests 549-551 should apply to all lisps, not just Symbolics.
+;;;;
 ;;;; Revision 1.18  2000/09/22 16:01:43  rtoy
 ;;;; o Rainer Joswig points out that in several places we use lisp:let.
 ;;;;   Make that common-lisp:let.
@@ -1979,6 +1986,9 @@
 
 (defok 465 (te (map-fn #'car #Z(1 2 3))) 70)
 
+;; What is this really supposed to test?  That series handles lambda
+;; keywords?  But &foo is invalid.
+#+nil
 (defok 466 (teo (defun ff (&foo b)
 		    (declare (optimizable-series-function))
 		    (car a))) 71)
@@ -2069,7 +2079,7 @@
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
 
 #+clisp
-(defok 491 (tw (lisp::compiler-let ((*suppress-series-warnings* T))
+(defok 491 (tw (ext::compiler-let ((*suppress-series-warnings* T))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
@@ -2335,15 +2345,14 @@
 		    (collect (split-if data #'(lambda (obj) (eql obj end))))))
   (3))
 
-; Additional tests that only work on symbolics.
+;; Additional tests
 
- #+(or cmu symbolics)
 (defok 549 (td (defun foo4 (number)
 		   (declare (integer number))
 		   (1+ number))
 		 (collect (scan-range :below (foo4 4))))
   (0 1 2 3 4))
- #+(or cmu symbolics)
+
 (defok 550 (ton (collect (mapping ((x #Z(1 2)))
 			     (do ((i 1 (1+ i))
 				  a (b) (c 0)
@@ -2352,7 +2361,6 @@
 			       (setq b i a i)
 			       (if (> (+ a b c) 100) (return nil))))))
   (1 4))
- #+(or cmu symbolics)
 (defok 551 (tw (defun ugh6 (a)
 		   (declare (optimizable-series-function) (ignore a))
 		   (scan a)))
