@@ -95,6 +95,13 @@ installed.
 Release notes
 -------------
 
+* Series 2.2.8 Release Notes
+
+o Support for SBCL and asdf.
+o Some fixes for CMUCL 18e and later.
+o ALTER was not working in some cases.
+o Bug 434120 fixed.
+
 * Series 2.2.7 Release Notes
 
 o Some changes for CLISP 2.29.  The declaration SYSTEM::READ-ONLY was
