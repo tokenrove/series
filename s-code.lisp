@@ -1,17 +1,22 @@
 ;-*- Mode: lisp; syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
 
 ;;;; The standard version of this program is available from
-;;;; http://www.mindspring.com/~rtoy/software/series/series.html If
-;;;; you have gotten the file from somewhere else, or copied the files
-;;;; a long time ago, you might consider copying them from the above
-;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.47 2000/02/11 14:45:42 toy Exp $
+;;;; http://www.mindspring.com/~rtoy/software/series/series.html
+;;;;
+;;;; If you obtained this file from somewhere else, or copied the
+;;;; files a long time ago, you might consider copying them from the
+;;;; above web site now to obtain the latest version.
+;;;;
+;;;; $Id: s-code.lisp,v 1.48 2000/02/22 15:21:38 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.48  2000/02/22 15:21:38  toy
+;;;; Fernando added dynamic-extent declarations wherever needed.
+;;;;
 ;;;; Revision 1.47  2000/02/11 14:45:42  toy
 ;;;; Let's not use fix-types for CMU in optimize-producing.  This means the
 ;;;; compiler can't optimize things as well as it could, and I (RLT) want
@@ -518,12 +523,14 @@
         (T `(multiple-value-setq ,vars ,value))))
 
 (cl:defun pos (&rest bools)
+  (declare (dynamic-extent bools))
   (do ((bs bools (cdr bs))
        (i 0 (1+ i)))
       ((null bs) i)
     (if (car bs) (return i))))
 
 (cl:defun pos-if (item &rest fns)
+  (declare (dynamic-extent fns))	  
   (do ((fs fns (cdr fs))
        (i 0 (1+ i)))
       ((null fs) i)
@@ -1091,6 +1098,7 @@
 
 ;; HELPER
 (cl:defun rrs (id &rest args) ;Restriction violations.
+  (declare (dynamic-extent args))	  
   (when (not *suppress-series-warnings*)
     (report-error (list* "~&Restriction violation " id
                          " in series expression:~%"
@@ -1664,6 +1672,7 @@
          (T ,non-opt)))
 
 (cl:defun ers (id &rest args)  ;Fatal errors.
+  (declare (dynamic-extent args))	  
   (if *testing-errors* (throw :testing-errors id))
   (if *in-series-expr*
     (report-error (list* "~&Error " id " in series expression:~%"
@@ -1672,6 +1681,7 @@
   (error ""))
 
 (cl:defun wrs (id always-report-p &rest args) ;Warnings.
+  (declare (dynamic-extent args))	  
   (when (or always-report-p (not *suppress-series-warnings*))
     (report-error (list* "~&Warning " id
                          " in series expression:~%"
@@ -1689,6 +1699,7 @@
 (cl:defun some-series-type-p (type)
   (cl:flet ((s-car-p (typ)
               (eq-car typ 'series)))
+    (declare (dynamic-extent #'s-car-p))
     (or (s-car-p type)
         (and (or (eq-car type 'or)
                  (eq-car type 'and))
@@ -1701,6 +1712,7 @@
                   (if (eq-car typ 'series)
                       (cadr typ)
                     typ)))
+      (declare (dynamic-extent #'upgrade-type))
       (if (eq cartyp 'series)
           (cadr type)
         (if (or (eq cartyp 'or) 
@@ -1714,6 +1726,7 @@
                 (if (eq typ '*)
                     t
                   typ)))
+      (declare (dynamic-extent #'star2t))
       (typecase type
         (list (cl:let ((cartyp (car type)))
                 (if (or (eq cartyp 'or) 
@@ -2662,6 +2675,7 @@
   (merge-frags ret-frag arg-frag))
 
 (cl:defun non-series-merge-list (&rest frags)
+  (declare (dynamic-extent frags))	  
   (cl:let ((frag (pop frags)))
     (loop (if (null frags) (return frag))
           (setq frag (non-series-merge frag (pop frags))))))
@@ -4465,6 +4479,7 @@ TYPE."
       (flet ((new-init () (forceL n (multiple-value-list (cl:funcall init))))
              (new-step (state) (forceL n (multiple-value-list (apply step state))))
              (new-test (state) (apply test state)))
+	(declare (dynamic-extent #'new-init #'new-step #'new-test))
         (cl:funcall fn T #'new-init #'new-step #'new-test)))))
 
 ;; needed because collect is a macro
@@ -4477,6 +4492,7 @@ TYPE."
 
 ;;needed because collect-fn is macro
 (cl:defun basic-collect-fn (inits function &rest args)
+  (declare (dynamic-extent args))	  
   (declare (type list args))
   (compiler-let ((*optimize-series-expressions* nil))
     (fragL ((inits) (function) (args)) ((result))
@@ -4498,6 +4514,7 @@ TYPE."
                       #'(lambda ()
                           (forceL n (multiple-value-list (cl:funcall inits))))
                       #'(lambda (state &rest args)
+			  (declare (dynamic-extent args))	  
                           (forceL n (multiple-value-list
                                       (apply function (nconc state args)))))
                       args)))))
@@ -4526,6 +4543,7 @@ TYPE."
                                   #'(lambda ()
                                       (forceL n (multiple-value-list (cl:funcall inits))))
                                   #'(lambda (state &rest args)
+				      (declare (dynamic-extent args))	  
                                       (forceL n (multiple-value-list
                                                  (apply function (append state args)))))
                                   args)))))
@@ -4763,6 +4781,7 @@ TYPE."
 		   (progn
 		     (setq state :middle)
 		     from)))))
+	(declare (dynamic-extent #'xform-assignment))
 	(cond ((and (consp f) (case (car f) ((setq) t))) ; SETF removed for now
 	       (cl:multiple-value-bind (vars lastbind binds) (split-assignment (cdr f))
 		 (unless (cdr lastbind)
@@ -4803,6 +4822,7 @@ TYPE."
       #+nil
       (flet ((fix-types (var)
                (cons (car var) (type-or-null (cdr var)))))
+	(declare (dynamic-extent #'fix-types))
         (setq type-alist (mapcar #'fix-types type-alist)))
       (cl:let* ((forms (cdadar bod))
                 (frag (make-frag))
@@ -4832,6 +4852,7 @@ TYPE."
                        (if (eq-car typ 'series)
                            (cadr typ)
                          typ)))
+		(declare (dynamic-extent #'upgrade-type))
                 (if (eq-car type 'series)
                     (setq type (cadr type)) 
                   (if (eq-car type 'or)
