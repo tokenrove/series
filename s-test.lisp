@@ -40,9 +40,21 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.13 2000/03/03 19:17:15 matomira Exp $
+;;;; $Id: s-test.lisp,v 1.14 2000/03/14 10:52:34 matomira Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.14  2000/03/14 10:52:34  matomira
+;;;; Workaround for ACL 5.0.1 TAGBODY bug added.
+;;;; ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
+;;;; GENERATOR deftyped to CONS, not LIST, when necessary.
+;;;; Abstracted use of wrapper component of frags.
+;;;;
+;;;; Revision 1.14  2000/03/14 10:48:10  matomira
+;;;; Workaround for ACL 5.0.1 TAGBODY bug added.
+;;;; ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
+;;;; Abstracted use of wrapper component of frags.
+;;;; GENERATOR deftyped to CONS, not LIST, when necessary.
+;;;;
 ;;;; Revision 1.13  2000/03/03 19:17:15  matomira
 ;;;; Series 2.0 - Change details in RELEASE-NOTES.
 ;;;;
@@ -77,14 +89,18 @@
 ;;;;
 ;;;;
 
-(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
-	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
-					  :load-toplevel
-					  :execute)
+(series::eval-when (:compile-toplevel :load-toplevel :execute)
   #-clisp
   (in-package "COMMON-LISP-USER")
   #+clisp
   (in-package "USER")
+
+  #+(and :allegro-version>= (version>= 5 0) (not (version>= 5 1)))
+  (defadvice make-sequence :before
+    (cond ((eql (car excl:arglist) 'base-string)
+	   (setf (car excl:arglist) '(vector base-char)))
+	  ((eql (car excl:arglist) 'simple-base-string)
+	   (setf (car excl:arglist) '(simple-array base-char (*))))))
 
   (series::install)
 ) ; end of eval-when
@@ -1562,11 +1578,11 @@
 		    (list (collect-sum (#M+ x y)) (collect-sum y))))
   (21 22))
 (defok 375 (ton (let ((x #Z(1 2 3))
-			(y #Z(4 5 6 7)))
+		      (y #Z(4 5 6 7)))
 		    (list (collect-sum (#M+ x y)) (collect-sum y) (collect-sum y))))
   (21 22 22))
 (defok 376 (ton (let* ((e #Z(1 -2 -4 3))
-			 (f #Z(a)))
+		       (f #Z(a)))
 		    (multiple-value-bind (w x) (split-if e #'plusp)
 		      (list (collect (#Mlist w))
 			    (collect (#Mlist x f))))))

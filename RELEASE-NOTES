@@ -1,4 +1,4 @@
-                      Series Version 2.0.3 RELEASE NOTES
+                      Series Version 2.1 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -42,8 +42,9 @@
                               Tim Bradshaw    (Symbolics)
                               Bruno Haible    (CLISP)
                              Arthur Lemmens
+                             Lieven Marchand  (Allegro)
                             Reginald S. Perry
-                             Pekka Pirinen    (Liquid Common Lisp)
+                             Pekka Pirinen    (Liquid)
                              Paul Werkowski   (CMUCL)
 
  
@@ -109,6 +110,9 @@ IMPROVEMENTS:
   - Replaced some SETQs by initializations at LET binding time.
   - Removed global function namespace pollution.
   - Encapsulated series subfunctions.
+  - Prevented generation of some dead termination code.
+  - Whole expression (t) and :loop wrapper placement
+    (:prolog and :epilog support easy to add, if necessary).
 - Source clean up.
   Local series functions are almost there (FLET extension)
   Bottom-up definition for improved compilation.
@@ -117,13 +121,17 @@ IMPROVEMENTS:
   `readability/documentation' release.
   Abstracted use of aux component of frags.
   Some work done towards multiple assignment support in PRODUCING.
-
+  Added private ANSI-compliant eval-when macro when special form is old-style.
+  Abstracted use of wrapper component of frags.
+  GENERATOR deftyped to CONS, not LIST, when necessary.
 
 BUG FIXES:
 ---------
 - Does not unintern EXT:COLLECT and EXT:ITERATE anymore under CMUCL!!!
 - GATHERING et al. are not bitten by CMUCL DEFSTRUCT bugs.
 - Allegro 5.x needs the GENERATOR deftype, too.
+- Workaround for ACL 5.0.1 TAGBODY bug.
+- ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
 
 COMPILING
 --------
