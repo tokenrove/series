@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.6 1997/01/13 17:47:19 toy Exp $
+;;;; $Id: s-code.lisp,v 1.7 1997/01/16 14:20:23 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.7  1997/01/16 14:20:23  toy
+;;;; GCL normally doesn't have defpackage, so don't use defpackage form.
+;;;; It also doesn't have a "CL" package, so rename "LISP" to
+;;;; "COMMON-LISP" with appropriate nicknames.
+;;;;
 ;;;; Revision 1.6  1997/01/13 17:47:19  toy
 ;;;; Added some changes from Tim Bradshaw (tfb@aiai.ed.ac.uk):
 ;;;;   Replace "LISP:" with "CL:"
@@ -99,6 +104,7 @@
 
 (provide "SERIES")
 
+#-gcl
 (defpackage "SERIES"
     (:use "LISP")
   (:export 
@@ -138,6 +144,13 @@
   #+Allegro
   (:import-from "CLTL1" "COMPILER-LET")
 )
+
+;;; Some Lisps don't have the CL (COMMON-LISP) package.  However, they
+;;; do have the LISP package which would work here.  Rename LISP to CL
+;;; with LISP as a nickname for these Lisps.
+#+(or gcl)
+(eval-when (compile load eval)
+  (rename-package "LISP" "COMMON-LISP" '("LISP" "CL")))
 
 #+cmu
 (in-package "SERIES")
