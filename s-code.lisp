@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.82 2001/04/07 20:14:31 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.83 2001/04/09 19:52:34 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.83  2001/04/09 19:52:34  rtoy
+;;;; Stupid typo commenting (too much) stuff out.
+;;;;
 ;;;; Revision 1.82  2001/04/07 20:14:31  rtoy
 ;;;; o remove-aux-if was inadvertently defined twice (should have been
 ;;;;   remove-aux-if-not)
@@ -1902,7 +1905,7 @@
   (declaim (inline remove-aux-if-not))
   (cl:defun remove-aux-if-not (p auxs)
     (mapcar #'(lambda (b) (remove-if-not p b)) auxs))
-#|
+|#
   (declaim (inline segregate-aux))
   (cl:defun segregate-aux (p auxs)
     (2mapcar #'(lambda (b) (values (remove-if-not p b) (remove-if p b))) auxs))
