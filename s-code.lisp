@@ -8,11 +8,19 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.22 1999/04/09 12:32:26 toy Exp $
+;;;; $Id: s-code.lisp,v 1.23 1999/04/13 16:51:32 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.23  1999/04/13 16:51:32  toy
+;;;; o  Back up the gensym changes made in 1.21 because CLISP doesn't like
+;;;;    it.
+;;;; o  type-expand for CLISP is in the LISP package.
+;;;; o  For CMUCL, in aux-init need to check for bit-vector before
+;;;;    simple-array because simple-bit-vector was done as simple-array
+;;;;    instead of bit-vector, which is wrong.
+;;;;
 ;;;; Revision 1.22  1999/04/09 12:32:26  toy
 ;;;; Add definition of canonical-type for CLISP.
 ;;;;
@@ -632,7 +640,7 @@
   (setf (rets frag) (copy-tree (mapcar #'cddr (rets frag))))
   (setf (args frag) (copy-tree (mapcar #'cddr (args frag))))
   (cl:let ((gensyms (find-gensyms frag)))
-    (sublis (mapcar #'(lambda (v) (cons v (gensym (root v)))) gensyms)
+    (sublis (mapcar #'(lambda (v) (cons v (gentemp (root v)))) gensyms)
       (cons gensyms (iterative-copy-tree (cddddr frag))))))
 
 (cl:defun find-gensyms (tree &optional (found nil))
@@ -3001,7 +3009,7 @@
 						type))))
 #+CLISP
 (cl:defun canonical-type (type)
-  (type-expand type))
+  (lisp:type-expand type))
 
 #-(or cmu CLISP)
 (cl:defun canonical-type (type)
@@ -3036,15 +3044,6 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name ""))))
-	  ((subtypep var-type 'simple-array)
-	   (cond ((and (consp var-type)
-		       (= 3 (length var-type)))
-		  (cl:let ((len (first (third var-type))))
-		    (list var-name (list 'make-sequence
-					 `',var-type
-					 (if (eq len '*) 0 len)))))
-		 (t
-		  (list var-name '#()))))
 	  #+cmu	; CMUCL converts (vector bit) to bit-vector
 	  ((subtypep var-type 'bit-vector)
 	   (cond ((consp var-type)
@@ -3054,6 +3053,15 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name #*))))
+	  ((subtypep var-type 'simple-array)
+	   (cond ((and (consp var-type)
+		       (= 3 (length var-type)))
+		  (cl:let ((len (first (third var-type))))
+		    (list var-name (list 'make-sequence
+					 `',var-type
+					 (if (eq len '*) 0 len)))))
+		 (t
+		  (list var-name '#()))))
 	  ((subtypep var-type 'vector)
 	   (cond ((and (consp var-type))
 		  (cond ((= 3 (length var-type))
@@ -3282,9 +3290,9 @@
 	      (dcl (if (consp doc) (prog1 (cdr doc) (setq doc (car doc)))))
 	      (opt-code (or optimizer body))
 	      (body-fn (cond ((symbolp body-code) body-code)
-			     (trigger (gensym (string name)))))
-	      (opt-fn (gensym (string name)))
-	      (desc-fn (cond (discriminator (gensym (string name)))
+			     (trigger (gentemp (string name)))))
+	      (opt-fn (gentemp (string name)))
+	      (desc-fn (cond (discriminator (gentemp (string name)))
 			     (trigger 'no)
 			     (t 'yes)))
 	      (opt-arglist	;makes up for extra level of evaluation.
