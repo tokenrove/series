@@ -8,9 +8,22 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.6 2000/03/03 19:17:15 matomira Exp $
+;;;; $Id: s-package.lisp,v 1.7 2000/03/28 10:23:49 matomira Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.7  2000/03/28 10:23:49  matomira
+;;;; polycall et all are now tail recursive.
+;;;; LETIFICATION WORKS COMPLETELY!!
+;;;;
+;;;; Revision 1.8  2000/03/14 10:48:10  matomira
+;;;; Workaround for ACL 5.0.1 TAGBODY bug added.
+;;;; ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
+;;;; Abstracted use of wrapper component of frags.
+;;;; GENERATOR deftyped to CONS, not LIST, when necessary.
+;;;;
+;;;; Revision 1.7  2000/03/11 17:36:34  matomira
+;;;; Added eval-when compatibility magic.
+;;;;
 ;;;; Revision 1.6  2000/03/03 19:17:15  matomira
 ;;;; Series 2.0 - Change details in RELEASE-NOTES.
 ;;;;
@@ -40,8 +53,12 @@
   (unless (find-package "CL")
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
+#+(or :cmu :sbcl)
+(cl:eval-when (load eval compile)
+  (cl:pushnew ':pittsburgh cl:*features*))
+
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp CLISP)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro :pittsburgh Genera Harlequin-Common-Lisp CLISP)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
 
@@ -103,19 +120,23 @@
   '(;(2) readmacros (#M and #Z)
 
     ;(5) declarations and types (note dual meaning of series)
+    indefinite-extent
     optimizable-series-function off-line-port ;series
     series-element-type propagate-alterability
 
     ;(10) special functions
     alter to-alter encapsulated terminate-producing
-    next-in next-out generator gatherer result-of gathering
+    next-in next-out generator gatherer result-of 
+    gather-next gather-result fgather-next fgather-result
+    gathering fgathering gatherlet fgatherlet
 
     ;(55) main line functions
     make-series series scan scan-multiple scan-range scan-sublists scan-fn
     scan-fn-inclusive scan-lists-of-lists scan-lists-of-lists-fringe scan-file
     scan-stream scan-hash scan-alist scan-plist scan-symbols collect-fn collect
     collect-append collect-nconc collect-file collect-alist collect-plist
-    collect-hash collect-length collect-sum collect-max collect-min
+    collect-hash collect-length
+    collect-sum collect-product collect-max collect-min
     collect-last collect-first collect-nth collect-and collect-or
     previous map-fn iterate mapping collecting-fn cotruncate
     latch until until-if positions choose choose-if
@@ -128,3 +149,21 @@
     *last-series-error*
     *suppress-series-warnings*))
 
+#-(or Series-ANSI)
+(eval-when (compile load eval)
+  (in-package "SERIES" :use '("LISP"))
+  (shadow '(let let* multiple-value-bind funcall defun eval-when #+cmu collect #+cmu iterate))
+) ; end of eval-when
+
+#-(or Series-ANSI)
+(cl:eval-when (compile load eval)
+  (defmacro eval-when ((&rest times) &body body)
+    `(cl:eval-when ,(append
+		     (when (member :compile-toplevel times)
+		       '(compile))
+		     (when (member :load-toplevel times)
+		       '(load))
+		     (when (member :execute times)
+		       '(eval)))
+       ,@body))
+) ; end of eval-when

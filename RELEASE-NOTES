@@ -1,4 +1,4 @@
-                      Series Version 2.3 RELEASE NOTES
+                      Series Version 2.2.2 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -117,13 +117,13 @@ IMPROVEMENTS:
 - MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
 - Better code generation
   . Stricter typing.
-  . Replaced some SETQs by initializations at LET binding time.
+  . OUTPUT IS NOW `LETIFIED'. SETQs GO HOME!!
+    (Replaced as many SETQs as possible by initializations at LET binding time)
   . Removed global function namespace pollution.
   . Encapsulated series subfunctions.
   . Prevented generation of some dead termination code.
   . Whole expression (t) and :loop wrapper placement
     (:prolog and :epilog support easy to add, if necessary).
-  . Improved letification merging.
   . Optimized collections of the form (collect [type] (scan [type] ({list | ..}
   . Some fixnum declarations were further constrained.
   . Optimized scanning of constant sequences.
@@ -136,6 +136,8 @@ IMPROVEMENTS:
   . Variables of type NULL are replaced by constant NILs.
   . Avoid indirect funcalling through a variable in CHOOSE-IF and basic-collect-fn whenever possible.
   . Avoid consing in MAP-FN.
+  . Removes fake series result variables from generated code.
+  . polycall et al. are now tail recursive [If your compiler cannot optimize this, bark to your provider]
 
 - Source clean up.
   Local series functions are almost there (FLET extension)
@@ -150,6 +152,7 @@ IMPROVEMENTS:
   GENERATOR deftyped to CONS, not LIST, when necessary.
   Abstracted use of prolog component of frags.
   MERGE-FRAGS no longer depends on the exact order of frag components.
+  Removed almost all uses of *fragL already.
 
 BUG FIXES:
 ---------

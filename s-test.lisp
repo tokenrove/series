@@ -40,14 +40,24 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.14 2000/03/14 10:52:34 matomira Exp $
+;;;; $Id: s-test.lisp,v 1.15 2000/03/28 10:23:49 matomira Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
-;;;; Revision 1.14  2000/03/14 10:52:34  matomira
-;;;; Workaround for ACL 5.0.1 TAGBODY bug added.
-;;;; ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
-;;;; GENERATOR deftyped to CONS, not LIST, when necessary.
-;;;; Abstracted use of wrapper component of frags.
+;;;; Revision 1.15  2000/03/28 10:23:49  matomira
+;;;; polycall et all are now tail recursive.
+;;;; LETIFICATION WORKS COMPLETELY!!
+;;;;
+;;;; Revision 1.17  2000/03/17 19:24:24  matomira
+;;;; MERGE-FRAGS no longer depends on frag component order.
+;;;; purity component of frag is now just a symbol.
+;;;; Abstracted use of prolog component of frags.
+;;;; Prolog letification almost works. Need to adapt MERGE-FRAGS still.
+;;;;
+;;;; Revision 1.16  2000/03/15 18:40:36  matomira
+;;;; LOCALLY and letification works.
+;;;;
+;;;; Revision 1.15  2000/03/15 09:05:41  matomira
+;;;; Temporary NULL-OR wrap for some declarations.
 ;;;;
 ;;;; Revision 1.14  2000/03/14 10:48:10  matomira
 ;;;; Workaround for ACL 5.0.1 TAGBODY bug added.
@@ -148,6 +158,9 @@
         "~%No test with name ~:@(~S~)."
 	name))
     entry))
+
+(defmacro edeftest (name form &rest values)
+  `(add-entry (list t ',name ',form ,@values)))
 
 (defmacro deftest (name form &rest values)
   `(add-entry '(t ,name ,form .,values)))
@@ -399,6 +412,9 @@
 
 (defmacro c1-c2-macro (value)
   `(list ,*c1* ,*c2* ,value))
+
+(defstruct test-struct)
+
 
 ;The first few pages of tests attempt to test each of the different
 ;series operations in the series function library.
@@ -1642,6 +1658,7 @@
 			 (decls (let ((x #Z(1 2 3)))
 				  (declare (type (series integer) x))
 				  (collect-sum x))) :test #'equal)))) T)
+#-:series-letify
 (defok 386
   (to (not (null (member '(type integer x)
 			 (decls (let* ((y #Z(1 2))
@@ -1681,13 +1698,13 @@
   (multiple-value-setq (x y) (values 1 2 3)))
 
 (defok 398 (ton (let ((code (copy-tree '((setq x 3) (setq y 4)))))
-		    (series::clean-code1 '(x) code) code)) ((setq y 4)))
+		    (series::clean-code1 '(x) nil code) code)) ((setq y 4)))
 (defok 399 (ton (let ((code (copy-tree '((setq x 3)))))
-		    (series::clean-code1 '(x) code) code)) (3))
+		    (series::clean-code1 '(x) nil code) code)) (3))
 (defok 400 (ton (let ((code (copy-tree  '((progn (setq x 3) . 4)))))
-		    (series::clean-code1 '(x) code) code)) ((progn . 4)))
+		    (series::clean-code1 '(x) nil code) code)) ((progn . 4)))
 (defok 401 (ton (let ((code (copy-tree '((progn (setq x 3))))))
-		    (series::clean-code1 '(x) code) code)) ((progn)))
+		    (series::clean-code1 '(x) nil code) code)) ((progn)))
 
 (defok 402 (ton (series::make-test nil)) t)
 (defok 403 (ton (series::make-test '((x y) (x)))) x)
@@ -2335,29 +2352,38 @@
 (defok 557 (ton (collect 'bit-vector #Z(1 0 1 1))) #*1011)
 (defok 558 (ton (collect 'simple-bit-vector #Z(1 0 1 1))) #*1011)
 
-(defok 559
-  (let* ((g 1)
+;;; New basic tests
+(defvar *str* (make-test-struct))
+(edeftest 3000
+  (ton (elt (collect 'vector (map-fn 'test-struct #'identity
+				     (scan (list *str*))))
+	    0))
+  *str*)
+;;; New GATHERING tests
+
+(defok 5000
+  (ton (let* ((g 1)
 	 (res (gathering ((y collect-sum))
 		(declare (indefinite-extent y))
 		(next-out y 1) (next-out y 2) (setq g y))))
     (declare (ignore res))
-    (result-of g)) 3)
-(defok 560 (ton (fgathering ((y collect-sum))
+    (result-of g))) 3)
+(defok 5001 (ton (fgathering ((y collect-sum))
 			     (fgather-next y 1) (fgather-next y 2))) 3)
-(defok 561
-  (let* ((g 1)
+(defok 5002
+  (ton (let* ((g 1)
 	 (res (fgathering ((y collect-sum))
 		(declare (indefinite-extent #'y))
 		(fgather-next y 1) (fgather-next y 2) (setq g #'y))))
     (declare (ignore res))
-    (result-of g)) 3)
-(defok 562 (ton (progn (if (probe-file test-file) (delete-file test-file))
+    (result-of g))) 3)
+(defok 5003 (ton (progn (if (probe-file test-file) (delete-file test-file))
 			 (prog1 (list (fgathering ((g (lambda (x) (collect-file test-file x))))
 						 (fgather-next g 3)
 						 (fgather-next g 4))
 				      (collect (scan-file test-file)))
 			   (if (probe-file test-file) (delete-file test-file))))) (T (3 4)))
-(defok 563 (ton (multiple-value-list
+(defok 5004 (ton (multiple-value-list
 		      (fgathering ((x (lambda (x) (collect x)))
 				   (y collect-sum))
 				 (dotimes (i 3)
