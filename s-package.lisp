@@ -8,9 +8,12 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.2 1999/07/02 20:38:13 toy Exp $
+;;;; $Id: s-package.lisp,v 1.3 1999/09/14 20:19:43 toy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.3  1999/09/14 20:19:43  toy
+;;;; Export the new function collect-stream.
+;;;;
 ;;;; Revision 1.2  1999/07/02 20:38:13  toy
 ;;;; Forgot a few items from s-code.lisp, and had to put the in-package
 ;;;; stuff back into s-code.lisp.
@@ -56,7 +59,7 @@
    "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-STREAM" "SCAN-HASH" "SCAN-ALIST"
    "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
    "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
-   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-SUM" "COLLECT-MAX"
+   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-STREAM" "COLLECT-SUM" "COLLECT-MAX"
    "COLLECT-MIN" "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
    "COLLECT-AND" "COLLECT-OR" "PREVIOUS" "MAP-FN" "ITERATE" "MAPPING"
    "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
