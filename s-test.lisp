@@ -40,9 +40,13 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.21 2001/12/23 16:54:44 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.22 2002/12/12 04:28:50 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.22  2002/12/12 04:28:50  rtoy
+;;;; Add another test.  (Forgot exactly why this is here, but it's a good
+;;;; test of the macrolet walker for Clisp.)
+;;;;
 ;;;; Revision 1.21  2001/12/23 16:54:44  rtoy
 ;;;; Make series support Allegro "modern" lisp with its case-sensitive
 ;;;; reader.  Mostly just making every that needs to be lower case actually
@@ -2394,13 +2398,19 @@
 (defok 557 (ton (collect 'bit-vector #Z(1 0 1 1))) #*1011)
 (defok 558 (ton (collect 'simple-bit-vector #Z(1 0 1 1))) #*1011)
 
-;;; New basic tests
-(defvar *str* (make-test-struct))
-(edeftest 3000
-  (ton (elt (collect 'vector (map-fn 'test-struct #'identity
-				     (scan (list *str*))))
-	    0))
-  *str*)
+(defok 559 (td (defun dtest ()
+		 (with-open-file (s "/tmp/foo" :direction :output)
+		   (format s "Hello, world!~%"))
+		 (let* ((foo (scan 'list '(1 2 3)))
+			(max (collect-max foo))
+			(bar (with-open-file (file "/tmp/foo" :direction :input)
+			       (loop for line of-type (or null simple-string) =
+				     (read-line file nil)
+				     until (null line)
+				     ))))
+		   max))
+	       (collect (scan-range :below (dtest))))
+  (0 1 2))
 
 ;;; Some simple consistency tests.  (Some of these were broken by
 ;;; changes in series, so we include them here to prevent these from
@@ -2416,6 +2426,14 @@
 
 (defok 1001 (ton (collect 'list (scan 'vector +constant+)))
   (1 2 3 4))
+
+;;; New basic tests
+(defvar *str* (make-test-struct))
+(edeftest 3000
+  (ton (elt (collect 'vector (map-fn 'test-struct #'identity
+				     (scan (list *str*))))
+	    0))
+  *str*)
 
 ;;; New GATHERING tests
 
