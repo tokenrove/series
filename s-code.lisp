@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.21 1999/04/08 21:46:08 toy Exp $
+;;;; $Id: s-code.lisp,v 1.22 1999/04/09 12:32:26 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.22  1999/04/09 12:32:26  toy
+;;;; Add definition of canonical-type for CLISP.
+;;;;
 ;;;; Revision 1.21  1999/04/08 21:46:08  toy
 ;;;; Use gensym instead of gentemp, which is deprecated in ANSI CL.
 ;;;;
@@ -2996,7 +2999,11 @@
 						     (eq 'quote (first type)))
 						(cdr type)
 						type))))
-#-cmu
+#+CLISP
+(cl:defun canonical-type (type)
+  (type-expand type))
+
+#-(or cmu CLISP)
 (cl:defun canonical-type (type)
   type)
 
