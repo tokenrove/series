@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.20 1999/04/08 21:41:16 toy Exp $
+;;;; $Id: s-code.lisp,v 1.21 1999/04/08 21:46:08 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.21  1999/04/08 21:46:08  toy
+;;;; Use gensym instead of gentemp, which is deprecated in ANSI CL.
+;;;;
 ;;;; Revision 1.20  1999/04/08 21:41:16  toy
 ;;;; Add CLISP to the Series-ANSI.  Then need to import COMPILER-LET.
 ;;;;
@@ -626,7 +629,7 @@
   (setf (rets frag) (copy-tree (mapcar #'cddr (rets frag))))
   (setf (args frag) (copy-tree (mapcar #'cddr (args frag))))
   (cl:let ((gensyms (find-gensyms frag)))
-    (sublis (mapcar #'(lambda (v) (cons v (gentemp (root v)))) gensyms)
+    (sublis (mapcar #'(lambda (v) (cons v (gensym (root v)))) gensyms)
       (cons gensyms (iterative-copy-tree (cddddr frag))))))
 
 (cl:defun find-gensyms (tree &optional (found nil))
@@ -3272,9 +3275,9 @@
 	      (dcl (if (consp doc) (prog1 (cdr doc) (setq doc (car doc)))))
 	      (opt-code (or optimizer body))
 	      (body-fn (cond ((symbolp body-code) body-code)
-			     (trigger (gentemp (string name)))))
-	      (opt-fn (gentemp (string name)))
-	      (desc-fn (cond (discriminator (gentemp (string name)))
+			     (trigger (gensym (string name)))))
+	      (opt-fn (gensym (string name)))
+	      (desc-fn (cond (discriminator (gensym (string name)))
 			     (trigger 'no)
 			     (t 'yes)))
 	      (opt-arglist	;makes up for extra level of evaluation.
