@@ -8,11 +8,18 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.17 1998/06/10 18:59:51 toy Exp $
+;;;; $Id: s-code.lisp,v 1.18 1998/06/12 20:45:23 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.18  1998/06/12 20:45:23  toy
+;;;; An addition to scan-hash for CLISP.  This reduces consing and should
+;;;; be at least as fast.  From Bruno Haible.
+;;;;
+;;;; Also, defstruct alter-fn needs to be defined twice for CLISP and
+;;;; probably also for CMUCL.  From Brun Haible.
+;;;;
 ;;;; Revision 1.17  1998/06/10 18:59:51  toy
 ;;;; Fixed long-standing bug in scan-range where the initial values of the
 ;;;; loop variables didn't match the specified :type.  I'm not sure this is
@@ -1056,7 +1063,7 @@
 			 (:print-function print-series))
   image-fn image-base (image-datum nil))
 
-#+(or CLISP) ; handle multiple definition of ALTER-FN
+#+(or cmu CLISP) ; handle multiple definition of ALTER-FN
 (defstruct (foundation-series (:conc-name nil))
   (alter-fn nil))
 
@@ -4722,6 +4729,7 @@
 
 (defS scan-hash (table)
     "Creates two series containing the keys and values in a hash table."
+  #-CLISP
   (fragL ((table)) ((keys T) (values T)) ((keys T) (values T) (lst list)) ()
 	 ((setq lst nil)
 	  (maphash #'(lambda (key val) (push (cons key val) lst)) table))
@@ -4729,6 +4737,12 @@
 	  (setq keys (caar lst))
 	  (setq values (cdar lst))
 	  (setq lst (cdr lst))) () ())
+  #+CLISP
+  (fragL ((table)) ((keys T) (values T)) ((state T) (nextp T) (keys T) (values T)) ()
+         ((setq state (sys::hash-table-iterator table)))
+         ((multiple-value-setq (nextp keys values) (sys::hash-table-iterate state))
+          (unless nextp (go END)))
+	 () ())
 #+symbolics :optimizer #+symbolics
   (funcall-literal-frag
     `((((table)) ((keys T) (values T)) ((state T) (keys T) (values T)) ()
@@ -4736,7 +4750,8 @@
        ((if (not (multiple-value-setq (state keys values)
 		   (si:send table :next-element state)))
 	    (go END))) ()
-       (#'(lambda (c) `(si:inhibit-gc-flips ,c)))) ,table)))
+       (#'(lambda (c) `(si:inhibit-gc-flips ,c)))) ,table))
+  )
 
 (defS previous (items &optional (default nil) (amount 1))
     "Shifts ITEMS to the right by AMOUNT inserting DEFAULT."
