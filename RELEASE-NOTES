@@ -58,6 +58,15 @@
 
                           Many unknown others
 
+Series 2.2.6 Release Notes
+--------------------------
+o Use list pretty-printer for printing out series (for CMUCL).
+o Some more doc strings.
+o Some optimizations from Joe Marshall for Allegro.  Allegro
+  apparently doesn't fold constants in coerce.
+o Make series work with Allegro in modern mode (case-sensitive
+  reader).
+
 Series 2.2.5 Release Notes
 --------------------------
 o Fixed a bug in scan-stream returning the wrong stuff.
