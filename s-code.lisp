@@ -1,4 +1,4 @@
-;-*- Mode: lisp; syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
+ ;-*- Mode: lisp; syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
 
 ;;;; The standard version of this program is available from
 ;;;;
@@ -8,12 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.59 2000/03/06 18:24:35 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.60 2000/03/07 08:54:20 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.60  2000/03/07 08:54:20  matomira
+;;;; Abstracted all uses of a frag's aux component.
+;;;;
 ;;;; Revision 1.59  2000/03/06 18:24:35  matomira
 ;;;; Replaced IF by WHEN in non-output code when possible.
 ;;;; Abstracted use of aux frag field.
@@ -832,6 +835,14 @@
   `(dolist (,v ,auxs)
      ,@body))
 
+(declaim (inline makeaux))
+(cl:defun makeaux (auxlist)
+  auxlist)	  
+
+(declaim (inline mapaux))
+(cl:defun mapaux (fun auxs)
+  (mapcar fun auxs))
+
 (declaim (inline first-aux))
 (cl:defun first-aux (auxs)
   (car auxs))
@@ -843,6 +854,10 @@
 (declaim (inline delete-aux))
 (cl:defun delete-aux (var auxs)
   (delete var auxs :key #'car))
+
+(declaim (inline remove-aux-if))
+(cl:defun remove-aux-if (p auxs)
+  (remove-if p auxs))
 
 (cl:defun add-aux (frag var typ &optional (val nil val-p))
   (push (if val-p
@@ -3627,9 +3642,33 @@
       dead)))
 
 (cl:defun clean-code (aux code)
-  (cl:let* ((suspicious (not-contained-twice (mapcar #'car aux) code))
+  (cl:let* ((suspicious (not-contained-twice (mapaux #'car aux) code))
 	    (dead-aux (clean-code1 suspicious code)))
-    (values (remove-if #'(lambda (v) (member (car v) dead-aux)) aux) code)))
+    (values (remove-aux-if #'(lambda (v) (member (car v) dead-aux)) aux) code)))
+
+(cl:defun propagate-types (expr aux &optional (input-info nil))
+  (do ((tt expr (cdr tt)))
+      ((not (consp tt)) nil)
+    (do () ((not (eq-car (car tt) 'series-element-type)))
+      (when-bind (info (cdr (assoc (cadar tt) input-info)))
+        (setf (car tt) info)
+        (return nil))
+      (setf (car tt)
+	    (cond ((cadr (find-aux (cadar tt) aux)))
+		  (T T))))
+    (when (consp (car tt)) (propagate-types (car tt) aux))))
+
+(cl:defun clean-dcls (aux)
+  (doaux (v aux)
+    (propagate-types (cdr v) aux))
+  (mapcar #'(lambda (v)
+              ;; Sometimes the desired type is quoted.  Remove the
+              ;; quote.  (Is this right?)
+              (if (and (listp (cadr v))
+                       (eq 'quote (caadr v)))
+                  `(type ,(cadadr v) ,(car v))
+		`(type ,(cadr v) ,(car v))))
+          (remove-aux-if #'(lambda (v) (eq (cadr v) T)) aux)))
 
 (cl:defun codify-1 (aux code)
     (multiple-value-setq (aux code) (clean-code aux code))
@@ -3637,12 +3676,22 @@
       (cl:let ((dcls (clean-dcls aux)))
         (when dcls
 	  (push `(declare ,@ dcls) code))))
-    `(cl:let ,(mapcar #'aux-init aux) ,@ code))
+    `(cl:let ,(mapaux #'aux-init aux) ,@ code))
 
 (cl:defun aux-ordering (a b)
   (when (consp a) (setq a (car a)))
   (when (consp b) (setq b (car b)))
   (string-lessp (string a) (string b)))
+
+(cl:defun use-user-names (aux loop)
+  (cl:let ((alist nil))
+    (doaux (v-info aux)
+      (cl:let* ((v (car v-info))
+                (u (cdr (assoc v *user-names*))))
+        (when (and u (not (contains-p u loop)) (not (rassoc u alist)))
+          (push (cons v u) alist))))
+    (when alist
+      (nsublis alist loop))))
 
 (cl:defun codify (frag)
   (dolist (r (rets frag))
@@ -3675,39 +3724,9 @@
     (setq code (nconc code (list rets)))
     (setq code (codify-1 aux code))
     (use-user-names aux code)
-    (setf (cadr code) (sort (cadr code) #'aux-ordering))
+    ;; THIS IS UNNECESSARY: (setf (cadr code) (sort (cadr code) #'aux-ordering))
     (setq *last-series-loop* code)))
 
-(cl:defun propagate-types (expr aux &optional (input-info nil))
-  (do ((tt expr (cdr tt)))
-      ((not (consp tt)) nil)
-    (do () ((not (eq-car (car tt) 'series-element-type)))
-      (when-bind (info (cdr (assoc (cadar tt) input-info)))
-        (setf (car tt) info)
-        (return nil))
-      (setf (car tt) (cond ((cadr (assoc (cadar tt) aux))) (T T))))
-    (when (consp (car tt)) (propagate-types (car tt) aux))))
-
-(cl:defun clean-dcls (aux)
-  (dolist (v aux) (propagate-types (cdr v) aux))
-  (mapcar #'(lambda (v)
-              ;; Sometimes the desired type is quoted.  Remove the
-              ;; quote.  (Is this right?)
-              (if (and (listp (cadr v))
-                       (eq 'quote (caadr v)))
-                  `(type ,(cadadr v) ,(car v))
-		`(type ,(cadr v) ,(car v))))
-          (remove-if #'(lambda (v) (eq (cadr v) T)) aux)))
-
-(cl:defun use-user-names (aux loop)
-  (cl:let ((alist nil))
-    (dolist (v-info aux)
-      (cl:let* ((v (car v-info))
-                (u (cdr (assoc v *user-names*))))
-        (when (and u (not (contains-p u loop)) (not (rassoc u alist)))
-          (push (cons v u) alist))))
-    (when alist
-      (nsublis alist loop))))
 ); end of eval-when
 
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (compile load)
@@ -4857,7 +4876,9 @@ TYPE."
 	    (*state* nil))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p T) frag))
-    (setf (aux frag) (mapcar #'list out-vars (mapcar #'type-or-list-of-type types))) 
+    (setf (aux frag)
+	  ;;(makeaux (mapcar #'list out-vars (mapcar #'type-or-list-of-type types))))
+	  (makeaux (mapcar #'list out-vars types)))
     (multiple-value-setq (function params)
       (handle-fn-arg frag function params))
     (setq params (mapcar #'retify (nconc params args)))
@@ -4879,8 +4900,9 @@ TYPE."
       (push wrap-fn (wrappers frag)))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p T) frag))
-    (setf (aux frag) (append (mapcar #'list state-vars types)
-                             (mapcar #'list out-vars types)))
+    (setf (aux frag)
+	  (makeaux (append (mapcar #'list state-vars types)
+			   (mapcar #'list out-vars types))))
     (multiple-value-setq (init params) (handle-fn-arg frag init params))
     (multiple-value-setq (step params) (handle-fn-arg frag step params))
     (when test-p
@@ -4918,7 +4940,8 @@ TYPE."
       (push wrap-fn (wrappers frag)))
     (dolist (var out-vars)
       (+ret (make-sym :var var) frag))
-    (setf (aux frag) (mapcar #'list out-vars types))
+    (setf (aux frag)
+	  (makeaux (mapcar #'list out-vars types)))
     (multiple-value-setq (inits params) (handle-fn-arg frag inits params))
     (multiple-value-setq (function params) (handle-fn-arg frag function params))
     (setq params (mapcar #'retify (nconc params args)))
@@ -5058,7 +5081,8 @@ TYPE."
               (*state* nil))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p T) frag))
-    (setf (aux frag) (mapcar #'list out-vars types))
+    (setf (aux frag)
+	  (makeaux (mapcar #'list out-vars types)))
     (multiple-value-setq (inits params) (handle-fn-arg frag inits params))
     (multiple-value-setq (function params) (handle-fn-arg frag function params))
     (setq params (mapcar #'retify (nconc params args)))
