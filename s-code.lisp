@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.30 1999/07/01 16:44:23 toy Exp $
+;;;; $Id: s-code.lisp,v 1.31 1999/07/02 15:09:49 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.31  1999/07/02 15:09:49  toy
+;;;; o  Need explicit package qualifier for multiple-value-bind in
+;;;;    init-elem.
+;;;; o  Reordered some of the tests in init-elem.
+;;;;
 ;;;; Revision 1.30  1999/07/01 16:44:23  toy
 ;;;; A comment was in the wrong place.
 ;;;;
@@ -3095,8 +3100,12 @@
                  (t
 		  ;; BUG: Can't find elem-type, try random value.
 		  '(nil))))
+	  ((typep nil var-type)
+	   ;; Use NIL as the initializer if the resulting type would
+	   ;; be T for the given implementation.
+	   nil)
           ((subtypep var-type 'sequence)
-           (multiple-value-bind (arr len elem-type)
+           (cl:multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
              (declare (ignore arr elem-type))
              ;; BUG: Only as good as DECODE-SEQ-TYPE.
@@ -3104,13 +3113,12 @@
           ((subtypep var-type 'array)
            ;; Heuristic: assume they mean vector.
            ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
-           (multiple-value-bind (arr len elem-type)
+           (cl:multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
              (declare (ignore arr))
              ;; Probably no length, as that case is caught by previous branch
              (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
-	  ((or (typep nil var-type)
-	       (eq t (upgraded-array-element-type var-type)))
+	  ((eq t (upgraded-array-element-type var-type))
 	   ;; Use NIL as the initializer if the resulting type would
 	   ;; be T for the given implementation.
 	   nil)
