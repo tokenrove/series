@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.3 1997/01/07 19:09:30 toy Exp $
+;;;; $Id: s-code.lisp,v 1.4 1997/01/10 22:37:03 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.4  1997/01/10 22:37:03  toy
+;;;; A patch from Tim Bradshaw that fixes a bug.  The code walker
+;;;; improperly handles nth-value.  Doesn't seem to have any affect in
+;;;; CMUCL but can be seen in others like lispm.
+;;;;
 ;;;; Revision 1.3  1997/01/07 19:09:30  toy
 ;;;; Changed aux-init to initialize variables better.  I think it handles
 ;;;; just about all cases now.
@@ -1377,9 +1382,15 @@
                            ((eq-car expansion 'the)
                             (fragify (caddr expansion) (cadr expansion)))
                            ((eq-car expansion 'values)
-                            (lisp:let ((rets (mapcar #'(lambda (form)
+ 			    ;; It used to map over the cdr of CODE here, which is
+ 			    ;; obviously not right -- for instance in the case where
+ 			    ;; (NTH-VALUE 0 x) --> (VALUES x) but it maps over (0 x)
+ 			    ;; and then thinks there is more than one value.  However
+ 			    ;; I'm not sure it's right to just blithly map over the
+ 			    ;; expansion either...
+			    (lisp:let ((rets (mapcar #'(lambda (form)
 							 (car (rets (fragify form T))))
-						     (cdr code))))
+						     (cdr expansion))))
                               (when (and (cdr rets) (some #'series-var-p rets))
                                 (rrs 7 "~%VALUES returns multiple series:~%" code))
                               (annotate code (pass-through-frag rets))))
