@@ -8,33 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.54 2000/03/02 17:49:29 toy Exp $
+;;;; $Id: s-code.lisp,v 1.55 2000/03/03 19:17:14 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
-;;;; Revision 1.54  2000/03/02 17:49:29  toy
-;;;; Even more changes from Fernando.
+;;;; Revision 1.55  2000/03/03 19:17:14  matomira
+;;;; Series 2.0 - Change details in RELEASE-NOTES.
 ;;;;
-;;;; Revision 1.53  2000/03/01 14:46:22  toy
-;;;; Some more changes from Fernando (actually two sets of changes):
-;;;;
-;;;; - A little bit more bottom-up def motion (notably defS and
-;;;;   COLLECT because of a warning if gatherers are compiled
-;;;;   first)
-;;;; - Added UNINITIALIZED and DEFAULTED typedefs (unused)
-;;;; - Added aux and output variable initialization (fragL aux
-;;;;   form now accepts also (var decl init)
-;;;; - Removed any fragL prolog code initializing vars to
-;;;;   constants and moved to aux decl form.
-;;;; - Fixed bug in COLLECT. CL: qualifier missing before a
-;;;;   MULTIPLE-VALUE-BIND
-;;;;
-;;;; - REMOVED LONGSTANDING defS cleanup BUG (inner function in
-;;;;   flet defined before top-level macro def)
-;;;; - Additional defS and defS-1 simplification (and slet*)
-;;;; - renamed LETIZE as DESTARRIFY
 ;;;; Revision 1.51  2000/02/23 15:27:02  toy
 ;;;; o Fernando added an indefinite-extent declaration and uses
 ;;;;   it in the one place where it's needed.
@@ -384,7 +366,6 @@
 ;;;;
 ;;;; The companion file "SDOC.TXT" contains brief documentation.
 
-
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
                                           :load-toplevel
@@ -447,21 +428,6 @@
      (when ,symbol
        ,@body)))
 
-(cl:defun destarrify (base binds &rest forms)
-  "Covert a BASE* form into a nested set of BASE forms"
-  (cl:labels ((destarrify-1 (binds)	  
-	      (when-bind (b (car binds))
-	        (cl:let ((d (cdr binds)))
-		  (if d
-		      (list base (list b) (destarrify-1 d))
-		    (list* base (list b) forms))))))
-    (declare (dynamic-extent #'destarrify-1))
-    (if binds
-	(destarrify-1 binds)
-      (if (cdr forms)
-	  `(progn ,@forms)
-	(car forms)))))
-
 (cl:defun atom-or-car (x)
   (if (listp x)
       (car x)
@@ -486,6 +452,9 @@
        (declaim (inline ,name))
        (cl:defun ,name ,@args)))
 
+  (cl:defun eq-car (thing item)
+    (and (consp thing) (eq (car thing) item)))
+
   (cl:defun nsubst-inline (new-list old list &optional (save-spot nil))
     (cl:let ((tail (member old list)))
       (cond ((not tail) old)
@@ -505,9 +474,6 @@
       (if (not (eql (aref root (1- (length root))) #\-))
           (setq root (concatenate 'string root "-")))
       (gensym root)))
-
-  (cl:defun eq-car (thing item)
-    (and (consp thing) (eq (car thing) item)))
 
   (cl:defun contains-p (item thing)
     (do ((tt thing (cdr tt)))
@@ -588,27 +554,65 @@
 
 ) ; end of eval-when
 
+;;; Code generation utilities
+
+(cl:defun extract-decls (forms)
+  "Grab all the DECLARE expressions at the beginning of the list forms"
+  (loop for i in forms
+    while (eq-car i 'declare)
+    collect i into decls
+    finally (return decls)))
+
+(cl:defun collect-declared (category decls)
+  "Given a list of DECLARE forms, concatenate all declarations of the same category, with  DECLAREs and category removed"
+  (when decls
+    (mapcan #'cdr (mapcan #'(lambda (d)
+			      (remove-if-not #'(lambda (x)
+					         (string-equal (string-upcase (symbol-name (car x)))
+							       (string-upcase (symbol-name category))))
+					     (cdr d)))
+			  decls))))
+  
+(cl:defun destarrify (base binds &rest forms)
+  "Covert a BASE* form into a nested set of BASE forms"
+  (cl:labels ((destarrify-1 (binds)	  
+	      (when-bind (b (car binds))
+	        (cl:let ((d (cdr binds)))
+		  (if d
+		      (list base (list b) (destarrify-1 d))
+		    (list* base (list b) forms))))))
+    (declare (dynamic-extent #'destarrify-1))
+    (if binds
+	(destarrify-1 binds)
+      (if (cdr forms)
+	  `(progn ,@forms)
+	(car forms)))))
+
 (cl:defun n-gensyms (n root)
+  "Generate n uninterned symbols with basename root"
   (do ((i n (1- i))
        (l nil (cons (gensym root) l)))
       ((zerop i) l)))
 
 (cl:defun variable-p (thing)
+  "Retunr T if thing is a non-keyword symbol different from T and NIL"
   (and thing (symbolp thing) (not (eq thing T)) (not (keywordp thing))))
 
 (cl:defun simple-quoted-lambda (form)
   (and (eq-car form 'function) (eq-car (cadr form) 'lambda)
        (every #'variable-p (cadr (cadr form)))))
 
-;; Make a type specifier of the form: (or FOO NULL)
 (cl:defun type-or-null (typ)
+  "Make a type specifier of the form: (or FOO NULL)"
   `(or ,typ null))
 
-;; Make a type specifier of the form: (or FOO (list FOO))
 (cl:defun type-or-list-of-type (typ)
+  "Make a type specifier of the form: (or FOO (list FOO))"
   `(or ,typ list))
 
-(cl:defun never (&rest stuff) (declare (ignore stuff)) nil)
+(cl:defun never (&rest stuff)
+  "Always returns NIL"
+  (declare (ignore stuff)) nil)
 
 (cl:defun make-general-setq (vars value)
   (cond ((= (length vars) 0) value)
@@ -755,6 +759,12 @@
   (body nil)      ;list of forms (possibly containing labels).
   (epilog nil)    ;list of forms (without labels).
   (wrappers nil)) ;functions that wrap forms around the whole loop.
+
+;; CMUCL 18b BUG fixnup macro - KEEP IN SYNC WITH THE ABOVE!!
+#+:cmu18
+(defmacro frag-wrappers (f) `(nth 11 ,f))
+#-:cmu18
+(defmacro frag-wrappers (f) `(wrappers ,f))
 
 ;;; There cannot be any redundancy in or between the args and aux.
 ;;; Each ret variable must be either on the args list or the aux list.
@@ -1025,7 +1035,7 @@
   (setf (rets frag) (copy-tree (mapcar #'cddr (rets frag))))
   (setf (args frag) (copy-tree (mapcar #'cddr (args frag))))
   (cl:let ((gensyms (find-gensyms frag)))
-    (sublis (mapcar #'(lambda (v) (cons v (gentemp (root v)))) gensyms)
+    (sublis (mapcar #'(lambda (v) (cons v (new-var (root v)))) gensyms)
       (cons gensyms (iterative-copy-tree (cddddr frag))))))
 
 (cl:defun root (symbol)
@@ -1749,8 +1759,8 @@
 
 ;; assumes opt result cannot be NIL
 (defmacro top-starting-series-expr (call opt non-opt)
-  (let ((res (gensym)))
-  `(let ((,res (catch :series-restriction-violation (starting-series-expr ,call ,opt))))
+  (cl:let ((res (gensym)))
+  `(cl:let ((,res (catch :series-restriction-violation (starting-series-expr ,call ,opt))))
      (if ,res
 	 (values ,res t)
        (values ,non-opt nil)))))
@@ -3929,33 +3939,36 @@
   (cl:defun compute-series-macform-2 (name arglist doc body-code trigger 
 					   local-p disc-expr opt-expr
 					   unopt-expansion)
-    #-:symbolics (declare (ignore arglist))
-    `(,name (&whole call &rest stuff &environment *env*)
+   #-:symbolics (declare (ignore arglist))
+   (cl:let ((unopt (if (symbolp body-code)
+		       `(cons ',body-code stuff)
+		     unopt-expansion)))
+     `(,name (&whole call &rest stuff &environment *env*)
 	#+:symbolics (declare (zl:arglist ,@(copy-list arglist)))
 	,@(if doc (list doc))
-	(if (and *optimize-series-expressions* ,trigger)
-	    ,(if local-p
-		 (cl:let ((retprop (gensym))
-			  (optprop (gensym))
-			  (result  (gensym)))
-		   `(cl:let ((,retprop (get ',name 'returns-series))
-			     (,optprop (get ',name 'series-optimizer)))
-		      (setf (get ',name 'returns-series)  (function ,disc-expr))
-		      (setf (get ',name 'series-optimizer) (function ,opt-expr))
-		      (setq ,result (process-top call))
-		      (setf (get ',name 'series-optimizer) ,optprop)
-		      (setf (get ',name 'returns-series) ,retprop)
-		      ,result))
-	       `(process-top call))
-	  ,(if (symbolp body-code)
-	       `(cons ',body-code stuff)
-	     unopt-expansion))))
+	,(if trigger
+	   `(if (and *optimize-series-expressions* ,trigger)
+		,(if local-p
+		   (cl:let ((retprop (gensym))
+			    (optprop (gensym))
+			    (result  (gensym)))
+		     `(cl:let ((,retprop (get ',name 'returns-series))
+			       (,optprop (get ',name 'series-optimizer)))
+		        (setf (get ',name 'returns-series)  (function ,disc-expr))
+			(setf (get ',name 'series-optimizer) (function ,opt-expr))
+			(setq ,result (process-top call))
+			(setf (get ',name 'series-optimizer) ,optprop)
+			(setf (get ',name 'returns-series) ,retprop)
+			,result))
+		 `(process-top call))
+	      ,unopt)
+	   unopt))))
 
   (cl:defun compute-series-macform-1 (name arglist body-code body-fn trigger
 					   local-p disc-expr opt-expr)
     (compute-series-macform-2 name arglist nil body-code trigger
 			      local-p disc-expr opt-expr
-      `(list* 'cl:funcall #',body-fn stuff))) ; Explicit FUNCALL to bypass SERIES processing
+      `(list* 'cl:funcall #',body-fn stuff)))
 
   ;; It's a macro and body can refer to it
   (cl:defun compute-series-macform (name arglist doc dcl body-code body-fn trigger
@@ -3965,9 +3978,9 @@
       `(macrolet (,(compute-series-macform-1
 		    name arglist body-code body-fn trigger
 		    local-p disc-expr opt-expr))
-	 (cl:labels (,(compute-series-funform
+	 (cl:flet (,(compute-series-funform
 		       body-fn arglist doc dcl body-code nil))
-	    (list* 'cl:funcall #',body-fn stuff))))) ; Explicit FUNCALL to bypass SERIES processing
+	    (list* 'cl:funcall #',body-fn stuff)))))
 
   ;;The body runs when optimization is not happening.
   ;;The optimizer runs when optimization is happening.
@@ -3979,7 +3992,7 @@
               (dcl (if (consp doc) (prog1 (cdr doc) (setq doc (car doc)))))
               (opt-code (or optimizer body))
               (body-fn (cond ((symbolp body-code) body-code)
-                             (trigger (gentemp (string name)))))
+                             (trigger (new-var (string name)))))
               (desc-fn (cond (discriminator nil)
                              (trigger 'no)
                              (t 'yes)))
@@ -4044,6 +4057,43 @@
       (apply #'destarrify 'slet1 defs forms))
     
 ) ;end of eval-when for defS
+
+;;;;                          ---- fragL ----
+
+(cl:defun funcall-literal-frag (frag-and-values)
+  (funcall-frag (literal-frag (car frag-and-values)) (cdr frag-and-values)))
+
+(defmacro fragL (&rest stuff)
+  #+symbolics (declare (scl:arglist args rets aux alt prolog body epilog wraprs))
+  (if *optimize-series-expressions*
+    `(funcall-literal-frag
+      (list ,(if (not (contains-p '*type* stuff))
+               `',stuff
+               `(subst *type* '*type* ',stuff))
+            ,@(mapcar #'car (car stuff))))
+    (cl:let ((literal-frag
+                 (list* (car stuff)
+                        (cadr stuff)
+                        (mapcar #'(lambda (data)
+                                    (if (or (eq (cadr data) '*type*)
+                                            (eq-car (cadr data)
+                                                    'series-element-type))
+                                        (list* (car data) T (cddr data))
+                                        data))
+                                (caddr stuff))
+                        (cdddr stuff))))
+      (frag->physical (literal-frag literal-frag)
+                      (mapcar #'car (car stuff))))))
+
+;; this forms are useful for making code that comes out one way in the
+;; body and another way in the optimizer
+
+(defmacro opt-non-opt (f1 f2)
+  (if *optimize-series-expressions* f1 f2))
+
+(defmacro non-optq (x) `(opt-non-opt ,x (list 'quote ,x)))
+
+(defmacro optq (x) `(opt-non-opt ',x ,x))
 
 ;;;;                          ---- COLLECT ----
 
@@ -4136,12 +4186,25 @@
 ;;; result is returned.  It is an error to call the gatherer again
 ;;; after the accumulated result has been returned.
 
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval compile load)
+           #+(or :cltl2 :x3j13 :ansi-cl) (:load-toplevel
+					  :compile-toplevel
+                                          :execute)
+
+  (defmacro gather-next (gatherer item)
+    `(cl:funcall ,gatherer ,item nil))
+
+  (defmacro gather-result (gatherer)
+    `(cl:funcall ,gatherer nil t))
+  	   
+) ; end of eval-when
+
 (cl:defun next-out (gatherer item)
-  (cl:funcall gatherer item nil)
+  (gather-next gatherer item)
   nil)
 
 (cl:defun result-of (gatherer)
-  (cl:funcall gatherer nil t))
+  (gather-result gatherer))
 
 ;; this assumes the frag is a one-in one-out collector and that if
 ;; there are wrappers, they are only relevant to the epilog.
@@ -4149,14 +4212,14 @@
   (when (off-line-spot (car (args frag)))
     (convert-to-reducer (car (args frag))))
   (cl:let ((code `(tagbody ,@(body frag)))
-             (ecode `(progn ,@(epilog frag))))
+	   (ecode `(progn ,@(epilog frag))))
     (dolist (wrp (wrappers frag))
       (setq ecode (cl:funcall (eval wrp) ecode)))
     (codify-1 (aux frag)
               `(,@(prolog frag)
-                #'(lambda (,(var (car (args frag))) result-p)
+                (function (lambda (,(var (car (args frag))) result-p)
                     (cond ((null result-p) ,code)
-                          (T ,ecode ,(var (car (rets frag))))))))))
+                          (T ,ecode ,(var (car (rets frag)))))))))))
 
 (cl:defun frag-for-collector (collector *env*)
   (cl:let ((frag
@@ -4190,11 +4253,39 @@
   (cl:let ((x (new-var 'gather)))
     `#'(lambda (,x) (funcall ,collector (scan (collect ,x))))))
 
+(cl:defun gatherlet-1 (binder bindifier decls var-collector-pairs *env* body)
+  (cl:let* ((frags (mapcar #'(lambda (p) (frag-for-collector (cadr p) *env*))
+			   var-collector-pairs))
+	    (stuff (mapcar #'gathererify frags))
+	    (fns (mapcar #'(lambda (p s) (cons (car p) (funcall bindifier (or (nth 4 s) (nth 3 s)))))
+			 var-collector-pairs stuff))
+	    (fullbody `(,binder ,fns ,@decls ,@body)))
+    (dolist (s (reverse stuff))
+      (setq fullbody `(cl:let ,(nth 1 s) ,(nth 2 s) ,@(when (nth 4 s) (list (nth 3 s))) ,fullbody)))
+    (cl:let ((wrps (mapcan #'(lambda (f)
+			       (prog1 (frag-wrappers f) (setf (wrappers f) nil)))
+			   frags)))
+      (dolist (wrp wrps)
+	(setq fullbody (cl:funcall (eval wrp) fullbody))))
+    fullbody))
+
+(cl:defun gathering-1 (binder bindifier  result-op decls var-collector-pairs *env* body)
+  (cl:let ((returns (mapcar #'(lambda (p) `(,result-op ,(car p)))
+			     var-collector-pairs)))
+    (gatherlet-1 binder bindifier decls var-collector-pairs *env*
+		  `(,@body ,(if (= (length returns) 1) (car returns) `(values ,@returns))))))
+
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load)
            #+(or :cltl2 :x3j13 :ansi-cl) (:load-toplevel
                                           :execute)
 	   
-(defmacro gatherer (collector &environment *env*)
+  (defmacro fgather-next (gatherer item)
+    `(,gatherer ,item nil))
+
+  (defmacro fgather-result (gatherer)
+    `(,gatherer nil t))
+
+  (defmacro gatherer (collector &environment *env*)
   (when (not (eq-car collector 'function))
     (cl:let ((x (new-var 'gather)))
       (setq collector
@@ -4208,24 +4299,32 @@
                      *env*))))
     (gathererify frag)))
 
+(defmacro gatherlet (var-collector-pairs &environment *env* &body body)
+  (gatherlet-1 'cl:let #'list nil var-collector-pairs *env* body))
+
+(defmacro fgatherlet (var-collector-pairs &environment *env* &body body)
+  (gatherlet-1 'cl:flet #'cdadr nil var-collector-pairs *env* body))
+
 (defmacro gathering (var-collector-pairs &environment *env* &body body)
-  (cl:let* ((frags (mapcar #'(lambda (p) (frag-for-collector (cadr p) *env*))
-                             var-collector-pairs))
-            (wrappers (mapcan #'(lambda (f)
-                                  (prog1 (wrappers f) (setf (wrappers f) nil)))
-                              frags))
-            (stuff (mapcar #'gathererify frags))
-            (fns (mapcar #'(lambda (p s) (list (car p) (nth 4 s)))
-                         var-collector-pairs stuff))
-            (returns (mapcar #'(lambda (p) `(result-of ,(car p)))
-                             var-collector-pairs)))
-    (setq returns (if (= (length returns) 1) (car returns) `(values ,@ returns)))
-    (setq body `(cl:let ,fns ,@ body ,returns))
-    (dolist (s (reverse stuff))
-      (setq body (list 'cl:let (nth 1 s) (nth 2 s) (nth 3 s) body)))
-    (dolist (wrp wrappers)
-      (setq body (cl:funcall (eval wrp) body)))
-    body))
+  (cl:let ((decls #+:cltl2-series nil
+		  #-:cltl2-series
+		  (when-bind (vars (set-difference (mapcar #'car var-collector-pairs)
+								     (collect-declared 'indefinite-extent
+										       (extract-decls body))))
+		    `((declare ,(cons 'dynamic-extent vars))))))
+    (gathering-1 'cl:let #'list 'gather-result decls var-collector-pairs *env* body)))
+
+(defmacro fgathering (var-collector-pairs &environment *env* &body body)
+  (cl:let ((decls #+:cltl2-series nil
+		  #-:cltl2-series
+		  (when-bind (vars (set-difference (mapcar #'(lambda (x)
+								`(function ,(car x)))
+							    var-collector-pairs)
+						    (collect-declared 'indefinite-extent
+								      (extract-decls body))
+						    :test #'equal))
+	            `((declare ,(cons 'dynamic-extent vars))))))
+    (gathering-1 'cl:flet #'cdadr 'fgather-result decls var-collector-pairs *env* body)))
 ) ; end of eval-when
 ;;;;                  ---- SERIES FUNCTION LIBRARY ----
 
@@ -4243,42 +4342,6 @@
              (when *series-expression-cache*
                (setf (gethash call *series-expression-cache*) cached-value))
              cached-value))))
-
-;; this forms are useful for making code that comes out one way in the
-;; body and another way in the optimizer
-
-(defmacro opt-non-opt (f1 f2)
-  (if *optimize-series-expressions* f1 f2))
-
-(defmacro non-optq (x) `(opt-non-opt ,x (list 'quote ,x)))
-
-(defmacro optq (x) `(opt-non-opt ',x ,x))
-
-(cl:defun funcall-literal-frag (frag-and-values)
-  (funcall-frag (literal-frag (car frag-and-values)) (cdr frag-and-values)))
-
-(defmacro fragL (&rest stuff)
-  #+symbolics (declare (scl:arglist args rets aux alt prolog body epilog wraprs))
-  (if *optimize-series-expressions*
-    `(funcall-literal-frag
-      (list ,(if (not (contains-p '*type* stuff))
-               `',stuff
-               `(subst *type* '*type* ',stuff))
-            ,@(mapcar #'car (car stuff))))
-    (cl:let ((literal-frag
-                 (list* (car stuff)
-                        (cadr stuff)
-                        (mapcar #'(lambda (data)
-                                    (if (or (eq (cadr data) '*type*)
-                                            (eq-car (cadr data)
-                                                    'series-element-type))
-                                        (list* (car data) T (cddr data))
-                                        data))
-                                (caddr stuff))
-                        (cdddr stuff))))
-      (frag->physical (literal-frag literal-frag)
-                      (mapcar #'car (car stuff))))))
-
 
 ;; The next few things are optimizers that hang on standard symbols.
 ;;
@@ -4896,7 +4959,7 @@ TYPE."
 ;; API
 (defS collect-ignore (items)
     "Reads input and returns NIL."
-  (fragL ((items T)) ((item)) ((item null nil)) () () () () ())
+  (fragL ((items T)) (nil) () () () () () ())
  :trigger T)
 
 (defmacro iterate-mac (var-value-list &rest body)
@@ -6379,6 +6442,9 @@ SCAN-FILE, except we read from an existing stream."
  :trigger T)
 
 (pushnew :series *features*)
+
+#+:cltl2-series
+(pushnew :cltl2-series *features*)
 
 ;;#+:excl
 ;;(setf excl:*cltl1-in-package-compatibility-p* nil)

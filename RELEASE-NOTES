@@ -1,0 +1,92 @@
+                      Series Version 2.0 RELEASE NOTES
+
+                           Fernando D. Mato Mira
+           CSEM (Centre Suisse d'Electronique et de Microtechnique)
+                Jaquet-Droz 1, CH-2007 Neuchatel, Switzerland
+                             matomira@acm.org
+
+
+                              3rd March, 2000
+
+***NEW SPECIFICATION RESTRICTIONS***
+------------------------------------
+
+1. The gatherers introduced by GATHERING have DYNAMIC extent, unless
+   explicitly declared INDEFINITE-EXTENT.
+   
+   If you need them to be indefinite extent by default,
+   evaluate (pushnew :cltl2-series) before compilation (or interpreted load)
+
+   After loading series :cltl2-series will indicate if backward-compatibility
+   mode is enabled.
+
+   Rationale for this change: 
+    "Weird code must be the one escaping gatherers so created"
+    "WHO EVER DID THAT???"
+
+
+NEW FEATURES:
+------------
+
+- GATHER-NEXT
+  A macro with the same effect as the NEXT-OUT function, but with result undefined.
+- GATHER-RESULT
+  A macro with the same semantics as the RESULT-OF function,
+- FGATHER-NEXT
+  Like GATHER-NEXT, but the gatherer argument must be a symbol denoting a gatherer bound by FLET.
+- FGATHER-RESULT
+  Like GATHER-RESULT, but the gatherer argument must be a symbol denoting a gatherer bound by FLET.
+- FGATHERING
+  Like GATHERING, but where the gatherers are bound by FLET instead of LET.
+  Same extent rules as for GATHERING apply. Remember that where you would use
+  (declare (indefinite-extent g)) inside GATHERING, you need to do 
+  (declare (indefinite-extent #'g)) with FGATHERING.
+- GATHERLET
+  The basic construct upon which GATHERING rests. No automatic return
+  of gatherer results. And no extent assumptions, of course. If you want
+  something dynamic-extent, you'll have to declare it.
+- FGATHERLET
+  The `F' version of GATHERLET. Duh.
+- COLLECT-PRODUCT
+  Like COLLECT-SUM, but for #'*. How more obvious does it get?
+- INDEFINITE-EXTENT
+  Declaration exported.
+
+IMPROVEMENTS:
+------------
+- MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
+- Better code generation
+  - Replaced some SETQs by initializations at LET binding time.
+  - Removed global function namespace pollution.
+  - Encapsulated series subfunctions.
+- Source clean up.
+  Local series functions are almost there (FLET extension)
+  Bottom-up definition for improved compilation.
+  Make source `FLET and LABELS ready'.
+  `readability/documentation' release.
+  Some work done towards multiple assignment support in PRODUCING.
+
+
+BUG FIXES:
+---------
+- Does not unintern EXT:COLLECT and EXT:ITERATE anymore under CMUCL!!!
+- GATHERING et al. are not bitten by CMUCL DEFSTRUCT bugs.
+
+
+COMPILING
+--------
+(load "s-package")
+(compile-file "s-package")
+(compile-file "s-code")
+
+LOADING
+-------
+(load "s-package")
+(load "s-code")
+
+TESTING
+-------
+Load SERIES, then:
+(compile-file "s-test")
+(load "s-test")
+(user::do-tests)

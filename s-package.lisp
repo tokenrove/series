@@ -8,11 +8,11 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.5 2000/02/28 17:40:15 toy Exp $
+;;;; $Id: s-package.lisp,v 1.6 2000/03/03 19:17:15 matomira Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
-;;;; Revision 1.5  2000/02/28 17:40:15  toy
-;;;; Forgot to export COLLECT-PRODUCT (caught by Fernando).
+;;;; Revision 1.6  2000/03/03 19:17:15  matomira
+;;;; Series 2.0 - Change details in RELEASE-NOTES.
 ;;;;
 ;;;; Revision 1.4  1999/12/01 16:09:05  toy
 ;;;; Need to import compiler-let from the extensions package in CMUCL.
@@ -54,10 +54,15 @@
    ;;(5) declarations and types (note dual meaning of series)
    "OPTIMIZABLE-SERIES-FUNCTION"  "OFF-LINE-PORT"  ;series
    "SERIES-ELEMENT-TYPE"  "PROPAGATE-ALTERABILITY"
-
+   "INDEFINITE-EXTENT"
+   
    ;;(10) special functions
    "ALTER" "TO-ALTER" "ENCAPSULATED" "TERMINATE-PRODUCING"
-   "NEXT-IN" "NEXT-OUT" "GENERATOR" "GATHERER" "RESULT-OF" "GATHERING"
+   "NEXT-IN" "NEXT-OUT"
+   "GENERATOR" 
+   "GATHERER"  "RESULT-OF" 
+   "GATHER-NEXT" "GATHER-RESULT" "GATHERLET" "GATHERING"
+   "FGATHER-NEXT" "FGATHER-RESULT" "FGATHERLET" "FGATHERING"
 
    ;;(55) main line functions
    "MAKE-SERIES" "SERIES" "SCAN" "SCAN-MULTIPLE" "SCAN-RANGE"
@@ -65,13 +70,13 @@
    "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-STREAM" "SCAN-HASH" "SCAN-ALIST"
    "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
    "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
-   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-STREAM" "COLLECT-SUM" "COLLECT-MAX"
-   "COLLECT-MIN" "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
+   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-STREAM"
+   "COLLECT-SUM" "COLLECT-PRODUCT" "COLLECT-MAX" "COLLECT-MIN"
+   "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
    "COLLECT-AND" "COLLECT-OR" "PREVIOUS" "MAP-FN" "ITERATE" "MAPPING"
    "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
    "CHOOSE" "CHOOSE-IF" "SPREAD" "EXPAND" "MASK" "SUBSERIES" "MINGLE"
    "CATENATE" "SPLIT" "SPLIT-IF" "PRODUCING" "CHUNK"
-   "COLLECT-PRODUCT"
 
    ;;(5) variables
     "*SERIES-EXPRESSION-CACHE*"

@@ -40,16 +40,11 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.12 2000/02/22 23:25:39 toy Exp $
+;;;; $Id: s-test.lisp,v 1.13 2000/03/03 19:17:15 matomira Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
-;;;; Revision 1.12  2000/02/22 23:25:39  toy
-;;;; o Let's try to set the correct package for CLISP depending if we're in
-;;;;   ANSI mode or not.  (Not sure this really works.)
-;;;;
-;;;; o In test 280, we probably really want to use the COMMON-LISP-USER
-;;;;   package instead of just USER.  Mostly for CLISP where the USER
-;;;;   package is not a nickname for COMMON-LISP-USER.
+;;;; Revision 1.13  2000/03/03 19:17:15  matomira
+;;;; Series 2.0 - Change details in RELEASE-NOTES.
 ;;;;
 ;;;; Revision 1.11  2000/02/09 22:52:00  toy
 ;;;; Fernando made these changes:  Replace deftest with defok,
@@ -86,9 +81,9 @@
 	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
 					  :load-toplevel
 					  :execute)
-  #+(and clisp ansi-cl)
+  #-clisp
   (in-package "COMMON-LISP-USER")
-  #-(and clisp ansi-cl)
+  #+clisp
   (in-package "USER")
 
   (series::install)
@@ -1111,7 +1106,7 @@
   ((a b) (b a)))
 
 (defok 280 (ton (multiple-value-bind (a b)
-		      (#2M(lambda (x) (let ((*package* (find-package "COMMON-LISP-USER")))
+		      (#2M(lambda (x) (let ((*package* (find-package "USER")))
 					(intern (string x))))
 			  #Z(x y))
 		    (collect (#Mlist a b)))) ((x :internal) (y :internal)))
@@ -1728,7 +1723,7 @@
 			   (next-out g 4)
 			   (list (result-of g) (collect (scan-file test-file)))))) (T (3 4)))
 (defok 414 (ton (let ((x (gatherer #'(lambda (x) (collect x))))
-			(y (gatherer #'(lambda (ns) (collect-sum (choose-if #'oddp ns))))))
+		      (y (gatherer #'(lambda (ns) (collect-sum (choose-if #'oddp ns))))))
 		    (dotimes (i 4)
 		      (next-out x i)
 		      (next-out y i)
@@ -2324,6 +2319,34 @@
 (defok 557 (ton (collect 'bit-vector #Z(1 0 1 1))) #*1011)
 (defok 558 (ton (collect 'simple-bit-vector #Z(1 0 1 1))) #*1011)
 
+(defok 559
+  (let* ((g 1)
+	 (res (gathering ((y collect-sum))
+		(declare (indefinite-extent y))
+		(next-out y 1) (next-out y 2) (setq g y))))
+    (declare (ignore res))
+    (result-of g)) 3)
+(defok 560 (ton (fgathering ((y collect-sum))
+			     (fgather-next y 1) (fgather-next y 2))) 3)
+(defok 561
+  (let* ((g 1)
+	 (res (fgathering ((y collect-sum))
+		(declare (indefinite-extent #'y))
+		(fgather-next y 1) (fgather-next y 2) (setq g #'y))))
+    (declare (ignore res))
+    (result-of g)) 3)
+(defok 562 (ton (progn (if (probe-file test-file) (delete-file test-file))
+			 (prog1 (list (fgathering ((g (lambda (x) (collect-file test-file x))))
+						 (fgather-next g 3)
+						 (fgather-next g 4))
+				      (collect (scan-file test-file)))
+			   (if (probe-file test-file) (delete-file test-file))))) (T (3 4)))
+(defok 563 (ton (multiple-value-list
+		      (fgathering ((x (lambda (x) (collect x)))
+				   (y collect-sum))
+				 (dotimes (i 3)
+				   (fgather-next y i)
+				   (if (evenp i) (fgather-next x (* i 10))))))) ((0 20) 3))
 ;------------------------------------------------------------------------
 
 ;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
