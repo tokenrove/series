@@ -8,11 +8,26 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Header: /net/lorien2/home/apps/src/sourceforge/backups/series-2010-12-15/series/s-code.lisp,v 1.2 1997/01/07 18:58:51 toy Exp $
+;;;; $Id: s-code.lisp,v 1.3 1997/01/07 19:09:30 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.3  1997/01/07 19:09:30  toy
+;;;; Changed aux-init to initialize variables better.  I think it handles
+;;;; just about all cases now.
+;;;;
+;;;; Modified clean-dcls to handle simple-arrays.
+;;;;
+;;;; Changed collect so that it handles types better by passing the correct
+;;;; type to fragL.  This allows better optimization by the compiler (at
+;;;; least for CMUCL).
+;;;;
+;;;; Added code at the end so that the package is installed whenever it's
+;;;; loaded.  You don't have to explicitly install the package anymore.
+;;;; However, there's a bug:  It assumes you were originally in the USER
+;;;; package.  This needs to be fixed.
+;;;;
 ;;;; Revision 1.2  1997/01/07 18:58:51  toy
 ;;;; Changes from Paul Werkowski to make series work/run under CMUCL.
 ;;;; Raymond Toy added the defpackage stuff.  There are probably other
@@ -2834,9 +2849,55 @@
 ;it assumes that like maclisp, all that could really matter is whether
 ;something is a fixnum, or float.
 
+;; toy@rtp.ericsson.se:
+;; Actually, to be correct, we need to be more careful about how we
+;; init things because CLtL2 says it's wrong and CMU Lisp complains
+;; and fails if we don't init things correctly.  In particular, we
+;; need to handle the case of arrays, strings, and "(member t)" that
+;; is used in a few places.  I think all cases that occur in the test
+;; suite are handled here.
+
 (lisp:defun aux-init (aux)
-  (cond ((subtypep (cadr aux) 'number)
+  (cond ((subtypep (cadr aux) 'complex)
+	 (cond ((atom (cadr aux))
+		;; Plain old complex
+		(list (car aux) #C(0.0 0.0)))
+	       (t
+		(list (car aux) (complex (coerce 0 (cadadr aux))
+					 (coerce 0 (cadadr aux)))))))
+	((subtypep (cadr aux) 'number)
 	 (list (car aux) (coerce 0 (cadr aux))))
+	((subtypep (cadr aux) 'simple-string)
+	 (cond ((and (consp (cadr aux))
+		     (= 2 (length (cadr aux))))
+		(lisp:let ((len (second (cadr aux))))
+		  (list (car aux) (list 'make-string
+					(if (eq len '*) 0 len)))))
+	       (t
+		(list (car aux) ""))))
+	((subtypep (cadr aux) 'simple-array)
+	 (cond ((and (consp (cadr aux))
+		     (= 3 (length (cadr aux))))
+		(lisp:let ((len (first (third (second aux)))))
+		  (list (car aux) (list 'make-sequence
+					`',(cadr aux)
+					(if (eq len '*) 0 len)))))
+	       (t
+		(list (car aux) #()))))
+	((subtypep (cadr aux) 'vector)
+	 (cond ((and (consp (cadr aux)))
+		(cond ((= 3 (length (cadr aux)))
+		       (lisp:let ((len (third (second aux))))
+			 (list (car aux) (list 'make-sequence
+					       `',(cadr aux)
+					       (if (eq len '*) 0 len)))))
+		      ((= 2 (length (cadr aux)))
+		       (list (car aux) (list 'make-sequence
+					     `',(cadr aux) 0)))))
+	       (t
+		(list (car aux) #()))))
+	((subtypep (cadr aux) 'cons)
+	 (list (car aux) '(cons nil nil)))
 	(T (car aux))))
 
 (lisp:defun clean-dcls (aux)
@@ -4285,6 +4346,10 @@
 	((eq type 'simple-vector) (values 'simple-vector nil T))
 	((eq-car type 'simple-vector)
 	 (values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
+	((eq-car type 'simple-array)
+	 (values 'simple-array
+		 (if (not (eq (caaddr type) '*)) (caaddr type))
+		 (if (not (eq (cadr type) '*)) (cadr type) T)))
 	(T (values 'sequence nil T))))
 
 (defS scan-sublists (lst)
@@ -4788,11 +4853,12 @@
 
 (defS collect (seq-type &optional (items nil items-p))
     "Collects the elements of a series into a sequence."
-  (lisp:let (*type* limit)
+  (lisp:let (*type* limit el-type)
     (when (not items-p) ;it is actually seq-type that is optional
       (setq items seq-type)
       (setq seq-type (optq 'list)))
-    (multiple-value-setq (*type* limit) (decode-seq-type (non-optq seq-type)))
+    (multiple-value-setq (*type* limit el-type)
+      (decode-seq-type (non-optq seq-type)))
     (cond ((eq *type* 'list)
 	   (fragL ((items T)) ((lst)) ((lst list)) ()
 		  ((setq lst nil))
@@ -4803,14 +4869,32 @@
 		  ((setq lst nil))
 		  ((setq lst (cons items lst))) () ()))
 	  (limit
+	   ;; It's good to have the type exactly right so CMUCL can
+	   ;; optimize better.
+	   (setq *type* (if (consp (cadr seq-type))
+			    (cadr seq-type)
+			    seq-type))
 	   (fragL ((seq-type) (items T) (limit)) ((seq))
-		  ((seq (or null sequence)) (index fixnum)) ()
-		  ((setq seq (make-sequence seq-type limit))
+		  ((seq *type*) (index fixnum)) ()
+		  (
+		   ;; For some reason seq isn't initialized when
+		   ;; *optimize-series-expressions* is nil and this
+		   ;; errors out in CMUCL.  This makes sure seq is
+		   ;; initialized to something.
+		   (setq seq (if seq
+				 seq
+				 (make-sequence seq-type limit)))
 		   (setq index 0))
 		  ((setf (aref seq index) items) (incf index)) () ()))
 	  ((not (eq *type* 'sequence)) ;some kind of vector with no length
+	   ;; It's good to have the type exactly right so CMUCL can
+	   ;; optimize better.
+	   (setq *type* (if (eq *type* 'simple-array)
+			    (list *type* el-type '(*))
+			    (list *type* el-type)))
 	   (fragL ((seq-type) (items T)) ((seq))
-		  ((seq (or null simple-array)) (lst list)) ()
+		  ;;((seq (or null simple-array)) (lst list)) ()
+		  ((seq *type*) (lst list)) ()
 		  ((setq lst nil))
 		  ((setq lst (cons items lst)))
 		  ((lisp:let ((num (length lst)))
@@ -5047,3 +5131,8 @@
 ;    SOFTWARE.
 
 ;-------------------------------------------------------------------------
+
+(eval-when (load)
+  (in-package "SERIES")
+  (install :pkg "USER")
+  (in-package "USER"))
