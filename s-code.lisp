@@ -6,12 +6,15 @@
 ;;;; a long time ago, you might consider copying them from the above
 ;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.41 2000/02/04 16:34:30 toy Exp $
+;;;; $Id: s-code.lisp,v 1.42 2000/02/04 22:52:45 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.42  2000/02/04 22:52:45  toy
+;;;; In collect-nth, counter is really a fixnum.
+;;;;
 ;;;; Revision 1.41  2000/02/04 16:34:30  toy
 ;;;; o  Some more changes from Fernando.  This fixes some bugs that show up
 ;;;;    in the test suite.  The test suite now passes on CMUCL.
@@ -5418,7 +5421,8 @@ SCAN-FILE, except we read from an existing stream."
 (defS mingle (items1 items2 comparator)
     "Merges two series into one."
   (fragL ((items1 T -X1- F1) (items2 T -X2- F2) (comparator)) ((items T))
-	 ((items (or (series-element-type items1) (series-element-type items2)))
+	 ((items (or (series-element-type items1)
+		     (series-element-type items2)))
 	  (need1 fixnum) (need2 fixnum)) ()
 	 ((setq need1 1 need2 1))
 	 ((if (not (plusp need1)) (go F1))
@@ -5607,7 +5611,7 @@ SCAN-FILE, except we read from an existing stream."
 			    (cadr seq-type)
 			    seq-type))
 	   (fragL ((seq-type) (items T) (limit)) ((seq))
-		  ((seq (optional *type*))
+		  ((seq *type*)
 		   (index fixnum)) ()		   
 		  (#-:cmu
 		   (setq seq (make-sequence seq-type limit))
@@ -5760,7 +5764,8 @@ SCAN-FILE, except we read from an existing stream."
 ;; API
 (defS collect-last (items &optional (default nil))
     "Returns the last element of ITEMS."
-  (fragL ((items T) (default)) ((item)) ((item (optional (series-element-type items)))) ()
+  (fragL ((items T) (default)) ((item))
+	 ((item (optional (series-element-type items)))) ()
 	 ((setq item default))
 	 ((setq item items)) () ())
  :trigger T)
@@ -5777,7 +5782,7 @@ SCAN-FILE, except we read from an existing stream."
 (defS collect-nth (n items &optional (default nil))
     "Returns the nth element of ITEMS."
   (fragL ((n) (items T) (default)) ((item))
-	 ((counter (optional fixnum))
+	 ((counter fixnum)
 	  (item (optional (series-element-type items)))) ()
 	 ((setq item default) (setq counter n))
 	 ((when (zerop counter) (setq item items) (go END))
