@@ -36,9 +36,12 @@
 ;comparison of results, all of the old tests are given numerical names
 ;that match the numbers printed out when running the old tester.
 
-;;;; $Id: s-test.lisp,v 1.9 1999/07/01 17:18:05 toy Exp $
+;;;; $Id: s-test.lisp,v 1.10 1999/07/02 19:46:19 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.10  1999/07/02 19:46:19  toy
+;;;; Select the right package for clisp (maybe).
+;;;;
 ;;;; Revision 1.9  1999/07/01 17:18:05  toy
 ;;;; Use the package COMMON-LISP-USER instead of USER.
 ;;;;
@@ -61,7 +64,11 @@
 ;;;;
 ;;;;
 
+#-clisp
 (in-package "COMMON-LISP-USER")
+#+clisp
+(in-package "USER")
+
 (eval-when (load compile)
   (series::install))
 
