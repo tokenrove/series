@@ -1,4 +1,4 @@
-                      Series Version 2.1 RELEASE NOTES
+                      Series Version 2.1.3 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -6,7 +6,7 @@
                              matomira@acm.org
 
 
-                              3rd March, 2000
+                              14th March, 2000
 
 
                     Series created by Richard C. Waters
@@ -113,6 +113,7 @@ IMPROVEMENTS:
   - Prevented generation of some dead termination code.
   - Whole expression (t) and :loop wrapper placement
     (:prolog and :epilog support easy to add, if necessary).
+  - Improved letification merging.
 - Source clean up.
   Local series functions are almost there (FLET extension)
   Bottom-up definition for improved compilation.
@@ -124,6 +125,8 @@ IMPROVEMENTS:
   Added private ANSI-compliant eval-when macro when special form is old-style.
   Abstracted use of wrapper component of frags.
   GENERATOR deftyped to CONS, not LIST, when necessary.
+  Abstracted use of prolog component of frags.
+  MERGE-FRAGS no longer depends on the exact order of frag components.
 
 BUG FIXES:
 ---------
@@ -132,6 +135,10 @@ BUG FIXES:
 - Allegro 5.x needs the GENERATOR deftype, too.
 - Workaround for ACL 5.0.1 TAGBODY bug.
 - ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
+- Some initial (unread) bindings of variables could be NIL, contradicting
+  declarations. Uses LOCALLY now for those (and also for all others for which
+NIL is OK, but which can be left unbound, if an implementation provides another version of LET that does not do NIL defaulting (and ideally would raise a compilation error if a variable is read before its written to)).
+- Full letification works (but disabled because still useless).
 
 COMPILING
 --------
@@ -150,3 +157,22 @@ Load SERIES, then:
 (compile-file "s-test")
 (load "s-test")
 (user::do-tests)
+[Don't get scared about "compilation aborted" messages. 
+ If it's reported that all tests passed, 
+ it means it was just the error testing]
+
+"use-package'ing"
+-----------------
+Load SERIES, then:
+(series::install)
+[This will shadow-import extended special forms and install readmacros]
+
+
+QUALIFIED ON:
+-----------
+ 
+CMUCL 18b (cmucl-2.4.19-2)           [SuSE Linux 6.3/Intel] 
+CMUCL 18c                            [Solaris]          
+LispWorks 4.1                        [Windows NT 4.0 SP6]
+clisp-99.01.08-21 with -a option     [SuSE Linux 6.3/Intel]
+ACL 5.0.1                            [SuSE Linux 6.3/Intel]
