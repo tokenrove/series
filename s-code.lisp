@@ -6,12 +6,16 @@
 ;;;; a long time ago, you might consider copying them from the above
 ;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.45 2000/02/09 22:46:00 toy Exp $
+;;;; $Id: s-code.lisp,v 1.46 2000/02/10 17:15:11 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.46  2000/02/10 17:15:11  toy
+;;;; Fix a typo that got in the last few patches:  LET should really be
+;;;; CL:LET.  (From Fernando.)
+;;;;
 ;;;; Revision 1.45  2000/02/09 22:46:00  toy
 ;;;; Changed all occurrences of defunique to be just defun and added a
 ;;;; comment on where the function is called.
@@ -4759,8 +4763,8 @@ TYPE."
 		 (unless (cdr lastbind)
 		   (ers 50 "~%Missing value in assignment: " f))
 		 ;; SETF still not supported - Need to make caller SETF-aware
-		 (let ((expr (cons 'setq ; Should be SETF
-				   (mapcan #'xform-assignment vars binds))))
+		 (cl:let ((expr (cons 'setq ; Should be SETF
+				      (mapcan #'xform-assignment vars binds))))
 		   ;;(format t "~S" expr)
 		   (push expr revbody))))
 	      ;; Need to first make caller PSETF-aware probably
