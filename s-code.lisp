@@ -9,12 +9,17 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.90 2002/12/10 17:55:46 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.91 2002/12/10 19:36:32 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.91  2002/12/10 19:36:32  rtoy
+;;;; Previous patch failed some tests.  Let's try this
+;;;; again. PROMOTE-SERIES returns an extra arg telling us what it did.  We
+;;;; use that to decide if we want the car or not of the item.
+;;;;
 ;;;; Revision 1.90  2002/12/10 17:55:46  rtoy
 ;;;; Bug [ 516952 ] only optimized split-if works
 ;;;;
@@ -8097,12 +8102,13 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; HELPER
 (cl:defun promote-series (series)
-  (cond ((not (alter-fn series)) series)
+  (cond ((not (alter-fn series))
+	 (values series nil))
         (t (setq series (if (image-series-p series)
                             (copy-image-series series)
 			  (copy-basic-series series)))
            (setf (alter-fn series) nil)
-           series)))
+           (values series t))))
 
 ;; API
 (defS cotruncate (&rest items-list)
@@ -8860,48 +8866,48 @@ order of scanning the hash table is not specified."
 ;; API
 (defS split-if (items pred &rest more-pred)
     "Divides a series into multiple outputs based on PRED."
-  (cl:let* ((preds (list* pred (copy-list more-pred)))
-	    (ps (promote-series items))
-	    (pos-lists
-	     ;; FIXME
-	     ;;
-	     ;; This is a really gross hack because I don't know how
-	     ;; this works.  According to bug 516952, the following
-	     ;; doesn't work
-	     ;;
-	     ;; (split-if (scan '(1 2 1 2 3)) (lambda (item) (evenp item)))
-	     ;;
-	     ;; What happens is something like '(1 (1 2 1 2 3) ..) 
-	     ;; gets passed to pos-if, which is not expecting a list.
-	     ;;
-	     ;; However the obvious fix of just taking the car then fails for
-	     ;;
-	     ;; (split-if #z(1 2 1 2 3) (lambda (item) (evenp item)))
-	     ;;
-	     ;; because pos-if would have been passed the individual items.
-	     ;;
-	     ;; So the hack is to see if there is a generator function
-	     ;; for the promoted series.  If so, we want to take the
-	     ;; car of each item before calling pos-if.  If not, just
-	     ;; pass the item in as is.
-	     ;;
-	     ;; If I (rtoy) were smarter I'd fix this better, but I'm
-	     ;; too stupid.
-	     (let ((car-item-p (if (gen-fn ps) t nil)))
-	       (map-fn t
-		       #'(lambda (item)
-			   (let ((it (if car-item-p
-					 (car item)
-					 item)))
+  (cl:let* ((preds (list* pred (copy-list more-pred))))
+    ;; FIXME
+    ;;
+    ;; This is a really gross hack because I don't know how
+    ;; this works.  According to bug 516952, the following
+    ;; doesn't work
+    ;;
+    ;; (split-if (scan '(1 2 1 2 3)) (lambda (item) (evenp item)))
+    ;;
+    ;; What happens is something like '(1 (1 2 1 2 3) ..) 
+    ;; gets passed to pos-if, which is not expecting a list.
+    ;;
+    ;; However the obvious fix of just taking the car then fails for
+    ;;
+    ;; (split-if #z(1 2 1 2 3) (lambda (item) (evenp item)))
+    ;;
+    ;; because pos-if would have been passed the individual items.
+    ;;
+    ;; So the hack is to see if there is to have promote-series return
+    ;; a second value that tells whether we're returning the series as
+    ;; is (NIL) or we copied the series (T).  Then, if T, we take the
+    ;; car of the item, otherwise just the item.
+    ;;
+    ;; If I (rtoy) were smarter I'd fix this better, but I'm
+    ;; too stupid.
+    (multiple-value-bind (ps altered)
+	(promote-series items)
+      (let ((pos-lists
+	     (map-fn t
+		     #'(lambda (item)
+			 (let ((it (if altered
+				       (car item)
+				       item)))
 			   (cons (apply #'pos-if it preds) item)))
-		       ps))))
-    (values-list
-      (mapcar #'(lambda (i)
-                  (make-image-series :alter-fn (alter-fn items)
-                                     :image-fn #'image-of-with-datum
-                                     :image-datum i
-                                     :image-base pos-lists))
-            (n-integers (+ 2 (length more-pred))))))
+		     ps)))
+	(values-list
+	 (mapcar #'(lambda (i)
+		     (make-image-series :alter-fn (alter-fn items)
+					:image-fn #'image-of-with-datum
+					:image-datum i
+					:image-base pos-lists))
+		 (n-integers (+ 2 (length more-pred))))))))
  :optimizer
   (do-split items (cons pred (copy-list more-pred)) nil))
 
