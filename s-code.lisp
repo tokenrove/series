@@ -9,12 +9,19 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.81 2001/04/07 15:35:51 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.82 2001/04/07 20:14:31 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.82  2001/04/07 20:14:31  rtoy
+;;;; o remove-aux-if was inadvertently defined twice (should have been
+;;;;   remove-aux-if-not)
+;;;; o remove-aux-if and remove-aux-if-not don't appear to be used
+;;;;   anywhere, so comment them out for now.  Remember to remove them
+;;;;   later.
+;;;;
 ;;;; Revision 1.81  2001/04/07 15:35:51  rtoy
 ;;;; scan-stream didn't work when not optimized, due to a typo.  The core
 ;;;; of scan-stream should now be identical to the core of scan-file.
@@ -1711,10 +1718,11 @@
   (cl:defun delete-aux-if (p auxs)
     (delete-if p auxs))
 
+#|  
   (declaim (inline remove-aux-if))
   (cl:defun remove-aux-if (p auxs)
     (remove-if p auxs))
-
+|#
   (declaim (inline segregate-aux))
   (cl:defun segregate-aux (p auxs)
     (values (remove-if-not p auxs) (remove-if p auxs)))
@@ -1886,14 +1894,15 @@
   (cl:defun delete-aux-if-not (p auxs)
     (mapcar #'(lambda (b) (remove-if-not p b)) auxs))
 
+#|  
   (declaim (inline remove-aux-if))
   (cl:defun remove-aux-if (p auxs)
     (mapcar #'(lambda (b) (remove-if p b)) auxs))
 
   (declaim (inline remove-aux-if-not))
-  (cl:defun remove-aux-if (p auxs)
+  (cl:defun remove-aux-if-not (p auxs)
     (mapcar #'(lambda (b) (remove-if-not p b)) auxs))
-
+#|
   (declaim (inline segregate-aux))
   (cl:defun segregate-aux (p auxs)
     (2mapcar #'(lambda (b) (values (remove-if-not p b) (remove-if p b))) auxs))
