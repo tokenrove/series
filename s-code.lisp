@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.31 1999/07/02 15:09:49 toy Exp $
+;;;; $Id: s-code.lisp,v 1.32 1999/07/02 20:37:39 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.32  1999/07/02 20:37:39  toy
+;;;; Moved the package stuff out to a separate file.
+;;;;
 ;;;; Revision 1.31  1999/07/02 15:09:49  toy
 ;;;; o  Need explicit package qualifier for multiple-value-bind in
 ;;;;    init-elem.
@@ -237,70 +240,6 @@
 ;The companion file "SDOC.TXT" contains brief documentation.
 
 
-;;; Add a feature to say if we are a Lisp that can hack ansi-cl style
-;;; stuff, as far as series goes anyway.  This implies:
-;;;	ansi style packages (DEFPACKAGE, CL not LISP as main package)
-;;;
-;;; if you don't have this you need to make the LISP package have CL
-;;; as a nickname somehow, in any case.
-;;;
-#+gcl
-(eval-when (compile load eval)
-  (unless (find-package "CL")
-    (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
-
-;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp CLISP)
-(cl:eval-when (load eval compile)
-  (cl:pushnew ':SERIES-ANSI cl:*features*))
-
-(provide "SERIES")
-
-#+(or Series-ANSI)
-(defpackage "SERIES"
-    (:use "CL")
-  (:export 
-   ;;(2) readmacros (#M and #Z)
-
-   ;;(5) declarations and types (note dual meaning of series)
-   "OPTIMIZABLE-SERIES-FUNCTION"  "OFF-LINE-PORT"  ;series
-   "SERIES-ELEMENT-TYPE"  "PROPAGATE-ALTERABILITY"
-
-   ;;(10) special functions
-   "ALTER" "TO-ALTER" "ENCAPSULATED" "TERMINATE-PRODUCING"
-   "NEXT-IN" "NEXT-OUT" "GENERATOR" "GATHERER" "RESULT-OF" "GATHERING"
-
-   ;;(55) main line functions
-   "MAKE-SERIES" "SERIES" "SCAN" "SCAN-MULTIPLE" "SCAN-RANGE"
-   "SCAN-SUBLISTS" "SCAN-FN" "SCAN-FN-INCLUSIVE" "SCAN-LISTS-OF-LISTS"
-   "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-STREAM" "SCAN-HASH" "SCAN-ALIST"
-   "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
-   "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
-   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-SUM" "COLLECT-MAX"
-   "COLLECT-MIN" "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
-   "COLLECT-AND" "COLLECT-OR" "PREVIOUS" "MAP-FN" "ITERATE" "MAPPING"
-   "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
-   "CHOOSE" "CHOOSE-IF" "SPREAD" "EXPAND" "MASK" "SUBSERIES" "MINGLE"
-   "CATENATE" "SPLIT" "SPLIT-IF" "PRODUCING" "CHUNK"
-
-   ;;(5) variables
-    "*SERIES-EXPRESSION-CACHE*"
-    "*LAST-SERIES-LOOP*"
-    "*LAST-SERIES-ERROR*"
-    "*SUPPRESS-SERIES-WARNINGS*"
-    )
-  (:shadow
-   "LET" "LET*" "MULTIPLE-VALUE-BIND" "FUNCALL" "DEFUN" #+cmu "COLLECT" #+cmu "ITERATE")
-  #+Harlequin-Common-Lisp
-  (:import-from "LISPWORKS" "COMPILER-LET")
-  #+Genera
-  (:import-from "LISP" "COMPILER-LET")
-  #+Allegro
-  (:import-from "CLTL1" "COMPILER-LET")
-  #+CLISP
-  (:import-from "LISP" "COMPILER-LET")
-)
-
 #+(or Series-ANSI)
 (in-package "SERIES")
 
@@ -311,36 +250,6 @@
 
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
-
-#-(or Series-ANSI)
-(export ;74 total concepts in the interface
-  '(;(2) readmacros (#M and #Z)
-
-    ;(5) declarations and types (note dual meaning of series)
-    optimizable-series-function off-line-port ;series
-    series-element-type propagate-alterability
-
-    ;(10) special functions
-    alter to-alter encapsulated terminate-producing
-    next-in next-out generator gatherer result-of gathering
-
-    ;(55) main line functions
-    make-series series scan scan-multiple scan-range scan-sublists scan-fn
-    scan-fn-inclusive scan-lists-of-lists scan-lists-of-lists-fringe scan-file
-    scan-stream scan-hash scan-alist scan-plist scan-symbols collect-fn collect
-    collect-append collect-nconc collect-file collect-alist collect-plist
-    collect-hash collect-length collect-sum collect-max collect-min
-    collect-last collect-first collect-nth collect-and collect-or
-    previous map-fn iterate mapping collecting-fn cotruncate
-    latch until until-if positions choose choose-if
-    spread expand mask subseries mingle catenate split split-if
-    producing chunk 
-
-    ;(5) variables
-    *series-expression-cache*
-    *last-series-loop*
-    *last-series-error*
-    *suppress-series-warnings*))
 
 (declaim (declaration optimizable-series-function off-line-port
 		      ;; Genera barfs at this (correctly I think)
@@ -433,7 +342,7 @@
 
 (defvar *standard-function-reader* (get-dispatch-macro-character #\# #\'))
 
-;             ---- UTILITIES FOR MANIPULATING FRAGMENTS ----
+;;;;             ---- UTILITIES FOR MANIPULATING FRAGMENTS ----
 
 (eval-when (eval load compile)
 
@@ -3374,6 +3283,7 @@
        (setf (get ',name 'series-optimizer) (function ,opt-fn))
        ',name)))
 
+
 (eval-when (eval load compile)
 
 (cl:defun eq-car (thing item)
@@ -5456,63 +5366,62 @@
 	     ((if (null number) (setq number default))) ()))
  :trigger T)
 
-;A note on types.  Things are set up so that every aux variable (except the
-;variable that is necessary when a non-series input is not a constant) is given a
-;type declaration whereas inputs are never given types.  This ensures that
-;everything is given a type definition and only once.  The only exception is
-;that a user can use a type decl in a series::let which will then override the
-;default type.  You can also wrap a (THE TYPE ...) around any series function call
-;to override the types of the output.
-;  Some types are given in the form (series-element-type var) where var
-;is a series input.  A final pass substitutes this type if it
-;can be found.  Note that this is a purely one-way propagation of information
-;starting on the inputs.
-;  The final pass also discards any type declarations which are T.
+;;; A note on types.  Things are set up so that every aux variable
+;;; (except the variable that is necessary when a non-series input is
+;;; not a constant) is given a type declaration whereas inputs are
+;;; never given types.  This ensures that everything is given a type
+;;; definition and only once.  The only exception is that a user can
+;;; use a type decl in a series::let which will then override the
+;;; default type.  You can also wrap a (THE TYPE ...) around any
+;;; series function call to override the types of the output.
+
+;;; Some types are given in the form (series-element-type var) where
+;;; var is a series input.  A final pass substitutes this type if it
+;;; can be found.  Note that this is a purely one-way propagation of
+;;; information starting on the inputs. The final pass also discards
+;;; any type declarations which are T.
 
-;------------------------------------------------------------
+(provide "SERIES")
 
-;some things added since the last documentation
-; #nM for returning multiple values
-; Note #M does odd stuff with the keywords for keyword arguments, but
-;   there is nothing we can do about this, because the documentation is very 
-;   clear on what #M does.  If your are using implicit mapping,
-;   #M is unnecessary anyway.
-; *series-implicit-map*, note the detailed rules for when mapping
-;   happens, which are much like OSS was, but more conservative.
-;   We never map a function unless we MUST---i.e., only when one of
-;   its actual arguments is a series.  We never map a special form except IF.
-;   The virtue of this is that it is applicable on a single function
-;   by single function basis, and gets the same results no matter what
-;   the input looks like syntactically.  (Note you might not get portable
-;   resuls. if some standard macro expands into code with an IF in one
-;   implementation and without in another.)  (Note the forced evaluation
-;   of non-series functions that are not last in a let etc. is already done.)
+;;; ------------------------------------------------------------
 
-;------------------------------------------------------------------------
+;;; some things added since the last documentation
+;;; #nM for returning multiple values
+;;; Note #M does odd stuff with the keywords for keyword arguments, but
+;;;   there is nothing we can do about this, because the documentation is very 
+;;;   clear on what #M does.  If your are using implicit mapping,
+;;;   #M is unnecessary anyway.
+;;; *series-implicit-map*, note the detailed rules for when mapping
+;;;   happens, which are much like OSS was, but more conservative.
+;;;   We never map a function unless we MUST---i.e., only when one of
+;;;   its actual arguments is a series.  We never map a special form except IF.
+;;;   The virtue of this is that it is applicable on a single function
+;;;   by single function basis, and gets the same results no matter what
+;;;   the input looks like syntactically.  (Note you might not get portable
+;;;   resuls. if some standard macro expands into code with an IF in one
+;;;   implementation and without in another.)  (Note the forced evaluation
+;;;   of non-series functions that are not last in a let etc. is already done.)
 
-;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
+;;; ------------------------------------------------------------------------
 
-;Permission to use, copy, modify, and distribute this software and its
-;documentation for any purpose and without fee is hereby granted,
-;provided that this copyright and permission notice appear in all
-;copies and supporting documentation, and that the name of M.I.T. not
-;be used in advertising or publicity pertaining to distribution of the
-;software without specific, written prior permission. M.I.T. makes no
-;representations about the suitability of this software for any
-;purpose.  It is provided "as is" without express or implied warranty.
+;;; Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
 
-;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
-;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
-;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
-;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
-;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
-;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
-;    SOFTWARE.
+;;; Permission to use, copy, modify, and distribute this software and its
+;;; documentation for any purpose and without fee is hereby granted,
+;;; provided that this copyright and permission notice appear in all
+;;; copies and supporting documentation, and that the name of M.I.T. not
+;;; be used in advertising or publicity pertaining to distribution of the
+;;; software without specific, written prior permission. M.I.T. makes no
+;;; representations about the suitability of this software for any
+;;; purpose.  It is provided "as is" without express or implied warranty.
 
-;-------------------------------------------------------------------------
+;;;    M.I.T. DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+;;;    ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
+;;;    M.I.T. BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+;;;    ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+;;;    WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+;;;    ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+;;;    SOFTWARE.
 
-#+nil ;; Don't think I really want to do this
-(eval-when (load)
-  (in-package "SERIES")
-  (install :pkg "COMMON-LISP-USER")
-  (in-package "COMMON-LISP-USER"))
+;;; -------------------------------------------------------------------------
+
