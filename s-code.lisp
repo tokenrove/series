@@ -9,12 +9,23 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.74 2000/09/05 15:54:09 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.75 2000/09/30 21:44:41 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.75  2000/09/30 21:44:41  rtoy
+;;;; Bug #115738:
+;;;;
+;;;; Use remove-if-not instead of delete-if-not in delete-aux-if-not.  This
+;;;; was causing CLISP to fail test 530.
+;;;;
+;;;; (I'm not sure about this.  It seems there's some shared list structure
+;;;; with CLISP that doesn't happen in CMUCL.  However, I think it's safe
+;;;; to cons up a new list instead of destructively modifying the
+;;;; original.)
+;;;;
 ;;;; Revision 1.74  2000/09/05 15:54:09  rtoy
 ;;;; Fix bug 113625:  scan doesn't scan constants very well.
 ;;;;
@@ -1821,7 +1832,7 @@
 
   (declaim (inline delete-aux-if-not))
   (cl:defun delete-aux-if-not (p auxs)
-    (mapcar #'(lambda (b) (delete-if-not p b)) auxs))
+    (mapcar #'(lambda (b) (remove-if-not p b)) auxs))
 
   (declaim (inline remove-aux-if))
   (cl:defun remove-aux-if (p auxs)
