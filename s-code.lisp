@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.79 2000/10/10 15:02:27 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.80 2000/10/10 21:03:12 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.80  2000/10/10 21:03:12  rtoy
+;;;; Oops.  It's cl:let, not just plain let.
+;;;;
 ;;;; Revision 1.79  2000/10/10 15:02:27  rtoy
 ;;;; Fix up the lifting code to handle all variables except #:SEQ.
 ;;;; (There's some code in collect that initializes a SEQ var with (if SEQ
@@ -5141,7 +5144,7 @@
 			     ;; Create a new bindings
 			     ;; list that initializes the
 			     ;; variables appropriately.
-			     (let ((var (if (listp v) (first v) v)))
+			     (cl:let ((var (if (listp v) (first v) v)))
 			       (or (assoc var inits :key #'(lambda (x)
 							     (if (listp x)
 								 (first x)
