@@ -8,11 +8,15 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.26 1999/04/23 17:51:24 toy Exp $
+;;;; $Id: s-code.lisp,v 1.27 1999/04/29 22:06:49 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.27  1999/04/29 22:06:49  toy
+;;;; Fix some problems in aux-init not handling some strings and
+;;;; bit-vectors correctly.
+;;;;
 ;;;; Revision 1.26  1999/04/23 17:51:24  toy
 ;;;; For CMUCL, decode-seq-type didn't handle base-string types.  Make it
 ;;;; work.
@@ -3042,59 +3046,80 @@
 
 
 (cl:defun aux-init (aux)
-  (cl:let ((var-name (car aux))
-	   (var-type (canonical-type (cadr aux))))
-    ;;(format t "var-name, var-type = ~a ~a~%" var-name var-type)
-    (cond ((subtypep var-type 'complex)
-	   ;; (complex) or (complex float-type)
-	   (cond ((atom var-type)
-		  ;; Plain old complex.  (Don't want #C(0 0) because
-		  ;; complex canonicalization converts that to plain
-		  ;; 0.)
-		  (list var-name #C(0.0 0.0)))
-		 (t
-		  ;; Create a complex zero with the correct component type.
-		  (list var-name (complex (coerce 0 (cadadr aux)))))))
-	  ((subtypep var-type 'number)
-	   (list var-name (coerce 0 var-type)))
-	  ((subtypep var-type 'string)
-	   ;; (string) or (string len)
-	   (cond ((and (consp var-type)
-		       (= 2 (length var-type)))
-		  (cl:let ((len (second var-type)))
-		    (list var-name (list 'make-string
-					 (if (eq len '*) 0 len)))))
-		 (t
-		  (list var-name ""))))
-	  ((subtypep var-type 'simple-array)
-	   ;; (simple-array) or (simple-array el-type) or
-	   ;; (simple-array el-type dim)
-	   (cond ((and (consp var-type)
-		       (= 3 (length var-type)))
-		  (cl:let ((len (first (third var-type))))
-		    (list var-name (list 'make-sequence
-					 `',var-type
-					 (if (eq len '*) 0 len)))))
-		 (t
-		  (list var-name (list 'make-sequence
-				       `',var-type
-				       0)))))
-	  ((subtypep var-type 'vector)
-	   ;; (vector) or (vector el-type) or (vector el-type len)
-	   (cond ((consp var-type)
-		  (cond ((= 3 (length var-type))
-			 (cl:let ((len (third var-type)))
-			   (list var-name (list 'make-sequence
-						`',var-type
-						(if (eq len '*) 0 len)))))
-			((= 2 (length var-type))
-			 (list var-name (list 'make-sequence
-					      `',var-type 0)))))
-		 (t
-		  (list var-name (list 'make-sequence `',var-type 0)))))
-	  ((subtypep var-type 'cons)
-	   (list var-name '(cons nil nil)))
-	  (T var-name))))
+  (cl:flet ((eq-or-eq-car (thing item)
+	      (or (eq thing item)
+		  (eq-car thing item))))
+    (cl:let ((var-name (car aux))
+	     (var-type (canonical-type (cadr aux))))
+      ;; (format t "var-name, var-type = ~a ~a~%" var-name var-type)
+      (cond ((subtypep var-type 'complex)
+	     ;; (complex) or (complex float-type)
+	     (cond ((atom var-type)
+		    ;; Plain old complex.  (Don't want #C(0 0) because
+		    ;; complex canonicalization converts that to plain
+		    ;; 0.)
+		    (list var-name #C(0.0f0 0.0f0)))
+		   (t
+		    ;; Create a complex zero with the correct component type.
+		    (list var-name (complex (coerce 0 (cadadr aux)))))))
+	    ((subtypep var-type 'number)
+	     ;; Initialize NUMBER's to 0 of the appropriate type.
+	     (list var-name (coerce 0 var-type)))
+	    ;; Although a STRING can be (VECTOR CHARACTER) and a
+	    ;; SIMPLE-STRING can be a (SIMPLE-ARRAY CHARACTER (*)), we
+	    ;; handle them here because the syntax of the declarations
+	    ;; is different.
+	    ((or (eq-or-eq-car var-type 'string)
+		 (eq-or-eq-car var-type 'simple-string)
+		 (eq-or-eq-car var-type 'base-string)
+		 (eq-or-eq-car var-type 'simple-base-string))
+	     ;; Handle (string) or (string len)
+	     ;; (format t "string = ~A~%" var-type)
+	     (cl:let ((len (if (and (consp var-type)
+				    (= 2 (length var-type)))
+			       (second var-type)
+			       0)))
+	       (list var-name (list 'make-sequence
+				    `',var-type
+				    (if (eq len '*) 0 len)))))
+	    ;; Although a BIT-VECTOR could be handled via the VECTOR
+	    ;; entry below, we do it here because the syntax of a
+	    ;; BIT-VECTOR declaration is different from VECTOR.  The
+	    ;; same holds for SIMPLE-BIT-VECTOR.
+	    ((or (eq-or-eq-car var-type 'bit-vector)
+		 (eq-or-eq-car var-type 'simple-bit-vector))
+	     ;; (bit-vector) or (bit-vector len) or (simple-bit-vector)
+	     ;; or (simple-bit-vector len)
+	     ;; (format t "got a bit-vector:  ~A~%" var-type)
+	     (cl:let ((len (if (and (consp var-type)
+				    (= 2 (length var-type)))
+			       (second var-type)
+			       0)))
+	       (list var-name (list 'make-sequence
+				    `',var-type
+				    (if (eq len '*) 0 len)))))
+	    ((subtypep var-type 'simple-array)
+	     ;; (simple-array) or (simple-array el-type) or
+	     ;; (simple-array el-type dim)
+	     (cl:let ((len (if (and (consp var-type)
+				    (= 3 (length var-type)))
+			       (first (third var-type))
+			       0)))
+	       (list var-name (list 'make-sequence
+				    `',var-type
+				    (if (eq len '*) 0 len)))))
+	    ((subtypep var-type 'vector)
+	     ;; (vector) or (vector el-type) or (vector el-type len)
+	     (cl:let ((len (if (and (consp var-type)
+				    (= 3 (length var-type)))
+			       (third var-type)
+			       0)))
+	       (list var-name (list 'make-sequence
+				    `',var-type
+				    (if (eq len '*) 0 len)))))
+	    ((subtypep var-type 'cons)
+	     (list var-name '(cons nil nil)))
+	    (T var-name)))))
 
 (cl:defun clean-dcls (aux)
   (dolist (v aux) (propagate-types (cdr v) aux))
@@ -4586,60 +4611,85 @@
 		    ((incf index)
 		     (setq elements (elt seq index))) () ())))))
 
+;;; DECODE-SEQ-TYPE
+;;;
+;;; DECODE-SEQ-TYPE tries to canonicalize the given type into the
+;;; underlying type.  It returns three values: the sequence type
+;;; (string, vector, simple-array, sequence), the length of the
+;;; sequence (or NIL if not known) and the element type of the
+;;; sequence (or T if not known).
 (cl:defun decode-seq-type (type)
-  (cond ((not (and (eq-car type 'quote) (setq type (cadr type))))
+  (cond ((not (and (eq-car type 'quote)
+		   (setq type (cadr type))))
 	 (values 'sequence nil T))
-	((and (symbolp type) (string= (string type) "BAG"))
+	((and (symbolp type)
+	      (string= (string type) "BAG"))
 	 (values 'bag nil T))
-	((and (consp type) (symbolp (car type))
+	((and (consp type)
+	      (symbolp (car type))
 	      (string= (string (car type)) "BAG"))
 	 (values 'bag nil (cadr type)))
 	(t
-	 (setf type #+cmu (kernel:type-specifier (c::specifier-type type))
-	            #-cmu type)
-	 (cond ((eq type 'list) (values 'list nil T))
-	       ((eq-car type 'list) (values 'list nil (cadr type)))
-	       ((eq type 'sequence) (values 'sequence nil T))
-	       ;; Strings are translated to the underlying vector/array types.
-	       ((or (eq type 'string)
-		    (eq type 'base-string))
+	 ;; Hmm, should we use subtypep to handle these?  Might be easier.
+	 (cond ((eq type 'list)
+		(values 'list nil T))
+	       ((eq-car type 'list)
+		(values 'list nil (cadr type)))
+	       ((eq type 'sequence)
+		(values 'sequence nil T))
+	       ;; A STRING is canonicalized to (VECTOR CHARACTER)
+	       ((eq type 'string)
 		(values 'vector nil 'character))
-	       ((or (eq-car type 'string)
-		    (eq-car type 'base-string))
-		(values 'vector (if (numberp (cadr type)) (cadr type))
-			'character))
-	       ((or (eq type 'simple-string)
-		    (eq type 'simple-base-string))
+	       ((eq-car type 'string)
+		(values 'vector (if (numberp (cadr type)) (cadr type)) 'character))
+	       ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
+	       ((eq type 'simple-string)
 		(values 'simple-array nil 'character))
-	       ((or (eq-car type 'simple-string)
-		    (eq-car type 'simple-base-string))
-		(values 'simple-array (if (numberp (cadr type)) (cadr type))
+	       ((eq-car type 'simple-string)
+		(values 'simple-array
+			(if (numberp (cadr type)) (cadr type))
 			'character))
-	       ;; Bit vectors are really vectors holding bits.
+	       ;; A BIT-VECTOR is (vector bit)
 	       ((eq type 'bit-vector)
 		(values 'vector nil 'bit))
 	       ((eq-car type 'bit-vector)
 		(values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
+	       ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
 	       ((eq type 'simple-bit-vector)
 		(values 'simple-array nil 'bit))
 	       ((eq-car type 'simple-bit-vector)
-		(values 'simple-array (if (numberp (cadr type)) (cadr type))
+		(values 'simple-array
+			(if (numberp (cadr type)) (cadr type))
 			'bit))
-	       ;; Vectors of some type
-	       ((eq type 'vector) (values 'vector nil T))
+	       ;; A VECTOR is just a VECTOR
+	       ((eq type 'vector)
+		(values 'vector nil T))
 	       ((eq-car type 'vector)
 		(values 'vector (if (numberp (caddr type)) (caddr type))
 			(if (not (eq (cadr type) '*)) (cadr type) T)))
-	       ((eq type 'simple-vector) (values 'simple-vector nil T))
+	       ;; And a SIMPLE-VECTOR is just a SIMPLE-VECTOR
+	       ((eq type 'simple-vector)
+		(values 'simple-vector nil T))
 	       ((eq-car type 'simple-vector)
 		(values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
-	       ;; Simple arrays
+	       ;; A SIMPLE-ARRAY is a SIMPLE-ARRAY.  This assumes you
+	       ;; specified a one-dimensional simple-array.  Results
+	       ;; are undefined if it's not a one-dimensional array.
+	       ((eq type 'simple-array)
+		(values 'simple-array nil T))
 	       ((eq-car type 'simple-array)
 		(values 'simple-array
 			(if (not (eq (caaddr type) '*)) (caaddr type))
-			(if (not (eq (cadr type) '*)) (cadr type) T)))
+			(if (not (eq (cadr type) '*))
+			    (cadr type)
+			    T)))
+	       ;; We don't need to handle anything else like arrays
+	       ;; because series only handles 1-dimensional
+	       ;; sequences.
+
 	       ;; Everything else is a sequence
-	       (T (values 'sequence nil T))))))
+	       (T
+		(values 'sequence nil T))))))
 
 (defS scan-sublists (lst)
     "Creates a series of the sublists in a list."
