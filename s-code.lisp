@@ -8,12 +8,17 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.49 2000/02/22 22:25:51 toy Exp $
+;;;; $Id: s-code.lisp,v 1.50 2000/02/22 23:37:22 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.50  2000/02/22 23:37:22  toy
+;;;; Remove the cmu version from scan-range.  It was generating bad
+;;;; initialization code for things like (scan-range :length 10 :type
+;;;; 'single-float).
+;;;;
 ;;;; Revision 1.49  2000/02/22 22:25:51  toy
 ;;;; o One of Fernando's uses of dynamic-extent was wrong, as Fernando
 ;;;;   points out.
@@ -5013,13 +5018,15 @@ TYPE."
 
 ;; API
 (defS alter (destinations items)
-    "Alters the values in DESTINATIONS to be ITEMS."
+  "Alters the values in DESTINATIONS to be ITEMS."
   (fragL ((destinations) (items T)) ((result))
-         ((gen (null-or generator)) ; Given that generator inherits from LIST, this should be removed when the CMUCL bug is fixed.
+         ((gen (null-or generator))	; Given that generator inherits
+					; from LIST, this should be removed
+					; when the CMUCL bug is fixed.
           (result null)) ()
          ((setq gen (generator destinations)) (setq result nil))
          ((do-next-in gen #'(lambda () (go END)) items)) () ())
- :optimizer
+  :optimizer
   (cl:let ((ret (retify destinations)))
     (when (not (series-var-p ret))
       (rrs 5 "~%Alter applied to a series that is not known at compile time:~%"
@@ -5155,15 +5162,6 @@ TYPE."
                   ((setq numbers (coerce (- from by) '*type*)))
                   ((setq numbers (+ numbers (coerce by '*type*)))
                    (if (not (> numbers above)) (go END))) () ()))
-          #+cmu
-          (length
-           (fragL ((from) (length) (by)) ((numbers T))
-                  ((numbers *type*) (counter fixnum)) ()
-                  ((setq numbers (- from by)) (setq counter length))
-                  ((setq numbers (+ numbers by))
-                   (if (not (plusp counter)) (go END))
-                   (decf counter)) () ()))
-          #-cmu
           (length
            (fragL ((from) (length) (by)) ((numbers T))
                   ((numbers *type*) (counter fixnum)) ()
