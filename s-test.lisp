@@ -40,9 +40,13 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.19 2001/08/23 22:21:59 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.20 2001/08/24 14:10:17 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.20  2001/08/24 14:10:17  rtoy
+;;;; Reinstate test 466, but change the bogus &foo to &key.  We're testing
+;;;; for unsupported lambda options.
+;;;;
 ;;;; Revision 1.19  2001/08/23 22:21:59  rtoy
 ;;;; o Comment out test 466 because I don't understand what this is really
 ;;;;   supposed to test.
@@ -1986,10 +1990,9 @@
 
 (defok 465 (te (map-fn #'car #Z(1 2 3))) 70)
 
-;; What is this really supposed to test?  That series handles lambda
-;; keywords?  But &foo is invalid.
-#+nil
-(defok 466 (teo (defun ff (&foo b)
+;; This tests for unsupported lambda keyword options.
+
+(defok 466 (teo (defun ff (&key b)
 		    (declare (optimizable-series-function))
 		    (car a))) 71)
 (defok 467 (te (defun ff (a &rest b)
