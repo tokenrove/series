@@ -8,11 +8,17 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.24 1999/04/15 16:35:54 toy Exp $
+;;;; $Id: s-code.lisp,v 1.25 1999/04/15 17:09:41 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.25  1999/04/15 17:09:41  toy
+;;;; Rework aux-init once again.  The bit-vector entry goes away, and the
+;;;; entry for vector and simple-array are changed to create the proper
+;;;; types when the length is not given.  I hope this is the last change
+;;;; here! :-)
+;;;;
 ;;;; Revision 1.24  1999/04/15 16:35:54  toy
 ;;;; In aux-init, the bit-vector entry is actually applicable to all Lisps
 ;;;; because bit-vectors would get initialized to #() instead of #*, which
@@ -3034,14 +3040,19 @@
 	   (var-type (canonical-type (cadr aux))))
     ;;(format t "var-name, var-type = ~a ~a~%" var-name var-type)
     (cond ((subtypep var-type 'complex)
+	   ;; (complex) or (complex float-type)
 	   (cond ((atom var-type)
-		  ;; Plain old complex
+		  ;; Plain old complex.  (Don't want #C(0 0) because
+		  ;; complex canonicalization converts that to plain
+		  ;; 0.)
 		  (list var-name #C(0.0 0.0)))
 		 (t
+		  ;; Create a complex zero with the correct component type.
 		  (list var-name (complex (coerce 0 (cadadr aux)))))))
 	  ((subtypep var-type 'number)
 	   (list var-name (coerce 0 var-type)))
 	  ((subtypep var-type 'simple-string)
+	   ;; (simple-string) or (simple-string len)
 	   (cond ((and (consp var-type)
 		       (= 2 (length var-type)))
 		  (cl:let ((len (second var-type)))
@@ -3049,15 +3060,9 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name ""))))
-	  ((subtypep var-type 'bit-vector)
-	   (cond ((consp var-type)
-		  (cl:let ((len (second var-type)))
-		    (list var-name (list 'make-sequence
-					 `',var-type
-					 (if (eq len '*) 0 len)))))
-		 (t
-		  (list var-name #*))))
 	  ((subtypep var-type 'simple-array)
+	   ;; (simple-array) or (simple-array el-type) or
+	   ;; (simple-array el-type dim)
 	   (cond ((and (consp var-type)
 		       (= 3 (length var-type)))
 		  (cl:let ((len (first (third var-type))))
@@ -3065,9 +3070,12 @@
 					 `',var-type
 					 (if (eq len '*) 0 len)))))
 		 (t
-		  (list var-name '#()))))
+		  (list var-name (list 'make-sequence
+				       `',var-type
+				       0)))))
 	  ((subtypep var-type 'vector)
-	   (cond ((and (consp var-type))
+	   ;; (vector) or (vector el-type) or (vector el-type len)
+	   (cond ((consp var-type)
 		  (cond ((= 3 (length var-type))
 			 (cl:let ((len (third var-type)))
 			   (list var-name (list 'make-sequence
@@ -3077,7 +3085,7 @@
 			 (list var-name (list 'make-sequence
 					      `',var-type 0)))))
 		 (t
-		  (list var-name '#()))))
+		  (list var-name (list 'make-sequence `',var-type 0)))))
 	  ((subtypep var-type 'cons)
 	   (list var-name '(cons nil nil)))
 	  (T var-name))))
