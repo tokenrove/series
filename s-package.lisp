@@ -1,4 +1,4 @@
-;;;;-*- Mode: lisp; Package: SERIES -*-
+;;;;-*- Mode: lisp; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
 
 ;;;; The package initialization stuff is done here now, instead of in s-code.lisp.  This is based a comment by Bruno Haible who said
 ;;;;
@@ -8,9 +8,12 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.7 2000/03/28 10:23:49 matomira Exp $
+;;;; $Id: s-package.lisp,v 1.8 2000/09/22 15:58:39 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.8  2000/09/22 15:58:39  rtoy
+;;;; Add support for MCL (from Rainer Joswig).
+;;;;
 ;;;; Revision 1.7  2000/03/28 10:23:49  matomira
 ;;;; polycall et all are now tail recursive.
 ;;;; LETIFICATION WORKS COMPLETELY!!
@@ -58,7 +61,7 @@
   (cl:pushnew ':pittsburgh cl:*features*))
 
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro :pittsburgh Genera Harlequin-Common-Lisp CLISP)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro :pittsburgh Genera Harlequin-Common-Lisp CLISP mcl)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
 
@@ -113,6 +116,8 @@
   (:import-from "LISP" "COMPILER-LET")
   #+cmu
   (:import-from "EXT" "COMPILER-LET")
+  #+mcl
+  (:import-from "CCL" "COMPILER-LET")
 )
 
 #-(or Series-ANSI)
