@@ -40,9 +40,18 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.17 2000/09/05 15:54:57 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.18 2000/09/22 16:01:43 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.18  2000/09/22 16:01:43  rtoy
+;;;; o Rainer Joswig points out that in several places we use lisp:let.
+;;;;   Make that common-lisp:let.
+;;;; o Rainer also points out we reference the package USER.  Make that
+;;;;   COMMON-LISP-USER.
+;;;; o We want to be in the COMMON-LISP-USER package for all platforms.
+;;;; o Test 491 was failing because it didn't have access to compiler-let.
+;;;;   Add a version for CLISP.
+;;;;
 ;;;; Revision 1.17  2000/09/05 15:54:57  rtoy
 ;;;; Add test to catch bug 113625:  scan doesn't scan constants very well.
 ;;;;
@@ -107,10 +116,7 @@
 ;;;;
 
 (series::eval-when (:compile-toplevel :load-toplevel :execute)
-  #-clisp
   (in-package "COMMON-LISP-USER")
-  #+clisp
-  (in-package "USER")
 
   #+(and :allegro-version>= (version>= 5 0) (not (version>= 5 1)))
   (defadvice make-sequence :before
@@ -461,14 +467,14 @@
   ((a b c) ((a b c) (b c) (c))))
 
 (defok 11 (ton (collect
-		  (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+		  (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				(scan-fn T #'(lambda () 0)
 					 #'(lambda (sum)
 					     (incf xx)
 					     (+ sum xx))
 					 #'(lambda (x) (> x 10)))))) (0 1 3 6 10))
 (defok 12 (ton (multiple-value-bind (a b)
-		     (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+		     (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				   (scan-fn '(values T T)
 					    #'(lambda () (values 0 1))
 					    #'(lambda (sum prod)
@@ -494,7 +500,7 @@
   ((1 2 3 -4) ((1 2 3 -4 5) (2 3 -4 5) (3 -4 5) (-4 5))))
 
 (defok 16 (ton (collect
-		  (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+		  (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				(scan-fn-inclusive T #'(lambda () 0)
 						   #'(lambda (sum)
 						       (incf xx)
@@ -502,7 +508,7 @@
 						   #'(lambda (x) (> x 10))))))
   (0 1 3 6 10 15))
 (defok 17 (ton (multiple-value-bind (a b)
-		     (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+		     (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				   (scan-fn-inclusive '(values T T)
 						      #'(lambda () (values 0 1))
 						      #'(lambda (sum prod)
@@ -986,14 +992,14 @@
 				  #Z(A B C) #Z(1 2 3))))
   (((c 3 2) (b 2 1) (a 1 0)) 3))
 
-(defok 233 (ton (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+(defok 233 (ton (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				(collect-fn T #'(lambda () 0)
 					    #'(lambda (sum x)
 						(incf xx)
 						(+ sum x xx))
 					    #Z(10 20 30)))) 66)
 (defok 234 (ton (multiple-value-list
-		      (encapsulated #'(lambda (b) `(lisp:let ((xx 0)) ,b))
+		      (encapsulated #'(lambda (b) `(common-lisp:let ((xx 0)) ,b))
 				    (collect-fn '(values t t)
 						#'(lambda () (values 0 1))
 						#'(lambda (sum prod x)
@@ -1145,7 +1151,7 @@
   ((a b) (b a)))
 
 (defok 280 (ton (multiple-value-bind (a b)
-		      (#2M(lambda (x) (let ((*package* (find-package "USER")))
+		      (#2M(lambda (x) (let ((*package* (find-package "COMMON-LISP-USER")))
 					(intern (string x))))
 			  #Z(x y))
 		    (collect (#Mlist a b)))) ((x :internal) (y :internal)))
@@ -2056,8 +2062,14 @@
 (defok 490 (tw (block bar
 		   (iterate ((x (series -1 2 3)))
 		     (if (plusp x) (return-from bar x))))) 2 29)
-#-allegro
+#-(or allegro clisp)
 (defok 491 (tw (compiler-let ((*suppress-series-warnings* T))
+		   (block bar
+		     (iterate ((x (series -1 2 3)))
+		       (if (plusp x) (return-from bar x)))))) 2 nil)
+
+#+clisp
+(defok 491 (tw (lisp::compiler-let ((*suppress-series-warnings* T))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
@@ -2376,7 +2388,7 @@
 
 (eval-when (compile load eval)
 (defconstant +constant+
-  #(1 2 3 4))
+  '#(1 2 3 4))
 )
 
 (defok 1001 (ton (collect 'list (scan 'vector +constant+)))
