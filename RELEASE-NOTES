@@ -6,7 +6,7 @@
                              matomira@acm.org
 
 
-                              14th March, 2000
+                              21st March, 2000
 
 
                     Series created by Richard C. Waters
@@ -101,6 +101,16 @@ NEW FEATURES:
   Like COLLECT-SUM, but for #'*. How more obvious does it get?
 - INDEFINITE-EXTENT
   Declaration exported.
+- (collect 'set
+  Collects a series into a list removing any duplicates in the most 
+  efficient way possible.
+- (collect 'ordered-set
+  Collects a series into a list removing any duplicates but keeping the 
+  original series order.
+- SCAN now allows to drop the type specifier for any argument
+  [:cltl2-series reactivates the old 'list assumption]
+- SCAN now can scan multidimensional arrays in row-major order.
+
 
 IMPROVEMENTS:
 ------------
@@ -115,6 +125,16 @@ IMPROVEMENTS:
     (:prolog and :epilog support easy to add, if necessary).
   - Improved letification merging.
   - Optimized collections of the form (collect [type] (scan [type] ({list | ..}
+  - Some fixnum declarations were further constrained.
+  - Optimized scanning of constant sequences.
+  - Somewhat optimized scanning of "empty" vectors, ie,
+    declared to be of constant 0 length, like in
+    (collect (scan '(vector t 0) <gimme-a-huge-array-to-throw-away>) 
+    now gives you NIL generating/executing less instructions.
+    [<gimme-a-huge-array-to-throw-away> is still executed if not constantp, 
+     though]
+  - Variables of type NULL are replaced by constant NILs.
+
 - Source clean up.
   Local series functions are almost there (FLET extension)
   Bottom-up definition for improved compilation.
@@ -142,7 +162,9 @@ NIL is OK, but which can be left unbound, if an implementation provides another 
 - Full letification works (modulo off-lining, and disabled because still useless).
 - Fixed letified merge-frags bug.
 - Adapted handle-dflow and non-series-merge for letification.
-
+- Some incorrect fixnum declarations were relaxed.
+- Improved some declarations to avoid spurious range warnings regarding 
+  dead code by not-so-smart compilers.
 
 COMPILING
 --------

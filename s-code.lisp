@@ -9,21 +9,71 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.68 2000/03/21 18:19:24 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.69 2000/03/23 23:04:11 matomira Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
-;;;; Revision 1.68  2000/03/21 18:19:24  matomira
-;;;; - Reinstated plain generation support.
-;;;; - Fixed letified merge-frags bug.
-;;;; - Adapted handle-dflow and non-series-merge for letification.
-;;;; - Spawned list->frag1 from list->frag.
-;;;; - define-optimizable-series-function uses list->frag1 to
-;;;;   support letification.
-;;;; - Still can't handle all initial fragL bindings because off-line handling
-;;;;   seems to move prologs into TAGBODYs.
+;;;; Revision 1.69  2000/03/23 23:04:11  matomira
+;;;;   NEW FEATURES:
+;;;;   ------------
+;;;;    - (collect 'set
+;;;;      Collects a series into a list removing any duplicates in the most efficient way possible.
+;;;;    - (collect 'ordered-set
+;;;;      Collects a series into a list removing any duplicates but keeping the original series order.
+;;;;    - SCAN now allows to drop the type specifier for any source expression
+;;;;      [:cltl2-series reactivates the old 'list assumption]
+;;;;    - SCAN now can scan multidimensional arrays in row-major order.
+;;;;
+;;;;   IMPROVEMENTS:
+;;;;   ------------
+;;;;    - Better code generation
+;;;;      . Some fixnum declarations were further constrained.
+;;;;      . Optimized scanning of constant sequences.
+;;;;      . Somewhat optimized scanning of "empty" vectors, ie,
+;;;;        declared to be of constant 0 length, like in
+;;;;        (collect (scan '(vector t 0) <gimme-a-huge-array-to-throw-away>)
+;;;;        now gives you NIL generating/executing less instructions.
+;;;;        [<gimme-a-huge-array-to-throw-away> is still executed if not constantp,
+;;;;         though]
+;;;;      . Variables of type NULL are replaced by constant NILs.
+;;;;
+;;;;   BUG FIXES:
+;;;;   ---------
+;;;;    - Some incorrect fixnum declarations were relaxed.
+;;;;    - Improved some declarations to avoid spurious range warnings regarding
+;;;;      dead code by not-so-smart compilers.
+;;;;
+;;;; Revision 1.80  2000/03/23 23:01:56  matomira
+;;;;   NEW FEATURES:
+;;;;   ------------
+;;;;    - (collect 'set
+;;;;      Collects a series into a list removing any duplicates in the most efficient way possible.
+;;;;    - (collect 'ordered-set
+;;;;      Collects a series into a list removing any duplicates but keeping the original series order.
+;;;;    - SCAN now allows to drop the type specifier for any source expression
+;;;;      [:cltl2-series reactivates the old 'list assumption]
+;;;;    - SCAN now can scan multidimensional arrays in row-major order.
+;;;;
+;;;;   IMPROVEMENTS:
+;;;;   ------------
+;;;;    - Better code generation
+;;;;      . Some fixnum declarations were further constrained.
+;;;;      . Optimized scanning of constant sequences.
+;;;;      . Somewhat optimized scanning of "empty" vectors, ie,
+;;;;        declared to be of constant 0 length, like in
+;;;;        (collect (scan '(vector t 0) <gimme-a-huge-array-to-throw-away>)
+;;;;        now gives you NIL generating/executing less instructions.
+;;;;        [<gimme-a-huge-array-to-throw-away> is still executed if not constantp,
+;;;;         though]
+;;;;      . Variables of type NULL are replaced by constant NILs.
+;;;;
+;;;;   BUG FIXES:
+;;;;   ---------
+;;;;    - Some incorrect fixnum declarations were relaxed.
+;;;;    - Improved some declarations to avoid spurious range warnings regarding
+;;;;      dead code by not-so-smart compilers.
 ;;;;
 ;;;; Revision 1.79  2000/03/21 17:18:56  matomira
 ;;;; Reinstated plain generation support.
@@ -491,9 +541,9 @@
 (defvar *series-implicit-map* nil 
   "T enables implicit mapping in optimized expressions")
 
-(defconstant +ext-conflicts+ #-:cmu () #+:cmu '(collect iterate))
+(defconstant /ext-conflicts/ #-:cmu () #+:cmu '(collect iterate))
 
-(defconstant +series-forms+ '(let let* multiple-value-bind funcall defun)
+(defconstant /series-forms/ '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
 #+:gcl
@@ -521,12 +571,19 @@
   (deftype nonnegative-fixnum () `(mod ,most-positive-fixnum))
   (deftype nonnegative-integer () `(integer 0))
   (deftype positive-integer () `(integer 1))
-  (deftype integer+ (m n &optional (over 1)) `(integer ,m ,(+ n over)))
+  (deftype -integer  (m &optional (n nil) (under 1)) `(integer ,(- m under) ,@(when n `(,n))))
+  (deftype integer+  (m &optional (n nil) (over 1))  `(integer ,m ,@(when n `(,(+ n over)))))
+  (deftype integer-  (m &optional (n nil) (over 1))  `(integer ,m ,@(when n `(,(- n over)))))
+  (deftype -integer- (m &optional (n nil) (over 1) (under 1)) `(integer ,(- m under) ,@(when n `(,(- n over)))))
   (deftype mod+ (n &optional (over 1)) `(mod ,(+ n over)))
   (deftype null-or (&rest types) `(or null ,@types))
   (deftype uninitialized (typ) `(null-or ,typ))
   (deftype defaulted (typ) `(null-or ,typ))
-  
+  (deftype -vector-index  ()  `(-integer- 0 ,array-total-size-limit))
+  (deftype vector-index   ()  `(integer-  0 ,array-total-size-limit))
+  (deftype vector-index+  ()  `(integer   0 ,array-total-size-limit)) 
+  (deftype -vector-index+ ()  `(-integer  0 ,array-total-size-limit))
+    
 #-:extensions
 (progn
 (defmacro when-bind ((symbol predicate) &body body)
@@ -910,11 +967,157 @@
 	(destarrify-1 base binds decls localdecls prologs forms wrapper t wrapped-prologs-p)
       (prognize (prologize prologs forms wrapped-prologs-p t) t)))
 
+(cl:defun compute-total-size (dims)
+  (cond ((consp dims)
+	 (cl:let ((n 1))
+           (dolist (d dims)
+	     (if (eq d '*)
+		 (return-from compute-total-size nil)
+	       (setq n (* n d))))
+	   n))
+	((eq dims '*) nil)
+	(t 0)))
+
+;;; DECODE-SEQ-TYPE
+;;;
+;;; DECODE-SEQ-TYPE tries to canonicalize the given type into the
+;;; underlying type.  It returns three values: the sequence type
+;;; (string, vector, simple-array, sequence), the length of the
+;;; sequence (or NIL if not known) and the element type of the
+;;; sequence (or T if not known).
+(cl:defun decode-seq-type (type)
+  (when (eq-car type 'quote)
+    (setq type (cadr type)))
+  (if type
+      (cond ((and (symbolp type)
+		  (string= (string type) "BAG"))
+	     (values 'bag nil T))
+	    ((and (consp type)
+		  (symbolp (car type))
+		  (string= (string (car type)) "BAG"))
+	     (values 'bag nil (cadr type)))
+	    ((and (symbolp type)
+		  (string= (string type) "SET"))
+	     (values 'set nil T))
+	    ((and (consp type)
+		  (symbolp (car type))
+		  (string= (string (car type)) "SET"))
+	     (values 'set nil (cadr type)))
+	    ((and (symbolp type)
+		  (string= (string type) "ORDERED-SET"))
+	     (values 'ordered-set nil T))
+	    ((and (consp type)
+		  (symbolp (car type))
+		  (string= (string (car type)) "ORDERED-SET"))
+	     (values 'ordered-set nil (cadr type)))
+	    (t
+	     ;; Hmm, should we use subtypep to handle these?  Might be easier.
+	     (cond ((eq type 'list)
+		    (values 'list nil T))
+		   ((eq-car type 'list)
+		    (values 'list nil (cadr type)))
+		   ((eq type 'sequence)
+		    (values 'sequence nil T))
+		   ;; A STRING is canonicalized to (VECTOR CHARACTER)
+		   ((eq type 'string)
+		    (values 'vector nil 'character))
+		   ((eq-car type 'string)
+		    (values 'vector
+			    (when (numberp (cadr type))
+			      (cadr type))
+			    'character))
+		   ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
+		   ((or (eq type 'simple-string)
+			(eq type 'simple-base-string))
+		    (values 'simple-array nil 'character))
+		   ((or (eq-car type 'simple-string)
+			(eq-car type 'simple-base-string))
+		    (values 'simple-array
+			    (when (numberp (cadr type))
+			      (cadr type))
+			    'character))
+		   ;; A BIT-VECTOR is (vector bit)
+		   ((eq type 'bit-vector)
+		    (values 'vector nil 'bit))
+		   ((eq-car type 'bit-vector)
+		    (values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
+		   ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
+		   ((eq type 'simple-bit-vector)
+		    (values 'simple-array nil 'bit))
+		   ((eq-car type 'simple-bit-vector)
+		    (values 'simple-array
+			    (when (numberp (cadr type))
+			      (cadr type))
+			    'bit))
+		   ;; A VECTOR is just a VECTOR
+		   ((eq type 'vector)
+		    (values 'vector nil T))
+		   ((eq-car type 'vector)
+		    (values 'vector (if (numberp (caddr type)) (caddr type))
+			    (if (not (eq (cadr type) '*))
+				(cadr type)
+			      T)))
+		   ;; And a SIMPLE-VECTOR is just a SIMPLE-VECTOR
+		   ((eq type 'simple-vector)
+		    (values 'simple-vector nil T))
+		   ((eq-car type 'simple-vector)
+		    (values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
+		   ((eq type 'simple-array)
+		    (values 'simple-array nil T))
+		   ((eq-car type 'simple-array)
+		    (values 'simple-array
+			    (when (caddr type)
+			      (compute-total-size (caddr type)))
+			    (if (not (eq (cadr type) '*))
+				(cadr type)
+			      T)))
+		   ((eq type 'array)
+		    (values 'array nil T))
+		   ((eq-car type 'array)
+		    (values 'array
+			    (when (caddr type)
+			      (compute-total-size (caddr type)))
+			    (if (not (eq (cadr type) '*))
+				(cadr type)
+			      T)))
+		   ;; Everything else is a sequence
+		   (T
+		    (values 'sequence nil T)))))
+    (values 'sequence nil T))) ; "SEQUENCE" - It might be a multidimensional array
+
 (cl:defun lister-p (expr)
   (when-bind (a (and (consp expr) (car expr)))
     (case a
-      ((list cons copy-list make-list) expr)
-      (quote (when (consp (cadr expr)) expr))
+      ((cons list list* 
+	cdr cddr cdddr cddddr
+	cdar cddar cdddar
+	cdaar cddaar
+	cdaaar
+	cdadr cddadr
+	cdaddr
+	cdaadr
+	push pushnew
+	last
+	copy-list make-list append nconc member butlast nbutlast revappend nreconc
+	rplaca rplacd
+	nthcdr rest
+	mapcar mapcan mapl maplist mapcon
+	assoc pairlis acons copy-alist assoc-if assoc-if-not 
+	subst subst-if subst-if-not
+	nsubst nsubst-if nsubst-if-not 
+	sublis nsublis
+	intersection nintersection set-difference nset-difference
+	adjoin union nunion set-exclusive-or nset-exclusive-or
+	get-properties ldiff) expr)
+      (quote (when (listp (cadr expr)) expr))
+      (collect (when (or (not (cadddr expr))
+			 (case (decode-seq-type (caddr expr))
+			   ((list bag set ordered-set) t)
+			   (t nil)))
+		 expr))
+      (copy-seq (when (or (null (cadr expr))
+			  (lister-p (cadr expr)))
+		  expr))
       (t nil))))
 
 (cl:defun matching-scan-p (expr pred)
@@ -1038,6 +1241,7 @@
 	(pop ptr))
       new)))
 
+
 ;;;; SERIES-specific code
 
 (cl:defun install (&key (pkg *package*) (macro T) (shadow T) (implicit-map nil)
@@ -1061,21 +1265,21 @@
 	      (unintern sym pkg)))
 	  #+(or cmu Harlequin-Common-Lisp)
 	  (unintern 'series "COMMON-LISP-USER")
-	  (shadowing-import +ext-conflicts+ pkg)
+	  (shadowing-import /ext-conflicts/ pkg)
 	  (use-package "SERIES" pkg)
-	  (when shadow (shadowing-import +series-forms+ pkg))
+	  (when shadow (shadowing-import /series-forms/ pkg))
 	  (unless shadow-extensions
-	    (when +ext-conflicts+
+	    (when /ext-conflicts/
 	      (cl:let* ((ext (find-package "EXTENSIONS"))
 			(syms (mapcar #'(lambda (s)
 					  (find-symbol (symbol-name s) ext))
-				      +ext-conflicts+)))
+				      /ext-conflicts/)))
 		 
 		(shadowing-import syms pkg))))
 	  ))
     (when (and remove (member spkg (package-use-list pkg)))
       (unuse-package "SERIES" pkg)
-      (dolist (sym (intersection (union +series-forms+ +ext-conflicts+)
+      (dolist (sym (intersection (union /series-forms/ /ext-conflicts/)
 				 (package-shadowing-symbols pkg)))
 	(unintern sym pkg))))
   T)
@@ -1119,7 +1323,7 @@
 ;;
 ;; 3- nil, var is rebound and protected from renaming.
 
-(defconstant +short-hand-types+
+(defconstant /short-hand-types/
         '(array atom bignum bit bit-vector character common compiled-function
           complex cons double-float fixnum float function hash-table integer
           keyword list long-float nil null number package pathname random-state
@@ -1334,6 +1538,10 @@
   (declaim (inline remove-aux-if))
   (cl:defun remove-aux-if (p auxs)
     (remove-if p auxs))
+
+  (declaim (inline segregate-aux))
+  (cl:defun segregate-aux (p auxs)
+    (values (remove-if-not p auxs) (remove-if p auxs)))
 
   (cl:defun add-aux (frag var typ &optional (val nil val-p))
     (push (if val-p
@@ -1745,6 +1953,64 @@
     (setq code (car code)))
   (list (apply-wrappers wrps code test)))
 
+(cl:defun clean-tagbody-redundancy (expr)
+  (if expr
+    (cl:let ((a (car expr)))
+      (if (and (eq-car a 'go)
+	       (eq (cadr a) (cadr expr)))
+	  (values (rplacd (cdr expr) (clean-tagbody-redundancy (cddr expr)))
+		  t)
+	(cl:multiple-value-bind (remaining cleaned) (clean-tagbody-redundancy (cdr expr))
+	  (if cleaned
+	      (values (rplacd expr remaining) t)
+	    (values expr nil)))))
+    (values nil nil)))
+
+(cl:defun clean-tagbody-deadcode (expr)
+  (if expr
+    (cl:let ((a (car expr)))
+      (if (eq-car a 'go)
+	  (cl:let ((remaining (member-if #'symbolp (cdr expr))))	    
+	    (values (rplacd expr (and remaining (rplacd remaining (clean-tagbody-deadcode (cdr remaining)))))
+		    t))
+	(cl:multiple-value-bind (remaining cleaned) (clean-tagbody-deadcode (cdr expr))
+	  (if cleaned
+	      (values (rplacd expr remaining) t)
+	    (values expr nil)))))
+    (values nil nil)))
+
+(cl:defun clean-tagbody-body (expr)
+  (when expr
+    (cl:let ((cleaned t))
+    (clean-tagbody-deadcode expr)
+
+    ;; This should be done better, with the list reversed
+    (tagbody
+     L
+     (cl:multiple-value-setq (expr cleaned) (clean-tagbody-redundancy expr))
+     (if cleaned (go L)))
+    
+    (if (every #'symbolp expr)
+	nil
+      (if (every #'(lambda (x) (or (symbolp x) (eq-car x 'go))) expr)
+	  (cl:let ((tags (remove-if-not #'symbolp expr))
+		   (stms (remove-if #'symbolp expr)))
+	    (setq cleaned nil)	   
+	    (dolist (s tags)
+	      (unless (find-if #'(lambda (x) (eq (cadr x) s)) stms)
+	        (setq expr (delete s expr))
+		(setq cleaned t)))
+	    (if cleaned
+		(clean-tagbody-body expr)
+	      expr))
+	expr)))))
+	
+(cl:defun clean-tagbody (expr)
+  (when-bind (body (clean-tagbody-body (cdr expr)))
+    (if (cdr body)
+	(cons 'tagbody body)
+      (car body))))
+    
 ;; This takes a series frag all of whose inputs and outputs are
 ;; non-series things and makes it into a non-series frag.
 (cl:defun maybe-de-series (frag &optional (prologize t))
@@ -1757,12 +2023,12 @@
 	    (when (not (active-terminator-p frag))
 	      (wrs 29 nil "~%Non-terminating series expression:~%" (code frag)))
 	    (cl:let ((lab (new-var 'll)))
-	      (setq loop `(tagbody ,lab ,@bod (go ,lab)
-				  ,@(when (branches-to END bod) `(,END))
-				  ))
-		     
-	     (when wrps 	      
-	       (setq loop (apply-wrappers wrps loop #'loop-wrapper-p)))))
+	      (setq loop (clean-tagbody
+			       `(tagbody ,lab ,@bod (go ,lab)
+				      ,@(when (branches-to END bod) `(,END))
+				      ))))
+	    (when (and wrps loop)	      
+	      (setq loop (apply-wrappers wrps loop #'loop-wrapper-p))))
 	  (when wrps
 	    (setf (wrappers frag) (delete-if #'loop-wrapper-p wrps)))
 	  (cl:let ((ending (if loop
@@ -2065,9 +2331,11 @@
 (defmacro deft (name head rest)
   `(setf (get ',name 'scan-template) (make-template ,head ,rest)))
 
-(defvar *expr-template* (make-template (Q) (E)))
+;; These two should de DEFCONSTANTs, but CMUCL gets confused by circularity
 
-(defvar *eval-all-template* (make-template () (E)))
+(defvar /expr-template/ (make-template (Q) (E)))
+
+(defvar /eval-all-template/ (make-template () (E)))
 
 ;; Sample LispWorks' MACROLET walking
 ;;
@@ -2186,9 +2454,9 @@
   (cl:let ((*being-setqed* nil))
     (m-&-r1 code)))
 
-(defconstant +fexprs-not-handled+ '(FLET LABELS #-:lispworks MACROLET))
+(defconstant /fexprs-not-handled/ '(FLET LABELS #-:lispworks MACROLET))
 
-(defconstant +expr-like-special-forms+ 
+(defconstant /expr-like-special-forms/ 
   '(multiple-value-call multiple-value-prog1 progn progv the throw
     ;;some simple additions for lispm
     *catch multiple-value-return progw return-list 
@@ -2199,7 +2467,7 @@
 (cl:defun not-expr-like-special-form-p (sym)
   (and #-Series-ANSI(special-form-p sym)
        #+Series-ANSI(special-operator-p sym)
-       (not (member sym +expr-like-special-forms+))))
+       (not (member sym /expr-like-special-forms/))))
 
 
 (cl:defun m-&-r2 (code template)
@@ -2218,14 +2486,14 @@
 	code
       (cl:let* ((head (car code))
 		(template (and (symbolp head) (get head 'scan-template))))
-        (when (or (member head +fexprs-not-handled+)
+        (when (or (member head /fexprs-not-handled/)
 		  (and (not-expr-like-special-form-p head) (null template))
 		  (and *in-series-expr* (eq head 'multiple-value-call)))
 	  (rrs 6 "~%The form " head " not allowed in SERIES expressions."))
 	(m-&-r2 code
 		(if (symbolp head)
-		    (or template *expr-template*) 
-		  *eval-all-template*))))))
+		    (or template /expr-template/) 
+		  /eval-all-template/))))))
 
 
 ;; This macro-expands everything in the code making sure that all free
@@ -2461,7 +2729,7 @@
 (cl:defun EX  (code)
   (cl:let* ((*not-straight-line-code* *in-series-expr*)
               (*in-series-expr* nil))
-    (m-&-r2 code *expr-template*)))
+    (m-&-r2 code /expr-template/)))
 (cl:defun EL  (code)
   (cl:let* ((*not-straight-line-code* *in-series-expr*)
               (*in-series-expr* nil))
@@ -2919,7 +3187,7 @@
 
 
 ;; Macroexpansion may result in unexpected arcana we should let through.
-(defconstant +allowed-generic-opts+ 
+(defconstant /allowed-generic-opts/ 
     (cons 'optimize 
           #+:lispworks '(CLOS::VARIABLE-REBINDING)
           #-:lispworks nil))
@@ -2945,8 +3213,8 @@
         (cond ((and (eq (car d) 'type)
                     (member 'types allowed-dcls))
                (dolist (v (cddr d)) (push (cons v (cadr d)) types)))
-              ((and (or (member (car d) +short-hand-types+)
-                        (and (listp (car d)) (member (caar d) +short-hand-types+)))
+              ((and (or (member (car d) /short-hand-types/)
+                        (and (listp (car d)) (member (caar d) /short-hand-types/)))
                     (member 'types allowed-dcls))
                (dolist (v (cdr d)) (push (cons v (car d)) types)))
               ((and (eq (car d) 'optimizable-series-function)
@@ -2962,7 +3230,7 @@
                     (member 'off-line-ports allowed-dcls))
                (setq off-line-ports (append off-line-ports (cdr d))))
               ((not (member 'no-complaints allowed-dcls))
-               (if (member (car d) +allowed-generic-opts+)
+               (if (member (car d) /allowed-generic-opts/)
                    (setq generic-opts (nconc generic-opts (list d)))
                  (rrs 1 "~%The declaration " d " blocks optimization.")))
               (T (setq no-complaints (nconc no-complaints (list d)))))))
@@ -4300,97 +4568,6 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
-;;; DECODE-SEQ-TYPE
-;;;
-;;; DECODE-SEQ-TYPE tries to canonicalize the given type into the
-;;; underlying type.  It returns three values: the sequence type
-;;; (string, vector, simple-array, sequence), the length of the
-;;; sequence (or NIL if not known) and the element type of the
-;;; sequence (or T if not known).
-(cl:defun decode-seq-type (type)
-  (when (eq-car type 'quote)
-    (setq type (cadr type)))
-  (if type
-      (cond ((and (symbolp type)
-		  (string= (string type) "BAG"))
-	     (values 'bag nil T))
-	    ((and (consp type)
-		  (symbolp (car type))
-		  (string= (string (car type)) "BAG"))
-	     (values 'bag nil (cadr type)))
-	    (t
-	     ;; Hmm, should we use subtypep to handle these?  Might be easier.
-	     (cond ((eq type 'list)
-		    (values 'list nil T))
-		   ((eq-car type 'list)
-		    (values 'list nil (cadr type)))
-		   ((eq type 'sequence)
-		    (values 'sequence nil T))
-		   ;; A STRING is canonicalized to (VECTOR CHARACTER)
-		   ((eq type 'string)
-		    (values 'vector nil 'character))
-		   ((eq-car type 'string)
-		    (values 'vector
-			    (when (numberp (cadr type))
-			      (cadr type))
-			    'character))
-		   ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
-		   ((or (eq type 'simple-string)
-			(eq type 'simple-base-string))
-		    (values 'simple-array nil 'character))
-		   ((or (eq-car type 'simple-string)
-			(eq-car type 'simple-base-string))
-		    (values 'simple-array
-			    (when (numberp (cadr type))
-			      (cadr type))
-			    'character))
-		   ;; A BIT-VECTOR is (vector bit)
-		   ((eq type 'bit-vector)
-		    (values 'vector nil 'bit))
-		   ((eq-car type 'bit-vector)
-		    (values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
-		   ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
-		   ((eq type 'simple-bit-vector)
-		    (values 'simple-array nil 'bit))
-		   ((eq-car type 'simple-bit-vector)
-		    (values 'simple-array
-			    (when (numberp (cadr type))
-			      (cadr type))
-			    'bit))
-		   ;; A VECTOR is just a VECTOR
-		   ((eq type 'vector)
-		    (values 'vector nil T))
-		   ((eq-car type 'vector)
-		    (values 'vector (if (numberp (caddr type)) (caddr type))
-			    (if (not (eq (cadr type) '*))
-				(cadr type)
-			      T)))
-		   ;; And a SIMPLE-VECTOR is just a SIMPLE-VECTOR
-		   ((eq type 'simple-vector)
-		    (values 'simple-vector nil T))
-		   ((eq-car type 'simple-vector)
-		    (values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
-		   ;; A SIMPLE-ARRAY is a SIMPLE-ARRAY.  This assumes you
-		   ;; specified a one-dimensional simple-array.  Results
-		   ;; are undefined if it's not a one-dimensional array.
-		   ((eq type 'simple-array)
-		    (values 'simple-array nil T))
-		   ((eq-car type 'simple-array)
-		    (values 'simple-array
-			    (when (not (eq (caaddr type) '*))
-			      (caaddr type))
-			    (if (not (eq (cadr type) '*))
-				(cadr type)
-			      T)))
-		   ;; We don't need to handle anything else like arrays
-		   ;; because series only handles 1-dimensional
-		   ;; sequences.
-
-		   ;; Everything else is a sequence
-		   (T
-		    (values 'sequence nil T)))))
-    (values 'sequence nil T)))
-
 ;;; This tries to get a correct init in situations where NIL won't do.
 
 ;; This function converts a type to a "canonical" type.  Mainly meant
@@ -4461,6 +4638,8 @@
              (make-sequence var-type (or len 0))))
           ((subtypep var-type 'array)
 	   nil
+	   ;; THIS IS PLAINLY WRONG FOR NON-SEQUENCE ARRAYS!!!
+	   ;; KEEPING CODE JUST FOR EVENTUAL SPECIAL-CASING	   
            ;; Heuristic: assume they mean vector.
            ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
 	   #+:ignore
@@ -4517,30 +4696,43 @@
       dead)))
 
 (cl:defun clean-code (aux prologs code)
-  #-:series-letify
-  (cl:let* ((suspicious (not-contained-twice (mapaux #'car aux) prologs code))
-	    (dead-aux (clean-code1 suspicious prologs code)))
-    (values (remove-aux-if #'(lambda (v) (member (car v) dead-aux)) aux) prologs code))	  
-  #+:series-letify
-  (do ((unfinished t))
-      ((not unfinished) (values aux prologs code))
-    (cl:multiple-value-bind (bound unbound) (segregate-aux #'cddr aux)
-      (setq unbound (delete nil unbound))
-      (cl:let ((suspicious (delete-aux-if-not #'(lambda (v)
-						  (cl:let ((val (caddr v)))
-						    (or (symbolp val) ; Symbol macros should have already expanded
-							(constantp val))))
-					      bound)))
-        (setq suspicious (not-contained (mapaux #'car suspicious)
+  (cl:multiple-value-bind (goes aux) (segregate-aux #'(lambda (v) (eq (cadr v) 'null)) aux)
+    ;; Let's get rid of silly constant NIL variables first
+    (when goes
+      (setq goes (mapaux #'(lambda (v) (cons (car v) nil)) goes))
+      (clean-code1 (mapcar #'car goes) prologs code)
+      (when prologs
+	(setq prologs (nsublis goes prologs)))
+      (when code
+	(setq code (nsublis goes code))))
+
+    #-:series-letify
+    (cl:let ((suspicious (not-contained (mapaux #'car aux) prologs code)))
+      (when suspicious 
+        (setq aux (delete-aux-if #'(lambda (v) (member (car v) suspicious)) aux)))
+      (setq suspicious (not-contained-twice (mapaux #'car aux) prologs code))
+      (cl:let ((dead-aux (clean-code1 suspicious prologs code)))
+        (values (delete-aux-if #'(lambda (v) (member (car v) dead-aux)) aux) prologs code)))	  
+    #+:series-letify
+    (do ((unfinished t))
+	((not unfinished) (values aux prologs code))
+      (cl:multiple-value-bind (bound unbound) (segregate-aux #'cddr aux)
+        (setq unbound (delete nil unbound))
+        (cl:let ((suspicious (delete-aux-if-not #'(lambda (v)
+						    (cl:let ((val (caddr v)))
+						      (or (symbolp val) ; Symbol macros should have already expanded
+							  (constantp val))))
+						bound)))
+          (setq suspicious (not-contained (mapaux #'car suspicious)
 					(mapaux #'caddr bound) prologs code))
-	(setq unfinished suspicious)
-	(setq aux (delete-aux-if #'(lambda (v) (member (car v) suspicious)) aux))
-	(setq suspicious (not-contained-twice (mapaux #'car unbound)
-					      (mapaux #'caddr aux) prologs code))
-	(setq suspicious (clean-code1 suspicious prologs code))
-	(when suspicious
 	  (setq unfinished suspicious)
-	  (setq aux (delete-aux-if #'(lambda (v) (member (car v) suspicious)) aux)))))))
+	  (setq aux (delete-aux-if #'(lambda (v) (member (car v) suspicious)) aux))
+	  (setq suspicious (not-contained-twice (mapaux #'car unbound)
+						(mapaux #'caddr aux) prologs code))
+	  (setq suspicious (clean-code1 suspicious prologs code))
+	  (when suspicious
+	    (setq unfinished suspicious)
+	    (setq aux (delete-aux-if #'(lambda (v) (member (car v) suspicious)) aux))))))))
 
 (cl:defun propagate-types (expr aux &optional (input-info nil))
   (do ((tt expr (cdr tt)))
@@ -4578,7 +4770,11 @@
 		      (or value-provided-p
 			  (setq var-value (init-elem typ)))
 		      (or var-value
-			  (and (typep nil typ) value-provided-p)
+			  ;; That the ones allowing nil show no explicit initializers should
+			  ;; be enough to indicate they should be considered unititialized.
+			  ;; Let's not penalize implementations not so good at LOCALLY,
+			  ;; nor generate gratuitous compilation overhead.
+			  (typep nil typ) ;(and (typep nil typ) value-provided-p)
 			  (if value-provided-p
 			      (setq typ `(null-or ,typ))
 			    (setq localtyp `(type ,typ ,var-name) typ nil)))
@@ -5099,6 +5295,16 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
+;; this forms are useful for making code that comes out one way in the
+;; body and another way in the optimizer
+
+(defmacro opt-non-opt (f1 f2)
+  (if *optimize-series-expressions* f1 f2))
+
+(defmacro non-optq (x) `(opt-non-opt ,x (list 'quote ,x)))
+
+(defmacro optq (x) `(opt-non-opt ',x ,x))
+
 (cl:defun unopt-fragl (stuff)
   (frag->physical (literal-frag stuff)
 		  (mapcar #'car (car stuff))))
@@ -5113,6 +5319,13 @@
       (opt-fragl `(quote ,stuff) (mapcar #'car (car stuff)))
     (unopt-fragl stuff)))
 
+(cl:defun sublis-limits (tree)
+  (sublis `((*limit*                . ,most-positive-fixnum)
+	    (most-positive-fixnum   . ,most-positive-fixnum)
+	    (array-total-size-limit . ,array-total-size-limit)
+	    (array-dimension-limit  . ,array-dimension-limit))
+	  tree))
+
 (cl:defun *fragL-1 (stuff)
   (if *optimize-series-expressions*
       (opt-fragl (if (not (contains-p '*type* stuff))
@@ -5121,7 +5334,9 @@
 		       `(subst *limit* '*limit* ',stuff))
 		   (if (not (contains-p '*limit* stuff))
 		       `(subst *type* '*type* ',stuff)
-		     `(subst *type* '*type* (subst *limit* '*limit* ',stuff))))
+		     `(sublis `((*type* . ,*type*)
+				(*limit* . ,*limit*))
+			      ',stuff)))
 		 (mapcar #'car (car stuff)))
     (unopt-fragl (list* (car stuff)
 		   (cadr stuff)
@@ -5130,9 +5345,11 @@
 				       (eq-car (cadr data)
 					       'series-element-type))
 				   (list* (car data) T (cddr data))
-				 (list* (car data) (subst most-positive-fixnum '*limit* (cadr data))  (cddr data))))
+				 (list* (car data)
+					(sublis-limits (cadr data))
+					(cddr data))))
 			   (caddr stuff))
-		   (cdddr stuff)))))
+		   (sublis-limits (cdddr stuff))))))
 
 ) ;end of eval-when for fragL-1
 
@@ -5143,16 +5360,6 @@
 (defmacro *fragL (&rest stuff)
   #+symbolics (declare (scl:arglist args rets aux alt prolog body epilog wraprs))
   (*fragL-1 stuff))
-
-;; this forms are useful for making code that comes out one way in the
-;; body and another way in the optimizer
-
-(defmacro opt-non-opt (f1 f2)
-  (if *optimize-series-expressions* f1 f2))
-
-(defmacro non-optq (x) `(opt-non-opt ,x (list 'quote ,x)))
-
-(defmacro optq (x) `(opt-non-opt ',x ,x))
 
 ;;;;                          ---- COLLECT ----
 
@@ -5193,6 +5400,35 @@
 		      ()
 		      ()
 		      nil)))
+	  ((eq *type* 'set)
+	   (fragL ((items T)) ((lst))
+		  ((table T #+:series-letify (make-hash-table))
+		   (lst list nil))
+		  ()
+		  (#-:series-letify (setq table (make-hash-table)))
+		  ((setf (gethash items table) t))
+		  ((with-hash-table-iterator (next-entry table)
+                     (loop (cl:multiple-value-bind (more key) (next-entry)
+                             (unless more (return lst))
+                             (push key lst)))))
+		  () nil))
+	  ((eq *type* 'ordered-set)
+	   (fragL ((items T)) ((lst))
+		  ((table T #+:series-letify (make-hash-table))
+		   (lastcons cons)
+		   (lst list nil))
+		  ()
+		  ((setq lastcons (list nil))
+		   (setq lst lastcons)
+		   #-:series-letify (setq table (make-hash-table)))
+		  ((cl:multiple-value-bind (val found)
+		       (gethash items table)
+		     (declare (ignore val))
+		     (unless found
+		       (setf (gethash items table) t)
+		       (setq lastcons (setf (cdr lastcons) (cons items nil))))))
+		  ((setq lst (cdr lst)))
+		  () nil))
           (limit
            ;; It's good to have the type exactly right so CMUCL can
            ;; optimize better.
@@ -5202,7 +5438,7 @@
 	   (*fragL
 	       ((seq-type) (items T) (limit)) ((seq))
 	       ((seq *type*)
-		(index nonnegative-fixnum 0))
+		(index vector-index+ 0))
 	       ()              
 	       (#-:cmu
 		(setq seq (make-sequence seq-type limit))
@@ -5215,12 +5451,12 @@
 			      seq
 			    (make-sequence seq-type limit)))
 		)
-	       ((setf (aref seq index) items) (incf index))
+	       ((setf (aref seq (the vector-index index)) items) (incf index))
 	       ()
 	       ()
 	       nil
 	       ))
-          ((not (eq *type* 'sequence)) ;some kind of vector with no length
+          ((not (eq *type* 'sequence)) ;some kind of array with no dimension
             ;; It's good to have the type exactly right so CMUCL can
 	   ;; optimize better.
 	   (setq *type* (if (eq *type* 'simple-array)
@@ -5235,6 +5471,7 @@
 			  ()
 			  ((cl:let* ((lst ,l)
 				     (num (length lst)))
+			     (declare (type nonnegative-integer num))
 			     (setq seq (make-sequence ,seq-type num))
 			     (do ((i (1- num) (1- i))) ((minusp i))
 			       (setf (aref seq i) (pop lst)))))
@@ -5250,15 +5487,19 @@
 		     ()
 		     ((setq lst (cons items lst)))
 		     ((cl:let ((num (length lst)))
+			(declare (type nonnegative-integer num))
 			(setq seq (make-sequence seq-type num))
 			(do ((i (1- num) (1- i))) ((minusp i))
 			  (setf (aref seq i) (pop lst)))))
 		     ()
 		     nil
 		     )))
+	  
           (T
 	     (fragL ((seq-type) (items T)) ((seq))
-                    ((seq T) (limit (null-or fixnum) nil) (lst list nil))
+                    ((seq T)
+		     (limit (null-or nonnegative-integer) nil)
+		     (lst list nil))
 		    ()
                     ((cl:multiple-value-bind (x y)
                          (decode-seq-type (list 'quote seq-type))
@@ -5266,6 +5507,7 @@
                        (setq limit y))) ; y is not restricted to fixnum!
                     ((setq lst (cons items lst)))
                     ((cl:let ((num (length lst)))
+		       (declare (type nonnegative-integer num))    
                        (setq seq (make-sequence seq-type (or limit num)))
                        (do ((i (1- num) (1- i))) ((minusp i))
                          (setf (elt seq i) (pop lst)))))
@@ -6744,88 +6986,204 @@ TYPE."
 		     ()
 		     :args)))))
 
+(defmacro null-scan (type)
+  `(*fragL ()
+	   ((elements T))
+	   ((elements ,type))
+	   ()
+	   ()
+	   ((go END))
+	   ()
+	   ()
+	   nil))
+
+(defmacro limited-scan (type unopt-type-limit opt-type-limit unopt-limit &optional opt-limit)
+  `(if *optimize-series-expressions*
+      (*fragL ((seq) ,@(when opt-limit `((,opt-limit)))) ((elements T))
+	       ((elements ,type)
+		(temp T) 
+		(index (integer -1 ,@(when opt-type-limit `(,opt-type-limit))) -1))
+	       ((elements (the *type* (setf (row-major-aref temp (the (integer- 0
+								     ,@(when opt-type-limit `(,opt-type-limit)))
+							 index)) *alt*)) temp index))
+	       ((setq temp seq))
+	       ((incf index)
+		(locally
+		 (declare (type (integer 0 ,opt-type-limit) index))
+		 (if (= index ,(or opt-limit opt-type-limit)) (go END))
+		 (setq elements (the ,type (row-major-aref seq (the (integer- 0
+								   ,@(when opt-type-limit `(,opt-type-limit)))
+						       index))))))
+	       ()
+	       ()
+	       :mutable)
+    (*fragL ((seq) (,unopt-limit)) ((elements T))
+	     ((elements ,type)
+	      (temp T) 
+	      (index (integer -1 ,@(when unopt-type-limit `(,unopt-type-limit))) -1))
+	     ((elements (the *type* (setf (row-major-aref temp (the (integer- 0
+								   ,@(when unopt-type-limit `(,unopt-type-limit)))
+						       index)) *alt*)) temp index))
+	     ((setq temp seq))
+	     ((incf index)
+	      (locally
+	       (declare (type (integer 0 ,@(when unopt-type-limit `(,unopt-type-limit))) index))
+	       (if (= index ,unopt-limit) (go END))
+	       (setq elements (the ,type (row-major-aref seq (the (integer- 0
+								 ,@(when unopt-type-limit `(,unopt-type-limit)))
+						     index))))))
+	     ()
+	     ()
+	     :mutable)))
+
+
+(defmacro list-scan (type)
+  `(*fragL ((seq)) ((elements T))
+	   ((elements ,type)
+	    (listptr list)
+	    (parent list))
+	   ((elements (the ,type (setf (car parent) *alt*)) parent))
+	   ((setq listptr seq))
+	   ((if (endp listptr) (go END))
+	    (setq parent listptr)
+	    (setq elements (the ,type (car listptr)))
+	    (setq listptr (cdr listptr)))
+	   ()
+	   ()
+	   :mutable))
+
 ;; API
 (defS scan (seq-type &optional (seq nil seq-p))
     "Enumerates a series of the values in a sequence"
   (cl:let (type limit *limit* *type*)
     (when (not seq-p) ;it is actually seq-type that is optional
       (setq seq seq-type)
-      (setq seq-type (optq 'list)))
+      (setq seq-type #-:cltl2-series nil #+:cltl2-series (unless (constantp seq) (optq 'list))))
     (multiple-value-setq (type limit *type*) (decode-seq-type (non-optq seq-type)))
     (cond ((member type '(list bag))
-           (*fragL ((seq)) ((elements T))
-		   ((elements *type*)
-		    (listptr list)
-		    (parent list))
-		   ((elements (the *type* (setf (car parent) *alt*)) parent))
-		   ((setq listptr seq))
-		   ((if (endp listptr) (go END))
-		    (setq parent listptr)
-		    (setq elements (the *type* (car listptr)))
-		    (setq listptr (cdr listptr)))
-		   ()
-		   ()
-		   :mutable))
+	   (if (null seq)
+	       (null-scan *type*)
+	     (list-scan *type*)))
           (limit
 	   (setq *limit* limit)
-	   (if *optimize-series-expressions*
-	       (*fragL ((seq)) ((elements T))
-		       ((elements *type*)
-			(temp T) 
-			(index (integer+ -1 *limit*) -1))
-		       ((elements (the *type* (setf (aref temp (the nonnegative-fixnum #+:ignore (mod+ *limit*)
-								    index)) *alt*)) temp index))
-		       ((setq temp seq))
-		       ((incf index)
-			(if (>= index *limit*) (go END))
-			(setq elements (the *type* (aref seq (the nonnegative-fixnum #+:ignore (mod+ *limit*)
-								  index)))))
-		       ()
-		       ()
-		       :mutable)
-	     (*fragL ((seq) (limit)) ((elements T))
+	   (if (= *limit* 0)
+	       (if (constantp seq)
+		   (null-scan *type*)
+		 (*fragL ((seq)) ((elements T))
+			 ((elements *type*)
+			  (temp T))
+			 ()
+			 ((setq temp seq))
+			 ((go END))
+			 ()
+			 ()
+			 :args))
+	     (limited-scan *type* nil *limit* limit)))
+          ((not (eq type 'sequence))	;some kind of array
+	   (if (constantp seq)
+	       (cl:let ((thing seq))   
+		 (when (and (consp seq) (eq (car seq) 'quote))
+		   (setq thing (cadr seq)))
+		 (setq limit (array-total-size thing))
+		 (when (eq *type* T)
+		   (setq *type* (array-element-type thing)))		 
+		 (if (= limit 0)
+		     (null-scan *type*)
+		   (progn
+		     (setq *limit* limit)
+		     (limited-scan *type* array-total-size-limit *limit* limit))))
+	     (*fragL ((seq)) ((elements T))
 		     ((elements *type*)
-		      (temp T) 
-		      (index (integer+ -1 *limit*) -1))
-		     ((elements (the *type* (setf (aref temp (the nonnegative-fixnum #+:ignore (mod+ *limit*)
-								  index)) *alt*)) temp index))
-		     ((setq temp seq))
+		      (temp T)
+		      (limit vector-index+)
+		      (index -vector-index+ -1))
+		     ((elements (the *type* (setf (row-major-aref temp (the vector-index index)) *alt*)) temp index))
+		     ((setq temp seq)
+		      (setq limit (array-total-size seq)))
 		     ((incf index)
-		      (if (>= index limit) (go END))
-		      (setq elements (the *type* (aref seq (the nonnegative-fixnum #+:ignore (mod+ *limit*)
-								index)))))
+		      (locally
+		       (declare (type vector-index+ index))
+		       (if (= index limit) (go END))
+		       (setq elements (the *type* (row-major-aref seq (the vector-index index))))))
 		     ()
 		     ()
 		     :mutable)))
-          ((not (eq type 'sequence))	;some kind of vector
-           (*fragL ((seq)) ((elements T))
-		   ((elements *type*)
-		    (temp T)
-		    (limit nonnegative-fixnum)
-		    (index fixnum -1))
-		   ((elements (the *type* (setf (aref temp (the nonnegative-fixnum index)) *alt*)) temp index))
-		   ((setq temp seq)
-		    (setq limit (length seq)))
-		   ((incf index)
-		    (if (>= index limit) (go END))
-		    (setq elements (the *type* (aref seq (the nonnegative-fixnum index)))))
-		   ()
-		   ()
-		   :mutable))
-          (T (*fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
+          (T
+	   (if (constantp seq)
+	       (if (null seq)
+		   (null-scan *type*)
+		 (cl:let ((thing seq))   
+		   (when (eq-car seq 'quote)
+		     (setq thing (cadr seq)))
+		   (when (and (eq *type* T) (not (listp thing)))
+		     (setq *type* (array-element-type thing)))
+		   (setq limit
+			 (if (listp thing)
+			     (length thing)
+			   (array-total-size thing)))
+		   (if (= limit 0)
+		       (null-scan *type*)
+		     (if (consp thing)
+			 (list-scan *type*)
+		       (progn
+			 (setq *limit* limit)
+			 (limited-scan *type* array-total-size-limit *limit* limit))))))
+	     #-:cltl2-series
+	     (if (lister-p seq)
+		 (list-scan *type*)
+	       (*fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
+		       ((elements *type*)
+			(parent list)
+			(listptr list)
+			(temp array)
+			(limit vector-index+)
+			(index -vector-index -1)
+			(lstp boolean))
+		       ((elements (the *type*
+				    (if lstp
+					(setf (car parent) *alt*)
+				      (setf (row-major-aref temp (the vector-index index)) *alt*)))
+				  parent temp index lstp))
+		       ((if (setq lstp (listp seq))
+			    (setq listptr seq)
+			  (locally
+			   (declare (type array seq))
+			   (setq temp seq)
+			   (setq limit (array-total-size seq)))))
+		       ((if lstp
+			    (progn
+			      (if (endp listptr) (go END))
+			      (setq parent listptr)
+			      (setq elements (the *type* (car listptr)))
+			      (setq listptr (cdr listptr)))
+			  (progn
+			    (incf index)
+			    (locally			  
+			     (declare (type array seq) (type vector-index index))
+			     (if (>= index limit) (go END))
+			     (setq elements (the *type* (row-major-aref seq index)))))))
+		       ()
+		       ()
+		       :mutable))
+	     #+:cltl2-series
+	     (*fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
 		     ((elements *type*)
-		      (temp T)
-		      (limit nonnegative-fixnum)
-		      (index fixnum -1))
-		     ((elements (the *type* (setf (elt temp (the nonnegative-fixnum index)) *alt*)) temp index))
+		      (temp sequence)
+		      (limit nonnegative-integer)
+		      (index (integer -1) -1))
+		     ((elements (the *type* (setf (elt temp (the nonnegative-integer index)) *alt*))
+				temp index))
 		     ((setq temp seq)
 		      (setq limit (length seq)))
 		     ((incf index)
-		      (if (>= index limit) (go END))
-		      (setq elements (the *type* (elt seq (the nonnegative-fixnum index)))))
+		      (locally
+		       (declare (type nonnegative-integer index))
+		       (if (>= index limit) (go END))
+		       (setq elements (the *type* (elt seq index)))))
 		     ()
 		     ()
-		     :mutable)))))
+		     :mutable)
+	     )))))
 
 ;; HELPER
 (cl:defun promote-series (series)
@@ -6869,14 +7227,14 @@ TYPE."
 		   ()
 		   ()
 		   :mutable))
-          ((not (eq type 'sequence))	;some kind of vector
+          ((not (eq type 'sequence))	;some kind of array
            (*fragL ((seq)) ((elements T))
 		   ((elements *type*)
-		    (temp T seq)
-		    (index nonnegative-fixnum 0))
-		   ((elements (the *type* (setf (aref temp index) *alt*)) temp index))
+		    (temp array seq)
+		    (index vector-index+ 0))
+		   ((elements (the *type* (setf (row-major-aref temp (the vector-index index)) *alt*)) temp index))
 		   ()
-		   ((setq elements (the *type* (aref seq index)))
+		   ((setq elements (the *type* (row-major-aref seq (the vector-index index))))
 		    (incf index))
 		   ()
 		   ()
@@ -6884,7 +7242,7 @@ TYPE."
           (T (*fragL ((seq-type) (seq)) ((elements T)) ;dummy type input avoids warn
 		     ((elements *type*)
 		      (temp T seq)
-		      (index nonnegative-fixnum 0))
+		      (index nonnegative-integer 0))
 		     ((elements (the *type* (setf (elt temp index) *alt*)) temp index))
 		     ()
 		     ((setq elements (the *type* (elt seq index)))
@@ -7408,16 +7766,18 @@ SCAN-FILE, except we read from an existing stream."
     "Returns the elements of items from START up to, but not including, BELOW."
   (cond (below-p
          (fragL ((items T -X-) (start) (below)) ((items T))
-		((index fixnum -1))
+		((index (integer -1) -1))
 		()
                 ()
                 (LP -X-
                     (incf index)
-                    (if (not (< index below)) (go END))
-                    (if (< index start) (go LP)))
+		    (locally
+		      (declare (type nonnegative-integer index))
+		      (if (>= index below) (go END))
+		      (if (< index start) (go LP))))
 		() () nil))
         (T (fragL ((items T -X-) (start)) ((items T))
-		  ((index fixnum #+:series-letify (- -1 start)))
+		  ((index integer #+:series-letify (- -1 start)))
 		  ()
                   (#-:series-letify (setq index (- -1 start)))
                   (LP -X-
@@ -7473,6 +7833,25 @@ SCAN-FILE, except we read from an existing stream."
   (if more-items
       `(catenate2 ,items1 (catenate ,items2 ,@ more-items))
     `(catenate2 ,items1 ,items2)))
+
+#|
+(defS collect-union (&rest items)
+  "Collect the union of 0 or more series sets"
+  (cond ((cddr items)
+	 (collect 'set (apply #'catenate items)))
+	(items
+	 (collect 'list items))
+	(t
+	 nil))
+  :optimizer
+    (cond ((cddr items)
+	   `(collect 'set (catenate ,@items)))
+	  (items
+	   (basic-collect-list items))
+	  (t
+	   nil))
+  :trigger T)
+|#
 
 ;;; Splitting
 
