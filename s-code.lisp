@@ -9,12 +9,25 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.96 2004/12/15 17:18:53 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.97 2005/01/26 18:37:34 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.97  2005/01/26 18:37:34  rtoy
+;;;; Fix bug reported by Dirk Gerrits, series-users, 2005-01-16.
+;;;;
+;;;; s-code.lisp:
+;;;; o ALTER was not handling some cases where the frag had multiple
+;;;;   ALTERABLE forms that matched the var.  Adjust ALTER so that all
+;;;;   matching alterable forms are placed in the body.  This only works
+;;;;   for optimized series.  Unoptimized series still has the bug.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add :if-exists :supersede when opening files for output.
+;;;; o Add a test for the ALTER bug reported by Dirk Gerrits.
+;;;;
 ;;;; Revision 1.96  2004/12/15 17:18:53  rtoy
 ;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
 ;;;; support.  His comments:
@@ -7652,7 +7665,43 @@ result of mapping."
 		  (equal (prolog (fr ret)) (makeprolog `((setq ,v ,(var a))))))
 	  (return (find-alter-form (prv a))))))))
 
+;; I'm leaving the above as a reference.  It turns out that in some
+;; cases such as the following:
+;;    (defstruct vec x y z)
+;;    (defun scan-vec (vec)
+;;      (declare (optimizable-series-function))
+;;      (to-alter (make-series (vec-x vec) (vec-y vec) (vec-z vec))
+;; 		#'(lambda (new-value index v)
+;; 		    (ecase index
+;; 		      (0 (setf (vec-x v) new-value))
+;; 		      (1 (setf (vec-y v) new-value))
+;; 		      (2 (setf (vec-z v) new-value))))
+;; 		(scan-range :from 0)
+;; 		(make-series vec vec vec)))
+;;     (let ((vec (make-vec :x 1 :y 2 :z 3)))
+;;       (alter (scan-vec vec) (series 0))
+;;       vec)
+;;
+;; that there are several forms in the alterable slot of the frag.  So
+;; we remove all forms that aren't for the current var and return all
+;; forms so ALTER can drop them into the code.
+;;
+;; I'm not really sure this is all right, but we definitely need the
+;; more than just the first match, as FIND-ALTER-FORM does.
+(cl:defun find-alter-forms (ret)
+  (cl:let* ((v (var ret))
+	    (forms (remove-if-not #'(lambda (item)
+				      (eql v (car item)))
+				  (alterable (fr ret)))))
+    (if forms
+	forms
+	(dolist (a (args (fr ret)))
+	  (when (or (eq v (var a))
+		    (equal (prolog (fr ret)) (makeprolog `((setq ,v ,(var a))))))
+	    (return (find-alter-forms (prv a))))))))
+
 ;; API
+#+nil
 (defS alter (destinations items)
   "Alters the values in DESTINATIONS to be ITEMS."
   (fragl ((destinations) (items t)) ((result))
@@ -7670,6 +7719,8 @@ result of mapping."
     (when (not (series-var-p ret))
       (rrs 5 "~%Alter applied to a series that is not known at compile time:~%"
            *call*))
+    (format t "All alter forms:~%")
+    (write (find-alter-forms ret) :circle t)
     (cl:let ((form (find-alter-form ret))
              (frag (literal-frag '(((old t) (items t)) ((result)) ((result null))
                                    ()
@@ -7682,6 +7733,44 @@ result of mapping."
       (unless form
         (ers 65 "~%Alter applied to an unalterable series:~%" *call*)) 
       (setf (body frag) (list (subst (var (cadr (args frag))) '*alt* form)))
+      (apply-frag frag (list ret items))))
+  :trigger t)
+
+;; The old version above is left for a reference.
+(defS alter (destinations items)
+  "Alters the values in DESTINATIONS to be ITEMS."
+  (fragl ((destinations) (items t)) ((result))
+         ((gen generator (generator destinations))
+          (result null nil))
+	 ()
+         ()
+         ((do-next-in gen #'(lambda () (go end)) items))
+	 ()
+	 ()
+	 nil ; series dataflow constraint takes care
+	 )
+  :optimizer
+  (cl:let ((ret (retify destinations)))
+    (when (not (series-var-p ret))
+      (rrs 5 "~%Alter applied to a series that is not known at compile time:~%"
+           *call*))
+    (cl:let ((all-forms (find-alter-forms ret))
+	     (frag (literal-frag '(((old t) (items t)) ((result)) ((result null))
+				   ()
+				   ((setq result nil))
+				   ()
+				   ()
+				   ()
+				   nil ; series dataflow constraint takes care
+				   ))))
+      (unless all-forms
+	(ers 65 "~%Alter applied to an unalterable series:~%" *call*))
+      ;; Look through all forms that match and do the appropriate
+      ;; thing so that the body has all alterable forms we need.  See
+      ;; comments for FIND-ALTER-FORMS.
+      (setf (body frag) (mapcar #'(lambda (f)
+				    (subst (var (cadr (args frag))) '*alt* (cadr f)))
+				all-forms))
       (apply-frag frag (list ret items))))
   :trigger t)
 

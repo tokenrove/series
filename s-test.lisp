@@ -40,9 +40,22 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.23 2004/12/15 17:18:57 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.24 2005/01/26 18:37:39 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.24  2005/01/26 18:37:39  rtoy
+;;;; Fix bug reported by Dirk Gerrits, series-users, 2005-01-16.
+;;;;
+;;;; s-code.lisp:
+;;;; o ALTER was not handling some cases where the frag had multiple
+;;;;   ALTERABLE forms that matched the var.  Adjust ALTER so that all
+;;;;   matching alterable forms are placed in the body.  This only works
+;;;;   for optimized series.  Unoptimized series still has the bug.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add :if-exists :supersede when opening files for output.
+;;;; o Add a test for the ALTER bug reported by Dirk Gerrits.
+;;;;
 ;;;; Revision 1.23  2004/12/15 17:18:57  rtoy
 ;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
 ;;;; support.  His comments:
@@ -311,7 +324,7 @@
   (if (streamp out)
       (do-entries out)
       (with-open-file 
-	  (stream out :direction :output)
+	  (stream out :direction :output :if-exists :supersede)
 	(do-entries stream))))
 
 (defun do-entries (s)
@@ -2427,7 +2440,7 @@
 (defok 558 (ton (collect 'simple-bit-vector #Z(1 0 1 1))) #*1011)
 
 (defok 559 (td (defun dtest ()
-		 (with-open-file (s "/tmp/foo" :direction :output)
+		 (with-open-file (s "/tmp/foo" :direction :output :if-exists :supersede)
 		   (format s "Hello, world!~%"))
 		 (let* ((foo (scan 'list '(1 2 3)))
 			(max (collect-max foo))
@@ -2439,6 +2452,26 @@
 		   max))
 	       (collect (scan-range :below (dtest))))
   (0 1 2))
+
+;; Test from bug report by Dirk Gerrits, 2005-01-16.
+(defstruct vec x y z)
+(defun scan-vec (vec)
+    (declare (optimizable-series-function))
+    (to-alter (make-series (vec-x vec) (vec-y vec) (vec-z vec))
+              #'(lambda (new-value index v)
+                  (ecase index
+                    (0 (setf (vec-x v) new-value))
+                    (1 (setf (vec-y v) new-value))
+                    (2 (setf (vec-z v) new-value))))
+              (scan-range :from 0)
+	      (make-series vec vec vec)))
+
+;; We should test non-opt too, but that fails.  I don't know how to
+;; fix the non-opt version so that this test passes.
+(defok 560 (to (let ((vec (make-vec :x 1 :y 2 :z 3)))
+		 (alter (scan-vec vec) (series 0))
+		 (list (vec-x vec) (vec-y vec) (vec-z vec))))
+  (0 0 0))
 
 ;;; Some simple consistency tests.  (Some of these were broken by
 ;;; changes in series, so we include them here to prevent these from
