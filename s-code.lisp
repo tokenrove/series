@@ -1,4 +1,4 @@
-;-*- syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
+;-*- Mode: lisp; syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
 
 ;This is the November, 26 1991 version of
 ;Richard C. Waters' Series macro package.
@@ -8,11 +8,22 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.10 1997/01/16 14:38:27 toy Exp $
+;;;; $Id: s-code.lisp,v 1.11 1997/10/02 13:25:18 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.11  1997/10/02 13:25:18  toy
+;;;; Added canonical-type function to extract out the "real" type if
+;;;; something has been deftype'd.  Changed code to support this new
+;;;; function.
+;;;;
+;;;; Do a better job in decode-seq-type.  Needed for CMUCL to complain
+;;;; less.
+;;;;
+;;;; Added scan-stream series function.  Just like scan-file, except that
+;;;; we have a stream instead of a file name.
+;;;;
 ;;;; Revision 1.10  1997/01/16 14:38:27  toy
 ;;;; Took out part of Tim's last change: Removed tests for :defpackage
 ;;;; feature.  Gcl with M. Kantrowitz's defpackage doesn't work and I'm too
@@ -2912,6 +2923,19 @@
 ;it assumes that like maclisp, all that could really matter is whether
 ;something is a fixnum, or float.
 
+;; This function converts a type to a "canonical" type.  Mainly meant
+;; to handle things that have been deftype'd.  We want to convert that
+;; deftype'd thing to the underlying Lisp type.  
+#+cmu
+(cl:defun canonical-type (type)
+  (kernel:type-specifier (c::specifier-type (if (and (not (atom type))
+						     (eq 'quote (first type)))
+						(cdr type)
+						type))))
+#-cmu
+(cl:defun canonical-type (type)
+  type)
+
 ;; toy@rtp.ericsson.se:
 ;; Actually, to be correct, we need to be more careful about how we
 ;; init things because CLtL2 says it's wrong and CMU Lisp complains
@@ -2920,52 +2944,61 @@
 ;; is used in a few places.  I think all cases that occur in the test
 ;; suite are handled here.
 
+
 (cl:defun aux-init (aux)
-  (cond ((subtypep (cadr aux) 'complex)
-	 (cond ((atom (cadr aux))
-		;; Plain old complex
-		(list (car aux) #C(0.0 0.0)))
-	       (t
-		(list (car aux) (complex (coerce 0 (cadadr aux))
-					 (coerce 0 (cadadr aux)))))))
-	((subtypep (cadr aux) 'number)
-	 (list (car aux) (coerce 0 (cadr aux))))
-	((subtypep (cadr aux) 'simple-string)
-	 (cond ((and (consp (cadr aux))
-		     (= 2 (length (cadr aux))))
-		(cl:let ((len (second (cadr aux))))
-		  (list (car aux) (list 'make-string
-					(if (eq len '*) 0 len)))))
-	       (t
-		(list (car aux) ""))))
-	((subtypep (cadr aux) 'simple-array)
-	 (cond ((and (consp (cadr aux))
-		     (= 3 (length (cadr aux))))
-		(cl:let ((len (first (third (second aux)))))
-		  (list (car aux) (list 'make-sequence
-					`',(cadr aux)
-					(if (eq len '*) 0 len)))))
-	       (t
-		(list (car aux) #()))))
-	((subtypep (cadr aux) 'vector)
-	 (cond ((and (consp (cadr aux)))
-		(cond ((= 3 (length (cadr aux)))
-		       (cl:let ((len (third (second aux))))
-			 (list (car aux) (list 'make-sequence
-					       `',(cadr aux)
-					       (if (eq len '*) 0 len)))))
-		      ((= 2 (length (cadr aux)))
-		       (list (car aux) (list 'make-sequence
-					     `',(cadr aux) 0)))))
-	       (t
-		(list (car aux) #()))))
-	((subtypep (cadr aux) 'cons)
-	 (list (car aux) '(cons nil nil)))
-	(T (car aux))))
+  (cl:let ((var-name (car aux))
+	   (var-type (canonical-type (cadr aux))))
+    ;;(format t "var-name, var-type = ~a ~a~%" var-name var-type)
+    (cond ((subtypep var-type 'complex)
+	   (cond ((atom var-type)
+		  ;; Plain old complex
+		  (list var-name #C(0.0 0.0)))
+		 (t
+		  (list var-name (complex (coerce 0 (cadadr aux)))))))
+	  ((subtypep var-type 'number)
+	   (list var-name (coerce 0 var-type)))
+	  ((subtypep var-type 'simple-string)
+	   (cond ((and (consp var-type)
+		       (= 2 (length var-type)))
+		  (cl:let ((len (second var-type)))
+		    (list var-name (list 'make-string
+					 (if (eq len '*) 0 len)))))
+		 (t
+		  (list var-name ""))))
+	  ((subtypep var-type 'simple-array)
+	   (cond ((and (consp var-type)
+		       (= 3 (length var-type)))
+		  (cl:let ((len (first (third var-type))))
+		    (list var-name (list 'make-sequence
+					 `',var-type
+					 (if (eq len '*) 0 len)))))
+		 (t
+		  (list var-name #()))))
+	  ((subtypep var-type 'vector)
+	   (cond ((and (consp var-type))
+		  (cond ((= 3 (length var-type))
+			 (cl:let ((len (third var-type)))
+			   (list var-name (list 'make-sequence
+						`',var-type
+						(if (eq len '*) 0 len)))))
+			((= 2 (length var-type))
+			 (list var-name (list 'make-sequence
+					      `',var-type 0)))))
+		 (t
+		  (list var-name #()))))
+	  ((subtypep var-type 'cons)
+	   (list var-name '(cons nil nil)))
+	  (T var-name))))
 
 (cl:defun clean-dcls (aux)
   (dolist (v aux) (propagate-types (cdr v) aux))
-  (mapcar #'(lambda (v) `(type ,(cadr v) ,(car v)))
+  (mapcar #'(lambda (v)
+	      ;; Sometimes the desired type is quoted.  Remove the
+	      ;; quote.  (Is this right?)
+	      (if (and (listp (cadr v))
+		       (eq 'quote (caadr v)))
+		  `(type ,(cadadr v) ,(car v))
+		  `(type ,(cadr v) ,(car v))))
 	  (remove-if #'(lambda (v) (eq (cadr v) T)) aux)))
 
 (cl:defun propagate-types (expr aux &optional (input-info nil))
@@ -4386,34 +4419,37 @@
 	((and (consp type) (symbolp (car type))
 	      (string= (string (car type)) "BAG"))
 	 (values 'bag nil (cadr type)))
-	((eq type 'list) (values 'list nil T))
-	((eq-car type 'list) (values 'list nil (cadr type)))
-	((eq type 'sequence) (values 'sequence nil T))
-	((eq type 'string) (values 'string nil 'string-char))
-	((eq-car type 'string)
-	 (values 'string (if (numberp (cadr type)) (cadr type)) 'string-char))
-	((eq type 'simple-string) (values 'simple-string nil 'string-char))
-	((eq-car type 'simple-string)
-	 (values 'simple-string (if (numberp (cadr type)) (cadr type))
-		 'string-char))
-	((eq type 'bit-vector) (values 'bit-vector nil 'bit))
-	((eq-car type 'bit-vector)
-	 (values 'bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
-	((eq type 'simple-bit-vector) (values 'simple-bit-vector nil 'bit))
-	((eq-car type 'simple-bit-vector)
-	 (values 'simple-bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
-	((eq type 'vector) (values 'vector nil T))
-	((eq-car type 'vector)
-	 (values 'vector (if (numberp (caddr type)) (caddr type))
-		 (if (not (eq (cadr type) '*)) (cadr type) T)))
-	((eq type 'simple-vector) (values 'simple-vector nil T))
-	((eq-car type 'simple-vector)
-	 (values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
-	((eq-car type 'simple-array)
-	 (values 'simple-array
-		 (if (not (eq (caaddr type) '*)) (caaddr type))
-		 (if (not (eq (cadr type) '*)) (cadr type) T)))
-	(T (values 'sequence nil T))))
+	(t
+	 (setf type #+cmu (kernel:type-specifier (c::specifier-type type))
+	            #-cmu type)
+	 (cond ((eq type 'list) (values 'list nil T))
+	       ((eq-car type 'list) (values 'list nil (cadr type)))
+	       ((eq type 'sequence) (values 'sequence nil T))
+	       ((eq type 'string) (values 'string nil 'string-char))
+	       ((eq-car type 'string)
+		(values 'string (if (numberp (cadr type)) (cadr type)) 'string-char))
+	       ((eq type 'simple-string) (values 'simple-string nil 'string-char))
+	       ((eq-car type 'simple-string)
+		(values 'simple-string (if (numberp (cadr type)) (cadr type))
+			'string-char))
+	       ((eq type 'bit-vector) (values 'bit-vector nil 'bit))
+	       ((eq-car type 'bit-vector)
+		(values 'bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
+	       ((eq type 'simple-bit-vector) (values 'simple-bit-vector nil 'bit))
+	       ((eq-car type 'simple-bit-vector)
+		(values 'simple-bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
+	       ((eq type 'vector) (values 'vector nil T))
+	       ((eq-car type 'vector)
+		(values 'vector (if (numberp (caddr type)) (caddr type))
+			(if (not (eq (cadr type) '*)) (cadr type) T)))
+	       ((eq type 'simple-vector) (values 'simple-vector nil T))
+	       ((eq-car type 'simple-vector)
+		(values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
+	       ((eq-car type 'simple-array)
+		(values 'simple-array
+			(if (not (eq (caaddr type) '*)) (caaddr type))
+			(if (not (eq (cadr type) '*)) (cadr type) T)))
+	       (T (values 'sequence nil T))))))
 
 (defS scan-sublists (lst)
     "Creates a series of the sublists in a list."
@@ -4558,6 +4594,30 @@
 	      (list 'with-open-file
 		    '(,file ,name :direction :input)
 		    code)))) ,reader))))
+
+(defS scan-stream (name &optional (reader #'read))
+    "Creates a series of the forms in the stream NAME."
+  (fragL ((name) (reader)) ((items T)) ((items T) (lst list)) ()
+	 ((setq lst nil)
+	  (cl:let ((done (list nil)))
+	    (loop		 
+		(cl:let ((item (cl:funcall reader name nil done)))
+		  (when (eq item done)
+		    (setq lst (nreverse lst))
+		    (return nil))
+		  (push item lst)))))
+	 ((if (null lst) (go END))
+	  (setq items (car lst))
+	  (setq lst (cdr lst))) () ())
+ :optimizer
+  (funcall-literal-frag
+   `((((reader)) ((items T)) ((items t) (done t)) ()
+      ((setq done (list nil)))
+      ((if (eq (setq items (cl:funcall reader ,name nil done)) done)
+	   (go END))) ()
+      ())
+     ,reader
+     )))
 
 (defS scan-hash (table)
     "Creates two series containing the keys and values in a hash table."
