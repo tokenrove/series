@@ -1,4 +1,4 @@
-                      Series Version 2.2.2 RELEASE NOTES
+                           Series RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -58,18 +58,30 @@
 
                           Many unknown others
 
+Series 2.2.3 Release Notes
+--------------------------
+
+Two small bugs are fixed in this release:
+
+1. collect 'vector sometimes collected the result in reverse order.
+   (See Bug #108331.)
+2. scan fails sometimes when scanning a constant. (See Bug #113625.)
+
+Series 2.2.2 Release Notes
+--------------------------
 
 ***NEW SPECIFICATION RESTRICTIONS***
 ------------------------------------
 
-1. The consequences of using the gatherers introduced by GATHERING outside the dynamic scope of the form are now explicitly stated to be undefined, except for
-   those declared INDEFINITE-EXTENT.
+1. The consequences of using the gatherers introduced by GATHERING
+   outside the dynamic scope of the form are now explicitly stated to
+   be undefined, except for those declared INDEFINITE-EXTENT.
    
-   If you need them to be indefinite extent by default,
-   evaluate (pushnew :cltl2-series) before compilation (or interpreted load)
+   If you need them to be indefinite extent by default, evaluate
+   (pushnew :cltl2-series) before compilation (or interpreted load)
 
-   After loading series :cltl2-series will indicate if backward-compatibility
-   mode is enabled.
+   After loading series :cltl2-series will indicate if
+   backward-compatibility mode is enabled.
 
    Rationale for this change: 
     "Weird code must be the one escaping gatherers so created"
@@ -80,22 +92,25 @@ NEW FEATURES:
 ------------
 
 - GATHER-NEXT
-  A macro with the same effect as the NEXT-OUT function, but with result undefined.
+  A macro with the same effect as the NEXT-OUT function, but with
+  result undefined.
 - GATHER-RESULT
   A macro with the same semantics as the RESULT-OF function,
 - FGATHER-NEXT
-  Like GATHER-NEXT, but the gatherer argument must be a symbol denoting a gatherer bound by FLET.
+  Like GATHER-NEXT, but the gatherer argument must be a symbol
+  denoting a gatherer bound by FLET.
 - FGATHER-RESULT
-  Like GATHER-RESULT, but the gatherer argument must be a symbol denoting a gatherer bound by FLET.
+  Like GATHER-RESULT, but the gatherer argument must be a symbol
+  denoting a gatherer bound by FLET.
 - FGATHERING
-  Like GATHERING, but where the gatherers are bound by FLET instead of LET.
-  Same extent rules as for GATHERING apply. Remember that where you would use
-  (declare (indefinite-extent g)) inside GATHERING, you need to do 
-  (declare (indefinite-extent #'g)) with FGATHERING.
+  Like GATHERING, but where the gatherers are bound by FLET instead of
+  LET.  Same extent rules as for GATHERING apply. Remember that where
+  you would use (declare (indefinite-extent g)) inside GATHERING, you
+  need to do (declare (indefinite-extent #'g)) with FGATHERING.
 - GATHERLET
   The basic construct upon which GATHERING rests. No automatic return
-  of gatherer results. And no extent restrictions, of course. If you want
-  something dynamic-extent, you'll have to declare it.
+  of gatherer results. And no extent restrictions, of course. If you
+  want something dynamic-extent, you'll have to declare it.
 - FGATHERLET
   The `F' version of GATHERLET. Duh.
 - COLLECT-PRODUCT
@@ -103,7 +118,7 @@ NEW FEATURES:
 - INDEFINITE-EXTENT
   Declaration exported.
 - (collect 'set
-  Collects a series into a list removing any duplicates in the most 
+  Collects a series into a list removing any duplicates in the most
   efficient way possible.
 - (collect 'ordered-set
   Collects a series into a list removing any duplicates but keeping the 
@@ -114,17 +129,20 @@ NEW FEATURES:
 
 IMPROVEMENTS:
 ------------
-- MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
+- MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block
+  optimization under LispWorks.
 - Better code generation
   . Stricter typing.
   . OUTPUT IS NOW `LETIFIED'. SETQs GO HOME!!
-    (Replaced as many SETQs as possible by initializations at LET binding time)
+    (Replaced as many SETQs as possible by initializations at LET
+    binding time)
   . Removed global function namespace pollution.
   . Encapsulated series subfunctions.
   . Prevented generation of some dead termination code.
   . Whole expression (t) and :loop wrapper placement
     (:prolog and :epilog support easy to add, if necessary).
-  . Optimized collections of the form (collect [type] (scan [type] ({list | ..}
+  . Optimized collections of the form (collect [type] (scan [type]
+    ({list | ..}
   . Some fixnum declarations were further constrained.
   . Optimized scanning of constant sequences.
   . Somewhat optimized scanning of "empty" vectors, ie,
@@ -134,10 +152,12 @@ IMPROVEMENTS:
     [<gimme-a-huge-array-to-throw-away> is still executed if not constantp, 
      though]
   . Variables of type NULL are replaced by constant NILs.
-  . Avoid indirect funcalling through a variable in CHOOSE-IF and basic-collect-fn whenever possible.
+  . Avoid indirect funcalling through a variable in CHOOSE-IF and
+    basic-collect-fn whenever possible.
   . Avoid consing in MAP-FN.
   . Removes fake series result variables from generated code.
-  . polycall et al. are now tail recursive [If your compiler cannot optimize this, bark to your provider]
+  . polycall et al. are now tail recursive [If your compiler cannot
+    optimize this, bark to your provider]
 
 - Source clean up.
   Local series functions are almost there (FLET extension)
@@ -161,10 +181,14 @@ BUG FIXES:
 - Allegro 5.x needs the GENERATOR deftype, too.
 - Workaround for ACL 5.0.1 TAGBODY bug.
 - ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.
-- Some initial (unread) bindings of variables could be NIL, contradicting
-  declarations. Uses LOCALLY now for those (and also for all others for which
-NIL is OK, but which can be left unbound, if an implementation provides another version of LET that does not do NIL defaulting (and ideally would raise a compilation error if a variable is read before its written to)).
-- Full letification works (modulo off-lining, and disabled because still useless).
+- Some initial (unread) bindings of variables could be NIL,
+  contradicting declarations. Uses LOCALLY now for those (and also for
+  all others for which NIL is OK, but which can be left unbound, if an
+  implementation provides another version of LET that does not do NIL
+  defaulting (and ideally would raise a compilation error if a
+  variable is read before its written to)).
+- Full letification works (modulo off-lining, and disabled because
+  still useless).
 - Fixed letified merge-frags bug.
 - Adapted handle-dflow and non-series-merge for letification.
 - Some incorrect fixnum declarations were relaxed.
