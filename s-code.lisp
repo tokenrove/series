@@ -9,12 +9,19 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.91 2002/12/10 19:36:32 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.92 2002/12/11 04:03:26 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.92  2002/12/11 04:03:26  rtoy
+;;;; o Update /allowed-generic-opts/ to include SYSTEM::READ-ONLY for CLISP
+;;;;   2.29.
+;;;; o Modify COMPUTE-SERIES-MACFORM-1 and COMPUTE-SERIES-MACFORM-2 so that
+;;;;   CMUCL doesn't try to dump functions directly to a FASL file.  Fixes
+;;;;   bug 498418: cmucl doesn't like dumping functions.
+;;;;
 ;;;; Revision 1.91  2002/12/10 19:36:32  rtoy
 ;;;; Previous patch failed some tests.  Let's try this
 ;;;; again. PROMOTE-SERIES returns an extra arg telling us what it did.  We
@@ -3804,9 +3811,10 @@
 
 ;; Macroexpansion may result in unexpected arcana we should let through.
 (defconstant /allowed-generic-opts/ 
-    (cons 'optimize 
+    (list 'optimize 
           #+:lispworks '(CLOS::VARIABLE-REBINDING)
-          #-:lispworks nil))
+	  #+:clisp 'system::read-only
+          ))
 
 ;; This takes a list of forms that may have documentation and/or
 ;; declarations in the initial forms.  It parses the declarations and
@@ -5949,7 +5957,7 @@
 					   local-p disc-expr opt-expr)
     (compute-series-macform-2 name arglist nil body-code trigger
 			      local-p disc-expr opt-expr
-      `(list* 'cl:funcall #',body-fn stuff)))
+      `(list* 'cl:funcall ',body-fn stuff)))
 
   ;; It's a macro and body can refer to it
   (cl:defun compute-series-macform (name arglist doc dcl body-code body-fn trigger
@@ -5959,9 +5967,9 @@
       `(macrolet (,(compute-series-macform-1
 		    name arglist body-code body-fn trigger
 		    local-p disc-expr opt-expr))
-	 (cl:flet (,(compute-series-funform
+	 `(cl:flet (,',(compute-series-funform
 		       body-fn arglist doc dcl body-code nil))
-	    (list* 'cl:funcall #',body-fn stuff)))))
+	    (,',body-fn ,@stuff)))))
 
   ;;The body runs when optimization is not happening.
   ;;The optimizer runs when optimization is happening.
