@@ -6,12 +6,17 @@
 ;;;; a long time ago, you might consider copying them from the above
 ;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.46 2000/02/10 17:15:11 toy Exp $
+;;;; $Id: s-code.lisp,v 1.47 2000/02/11 14:45:42 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.47  2000/02/11 14:45:42  toy
+;;;; Let's not use fix-types for CMU in optimize-producing.  This means the
+;;;; compiler can't optimize things as well as it could, and I (RLT) want
+;;;; to see these warnings.
+;;;;
 ;;;; Revision 1.46  2000/02/10 17:15:11  toy
 ;;;; Fix a typo that got in the last few patches:  LET should really be
 ;;;; CL:LET.  (From Fernando.)
@@ -4794,7 +4799,8 @@ TYPE."
   (cl:let ((series-ins (validate-producing output-list input-list body)))
     (cl:multiple-value-bind (bod type-alist propagations)
         (decode-dcls body '(types props))
-      #+:cmu
+      ;;#+:cmu
+      #+nil
       (flet ((fix-types (var)
                (cons (car var) (type-or-null (cdr var)))))
         (setq type-alist (mapcar #'fix-types type-alist)))
