@@ -8,12 +8,19 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.48 2000/02/22 15:21:38 toy Exp $
+;;;; $Id: s-code.lisp,v 1.49 2000/02/22 22:25:51 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.49  2000/02/22 22:25:51  toy
+;;;; o One of Fernando's uses of dynamic-extent was wrong, as Fernando
+;;;;   points out.
+;;;;
+;;;; o CLISP apparently has a bug in loop such that split-assignment is
+;;;;   broken.  Replace that with an equivalent do loop.
+;;;;
 ;;;; Revision 1.48  2000/02/22 15:21:38  toy
 ;;;; Fernando added dynamic-extent declarations wherever needed.
 ;;;;
@@ -461,12 +468,26 @@
         ((not (consp tt)) (member tt items))
       (if (contains-any items (car tt)) (return T))))
 
+  ;; Split the assignments into the vars, the last assignment, and the
+  ;; values the vars should be bound to.
+  #+nil ; CLISP has bug in loop (?) and doesn't like this.
   (cl:defun split-assignment (args)
     (loop for d in args by #'cddr as b on args by #'cddr
       collect d into vars
       when (not (null (cdr b)))
       collect (cadr b) into binds
       finally (return (values vars b binds))))
+  (cl:defun split-assignment (args)
+    (cl:let ((vars '())
+	  (binds '()))
+      (do ((var-list args (cddr var-list))
+	   (bind-list (rest args) (cddr bind-list)))
+	  ((endp bind-list)
+	   (values (nreverse vars)
+		   (last args 2)
+		   (nreverse binds)))
+	(push (first var-list) vars)
+	(push (first bind-list) binds))))
 
   ;; FDMM: SETQ can make parallel assignments.
   ;; But SERIES does not take that into account yet.
@@ -4479,7 +4500,6 @@ TYPE."
       (flet ((new-init () (forceL n (multiple-value-list (cl:funcall init))))
              (new-step (state) (forceL n (multiple-value-list (apply step state))))
              (new-test (state) (apply test state)))
-	(declare (dynamic-extent #'new-init #'new-step #'new-test))
         (cl:funcall fn T #'new-init #'new-step #'new-test)))))
 
 ;; needed because collect is a macro
