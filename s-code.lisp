@@ -8,14 +8,21 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.62 2000/03/08 12:36:31 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.63 2000/03/08 18:27:35 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
-;;;; Revision 1.62  2000/03/08 12:36:31  matomira
-;;;; Continued work on letification.
+;;;; Revision 1.63  2000/03/08 18:27:35  matomira
+;;;; Fixed Missing CL: before FUNCALL bug in DESTARRIFY.
+;;;; Fixed fragL instead of *fragL bug in COLLECT.
+;;;;
+;;;; Revision 1.64  2000/03/08 18:20:35  matomira
+;;;; Fixed fragL instead of *fragL bug in COLLECT.
+;;;;
+;;;; Revision 1.63  2000/03/08 17:58:24  matomira
+;;;; Fixed mixed CL: before FUNCALL in DESTARRIFY.
 ;;;;
 ;;;; Revision 1.62  2000/03/08 12:30:53  matomira
 ;;;; Continued work on letification.
@@ -637,8 +644,8 @@
 	      (when-bind (b (car binds))
 	        (cl:let ((d (cdr binds)))
 		  (if d
-		      (list base (funcall wrapper b) (destarrify-1 d))
-		    (list* base (funcall wrapper b) forms))))))
+		      (list base (cl:funcall wrapper b) (destarrify-1 d))
+		    (list* base (cl:funcall wrapper b) forms))))))
     (declare (dynamic-extent #'destarrify-1))
     (if binds
 	(destarrify-1 binds)
@@ -4402,7 +4409,7 @@
 	   (setq *type* (if (consp (cadr seq-type))
 			    (cadr seq-type)
 			  seq-type))
-	   (fragL
+	   (*fragL
 	       ((seq-type) (items T) (limit)) ((seq))
 	       ((seq *type*)
 		(index fixnum 0))
