@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.13 1998/05/21 15:18:27 toy Exp $
+;;;; $Id: s-code.lisp,v 1.14 1998/05/24 19:19:22 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.14  1998/05/24 19:19:22  toy
+;;;; Fixes from Reginald S. Perry were incompletely applied:  Forgot to
+;;;; import compiler-let and messed up a fix for uninterning SERIES for
+;;;; Harlequin.
+;;;;
 ;;;; Revision 1.13  1998/05/21 15:18:27  toy
 ;;;; Added a few fixes from "Reginald S. Perry" <reggie@aa.net> to make
 ;;;; this work with LWW.
@@ -188,6 +193,8 @@
     )
   (:shadow
    "LET" "LET*" "MULTIPLE-VALUE-BIND" "FUNCALL" "DEFUN" #+cmu "COLLECT" #+cmu "ITERATE")
+  #+Harlequin-Common-Lisp
+  (:import-from "LISPWORKS" "COMPILER-LET")
   #+Genera
   (:import-from "LISP" "COMPILER-LET")
   #+Allegro
@@ -274,8 +281,9 @@
       (cl:let ((ext (find-package "EXTENSIONS")))
 	;; CMU Lisp has COLLECT and ITERATE in the EXTENSIONS package.
 	;; Make them go away.
-	(unintern 'collect ext)
-	(unintern 'iterate ext)
+	(and ext
+	     (unintern 'collect ext)
+	     (unintern 'iterate ext))
 	(unintern 'series "COMMON-LISP-USER"))
       
       (use-package "SERIES" pkg)
