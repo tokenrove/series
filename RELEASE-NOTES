@@ -60,8 +60,8 @@
 ***NEW SPECIFICATION RESTRICTIONS***
 ------------------------------------
 
-1. The gatherers introduced by GATHERING have DYNAMIC extent, unless
-   explicitly declared INDEFINITE-EXTENT.
+1. The consequences of using the gatherers introduced by GATHERING outside the dynamic scope of the form are now explicitly stated to be undefined, except for
+   those declared INDEFINITE-EXTENT.
    
    If you need them to be indefinite extent by default,
    evaluate (pushnew :cltl2-series) before compilation (or interpreted load)
@@ -92,7 +92,7 @@ NEW FEATURES:
   (declare (indefinite-extent #'g)) with FGATHERING.
 - GATHERLET
   The basic construct upon which GATHERING rests. No automatic return
-  of gatherer results. And no extent assumptions, of course. If you want
+  of gatherer results. And no extent restrictions, of course. If you want
   something dynamic-extent, you'll have to declare it.
 - FGATHERLET
   The `F' version of GATHERLET. Duh.

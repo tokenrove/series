@@ -8,12 +8,18 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.61 2000/03/07 13:47:23 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.62 2000/03/08 12:36:31 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.62  2000/03/08 12:36:31  matomira
+;;;; Continued work on letification.
+;;;;
+;;;; Revision 1.62  2000/03/08 12:30:53  matomira
+;;;; Continued work on letification.
+;;;;
 ;;;; Revision 1.61  2000/03/07 13:47:23  matomira
 ;;;; Removed gratuitous sorting in CODIFY.
 ;;;;
@@ -625,14 +631,14 @@
 	     `((declare ,@notindecls))))
 	body))))
 
-(cl:defun destarrify (base binds &rest forms)
+(cl:defun destarrify (base binds forms &optional (wrapper #'list))
   "Covert a BASE* form into a nested set of BASE forms"
   (cl:labels ((destarrify-1 (binds)	  
 	      (when-bind (b (car binds))
 	        (cl:let ((d (cdr binds)))
 		  (if d
-		      (list base (list b) (destarrify-1 d))
-		    (list* base (list b) forms))))))
+		      (list base (funcall wrapper b) (destarrify-1 d))
+		    (list* base (funcall wrapper b) forms))))))
     (declare (dynamic-extent #'destarrify-1))
     (if binds
 	(destarrify-1 binds)
@@ -807,6 +813,52 @@
 
 (defvar *standard-function-reader* (get-dispatch-macro-character #\# #\'))
 
+;;;;                         ---- ERROR REPORTING ----
+
+;; HELPER
+(cl:defun report-error (info)
+  (setq *last-series-error* info)
+  (loop (when (null info)
+	  (return nil))
+        (if (stringp (car info))
+            (format *error-output* (pop info))
+	  (write (pop info) :stream *error-output* :escape T :pretty T
+		 :level nil :length nil :case :upcase))))
+
+(cl:defun ers (id &rest args)  ;Fatal errors.
+  (declare (dynamic-extent args))	  
+  (when *testing-errors*
+    (throw :testing-errors id))
+  (if *in-series-expr*
+      (report-error (list* "~&Error " id " in series expression:~%"
+			   *in-series-expr* (copy-list args)))
+    (report-error (list* "~&Error " id (copy-list args))))
+  (error ""))
+
+(cl:defun wrs (id always-report-p &rest args) ;Warnings.
+  (declare (dynamic-extent args))	  
+  (when (or always-report-p (not *suppress-series-warnings*))
+    (report-error (list* "~&Warning " id
+                         " in series expression:~%"
+                         (or *in-series-expr*
+                             (and (boundp '*not-straight-line-code*)
+                                  *not-straight-line-code*))
+                         (copy-list args)))
+    (when (not *testing-errors*)
+      (warn ""))))
+
+;; HELPER
+(cl:defun rrs (id &rest args) ;Restriction violations.
+  (declare (dynamic-extent args))	  
+  (when (not *suppress-series-warnings*)
+    (report-error (list* "~&Restriction violation " id
+                         " in series expression:~%"
+                         (or *in-series-expr* *not-straight-line-code*)
+                         (copy-list args)))
+    (when (not *testing-errors*)
+      (warn "")))
+  (throw :series-restriction-violation nil))
+
 ;;;;             ---- UTILITIES FOR MANIPULATING FRAGMENTS ----
 
 (defvar end 'END "used to force copying of frag lists")
@@ -834,39 +886,98 @@
 
 ;;; Local variable handling
 
-(defmacro doaux ((v auxs) &body body)
-  `(dolist (,v ,auxs)
-     ,@body))
+;;(eval-when (compile load) (pushnew :series-letify *features*))
 
-(declaim (inline makeaux))
-(cl:defun makeaux (auxlist)
-  auxlist)	  
+#-:series-letify
+(progn
+  (defmacro doaux ((v auxs) &body body)
+    `(dolist (,v ,auxs)
+       ,@body))
 
-(declaim (inline mapaux))
-(cl:defun mapaux (fun auxs)
-  (mapcar fun auxs))
+  (declaim (inline makeaux))
+  (cl:defun makeaux (auxlist)
+    auxlist)	  
+
+  (declaim (inline flatten-aux))
+  (cl:defun flatten-aux (auxs)
+    auxs)
+
+  (declaim (inline mapaux))
+  (cl:defun mapaux (fun auxs)
+    (mapcar fun auxs))
+
+  (declaim (inline first-aux-block))
+  (cl:defun first-aux-block (auxs)
+    auxs)
+
+  (declaim (inline find-aux))
+  (cl:defun find-aux (var auxs)
+    (assoc var auxs))
+
+  (declaim (inline delete-aux))
+  (cl:defun delete-aux (var auxs)
+    (delete var auxs :key #'car))
+
+  (declaim (inline remove-aux-if))
+  (cl:defun remove-aux-if (p auxs)
+    (remove-if p auxs))
+
+  (cl:defun add-aux (frag var typ &optional (val nil val-p))
+    (push (if val-p
+	      `(,var ,typ ,val)
+	    `(,var ,typ))
+	  (aux frag)))
+  )
+
+#+:series-letify
+(progn
+  (defmacro doaux ((v auxs) &body body)
+    (cl:let ((b (gensym)))
+      `(dolist (,b ,auxs)
+	 (dolist (,v ,b)
+	   ,@body))))
+
+  (declaim (inline makeaux))
+  (cl:defun makeaux (auxlist)
+    (list auxlist))	  
+
+  (declaim (inline flatten-aux))
+  (cl:defun flatten-aux (auxs)
+    (apply #'append auxs))
+
+  (declaim (inline mapaux))
+  (cl:defun mapaux (fun auxs)	  
+    (mapcan #'(lambda (b) (mapcar fun b)) auxs))
+
+  (declaim (inline first-aux-block))
+  (cl:defun first-aux-block (auxs)
+    (car auxs))
+
+  (cl:defun add-aux (frag var typ &optional (val nil val-p))
+    (push (if val-p
+	      `(,var ,typ ,val)
+	    `(,var ,typ))
+	  (car (aux frag))))
+
+  (declaim (inline find-aux))
+  (cl:defun find-aux (var auxs)
+    (dolist (b auxs)
+      (when-bind (a (assoc var b))
+        (return a))))	       
+
+  (declaim (inline delete-aux))
+  (cl:defun delete-aux (var auxs)
+    (mapcan #'(lambda (b) (delete var b :key #'car)) auxs))
+
+  (declaim (inline remove-aux-if))
+  (cl:defun remove-aux-if (p auxs)
+    (mapcar #'(lambda (b) (remove-if p b)) auxs))	  
+
+  )
 
 (declaim (inline first-aux))
 (cl:defun first-aux (auxs)
-  (car auxs))
-
-(declaim (inline find-aux))
-(cl:defun find-aux (var auxs)
-  (assoc var auxs))
-
-(declaim (inline delete-aux))
-(cl:defun delete-aux (var auxs)
-  (delete var auxs :key #'car))
-
-(declaim (inline remove-aux-if))
-(cl:defun remove-aux-if (p auxs)
-  (remove-if p auxs))
-
-(cl:defun add-aux (frag var typ &optional (val nil val-p))
-  (push (if val-p
-	    `(,var ,typ ,val)
-	  `(,var ,typ))
-	(aux frag)))
+  (car (first-aux-block auxs)))
 
 (declaim (inline add-literal-aux))
 (cl:defun add-literal-aux (frag var typ val)
@@ -874,7 +985,7 @@
 
 (cl:defun add-nonliteral-aux (frag var typ val)
   (add-aux frag var typ)	  
-  (push `(setq ,var ,val) (prolog frag)))	  
+  (push `(setq ,var ,val) (prolog frag)))
 
 ;;; There cannot be any redundancy in or between the args and aux.
 ;;; Each ret variable must be either on the args list or the aux list.
@@ -1145,6 +1256,7 @@
   (setq frag (copy-list frag))
   (setf (rets frag) (copy-tree (mapcar #'cddr (rets frag))))
   (setf (args frag) (copy-tree (mapcar #'cddr (args frag))))
+  #+:series-letify (setf (aux frag) (flatten-aux (aux frag)))
   (cl:let ((gensyms (find-gensyms frag)))
     (sublis (mapcar #'(lambda (v) (cons v (new-var (root v)))) gensyms)
       (cons gensyms (iterative-copy-tree (cddddr frag))))))
@@ -1170,6 +1282,7 @@
                            (nsublis alist (iterative-copy-tree list)))))
     (setf (args frag) (mapcar #'(lambda (s) (list->sym s frag)) (args frag)))
     (setf (rets frag) (mapcar #'(lambda (s) (list->sym s frag)) (rets frag)))
+    #+:series-letify (setf (aux frag) (makeaux (aux frag)))
     (values frag alist)))
 
 ;; Special form for defining series functions directly in the internal
@@ -1290,30 +1403,6 @@
 (defvar *expr-template* (make-template (Q) (E)))
 
 (defvar *eval-all-template* (make-template () (E)))
-
-;;; Error reporting
-
-;; HELPER
-(cl:defun report-error (info)
-  (setq *last-series-error* info)
-  (loop (when (null info)
-	  (return nil))
-        (if (stringp (car info))
-            (format *error-output* (pop info))
-	  (write (pop info) :stream *error-output* :escape T :pretty T
-		 :level nil :length nil :case :upcase))))
-
-;; HELPER
-(cl:defun rrs (id &rest args) ;Restriction violations.
-  (declare (dynamic-extent args))	  
-  (when (not *suppress-series-warnings*)
-    (report-error (list* "~&Restriction violation " id
-                         " in series expression:~%"
-                         (or *in-series-expr* *not-straight-line-code*)
-                         (copy-list args)))
-    (when (not *testing-errors*)
-      (warn "")))
-  (throw :series-restriction-violation nil))
 
 ;; Sample LispWorks' MACROLET walking
 ;;
@@ -1904,27 +1993,6 @@
 	 (values ,res t)
        (values ,non-opt nil)))))
 
-(cl:defun ers (id &rest args)  ;Fatal errors.
-  (declare (dynamic-extent args))	  
-  (when *testing-errors*
-    (throw :testing-errors id))
-  (if *in-series-expr*
-      (report-error (list* "~&Error " id " in series expression:~%"
-			   *in-series-expr* (copy-list args)))
-    (report-error (list* "~&Error " id (copy-list args))))
-  (error ""))
-
-(cl:defun wrs (id always-report-p &rest args) ;Warnings.
-  (declare (dynamic-extent args))	  
-  (when (or always-report-p (not *suppress-series-warnings*))
-    (report-error (list* "~&Warning " id
-                         " in series expression:~%"
-                         (or *in-series-expr*
-                             (and (boundp '*not-straight-line-code*)
-                                  *not-straight-line-code*))
-                         (copy-list args)))
-    (when (not *testing-errors*)
-      (warn ""))))
 
 
 ; Type handling
@@ -3679,7 +3747,9 @@
       (cl:let ((dcls (clean-dcls aux)))
         (when dcls
 	  (push `(declare ,@ dcls) code))))
-    `(cl:let ,(mapaux #'aux-init aux) ,@ code))
+    #-:series-letify (list* 'cl:let (mapaux #'aux-init aux) code)
+    #+:series-letify (destarrify 'cl:let (mapcar #'(lambda (b) (mapcar #'aux-init b)) aux) code #'identity)
+    )
 
 (cl:defun aux-ordering (a b)
   (when (consp a) (setq a (car a)))
@@ -4232,7 +4302,7 @@
 
     ;; DO NOT USE YET
     (defmacro slet* (defs &body forms)
-      (apply #'destarrify 'slet1 defs forms))
+      (destarrify 'slet1 defs forms))
     
 ) ;end of eval-when for defS
 
