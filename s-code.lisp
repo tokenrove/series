@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.9 1997/01/16 14:26:44 toy Exp $
+;;;; $Id: s-code.lisp,v 1.10 1997/01/16 14:38:27 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.10  1997/01/16 14:38:27  toy
+;;;; Took out part of Tim's last change: Removed tests for :defpackage
+;;;; feature.  Gcl with M. Kantrowitz's defpackage doesn't work and I'm too
+;;;; lazy to figure out why.
+;;;;
 ;;;; Revision 1.9  1997/01/16 14:26:44  toy
 ;;;; Some more patches from Tim (tfb@aiai.ed.ac.uk):  Conditionalize on
 ;;;; :defpackage too for package stuff.
@@ -118,6 +123,11 @@
 ;;; if you don't have this you need to make the LISP package have CL
 ;;; as a nickname somehow, in any case.
 ;;;
+#+gcl
+(eval-when (compile load eval)
+  (unless (find-package "CL")
+    (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
+
 ;;; Note this is really too early, but we need it here
 #+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera)
 (cl:eval-when (load eval compile)
@@ -125,7 +135,7 @@
 
 (provide "SERIES")
 
-#+(or Series-ANSI defpackage)
+#+(or Series-ANSI)
 (defpackage "SERIES"
     (:use "CL")
   (:export 
@@ -166,18 +176,10 @@
   (:import-from "CLTL1" "COMPILER-LET")
 )
 
-;;; Some Lisps don't have the CL (COMMON-LISP) package.  However, they
-;;; do have the LISP package which would work here.  Rename LISP to CL
-;;; with LISP as a nickname for these Lisps.
-#+(or gcl)
-(eval-when (compile load eval)
-  (rename-package "LISP" "COMMON-LISP" '("LISP" "CL")))
-
-
-#+(or Series-ANSI defpackage)
+#+(or Series-ANSI)
 (in-package "SERIES")
 
-#-(or Series-ANSI defpackage)
+#-(or Series-ANSI)
 (progn
   (in-package "SERIES" :use '("LISP"))
   (shadow '(let let* multiple-value-bind funcall defun)))
@@ -185,7 +187,7 @@
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
-#-(or Series-ANSI defpackage)
+#-(or Series-ANSI)
 (export ;74 total concepts in the interface
   '(;(2) readmacros (#M and #Z)
 
