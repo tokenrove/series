@@ -8,12 +8,18 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.50 2000/02/22 23:37:22 toy Exp $
+;;;; $Id: s-code.lisp,v 1.51 2000/02/23 15:27:02 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.51  2000/02/23 15:27:02  toy
+;;;; o Fernando added an indefinite-extent declaration and uses
+;;;;   it in the one place where it's needed.
+;;;; o Fernando renamed split-assignment to detangle2 and
+;;;;   corrected some bugs in my version.
+;;;;
 ;;;; Revision 1.50  2000/02/22 23:37:22  toy
 ;;;; Remove the cmu version from scan-range.  It was generating bad
 ;;;; initialization code for things like (scan-range :length 10 :type
@@ -400,6 +406,8 @@
 (defconstant *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
+(declaim (declaration indefinite-extent))
+
 (declaim (declaration optimizable-series-function off-line-port
                       ;; Genera barfs at this (correctly I think)
                       #-(or Genera lispworks4) series
@@ -473,26 +481,35 @@
         ((not (consp tt)) (member tt items))
       (if (contains-any items (car tt)) (return T))))
 
-  ;; Split the assignments into the vars, the last assignment, and the
-  ;; values the vars should be bound to.
+  ;; Detangle a list into the odd positions, what is left from the
+  ;; last odd position on, and the even positions [the first position
+  ;; is 1].  (The list actually looks like a property list.  We return
+  ;; a list of the properties, a list of the last property/value pair,
+  ;; and a list of values of the properties.
   #+nil ; CLISP has bug in loop (?) and doesn't like this.
-  (cl:defun split-assignment (args)
+  (cl:defun detangle2 (args)
     (loop for d in args by #'cddr as b on args by #'cddr
       collect d into vars
       when (not (null (cdr b)))
       collect (cadr b) into binds
       finally (return (values vars b binds))))
-  (cl:defun split-assignment (args)
+
+  (cl:defun detangle2 (args)
     (cl:let ((vars '())
-	  (binds '()))
-      (do ((var-list args (cddr var-list))
-	   (bind-list (rest args) (cddr bind-list)))
-	  ((endp bind-list)
-	   (values (nreverse vars)
-		   (last args 2)
-		   (nreverse binds)))
-	(push (first var-list) vars)
-	(push (first bind-list) binds))))
+	     (binds '())
+	     (lastbind '())
+	     (more (cdr args)))
+      (if (null more)
+	  (values args args nil)
+        (do* ((var-list args (cddr var-list))
+	      (bind-list more (cdr var-list)))
+          ((endp bind-list)
+           (values (nreverse vars)
+                   (if (endp var-list) lastbind (cddr lastbind))
+                   (nreverse binds)))
+	(setq lastbind var-list)
+        (push (first var-list) vars)
+        (push (first bind-list) binds)))))
 
   ;; FDMM: SETQ can make parallel assignments.
   ;; But SERIES does not take that into account yet.
@@ -500,7 +517,7 @@
     #+:ignore	  
     (when (eq-car thing 'setq)
       (when-bind (args (cdr thing))
-	(cl:multiple-value-bind (vars lastbind binds) (split-assignment args)
+	(cl:multiple-value-bind (vars lastbind binds) (detangle2 args)
 	  (when (and (not (null (cdr lastbind)))
 		     (every #'symbolp vars))
 	    (values vars binds)))))
@@ -4505,6 +4522,7 @@ TYPE."
       (flet ((new-init () (forceL n (multiple-value-list (cl:funcall init))))
              (new-step (state) (forceL n (multiple-value-list (apply step state))))
              (new-test (state) (apply test state)))
+	(declare (indefinite-extent #'new-init #'new-step #'new-test))
         (cl:funcall fn T #'new-init #'new-step #'new-test)))))
 
 ;; needed because collect is a macro
@@ -4808,7 +4826,7 @@ TYPE."
 		     from)))))
 	(declare (dynamic-extent #'xform-assignment))
 	(cond ((and (consp f) (case (car f) ((setq) t))) ; SETF removed for now
-	       (cl:multiple-value-bind (vars lastbind binds) (split-assignment (cdr f))
+	       (cl:multiple-value-bind (vars lastbind binds) (detangle2 (cdr f))
 		 (unless (cdr lastbind)
 		   (ers 50 "~%Missing value in assignment: " f))
 		 ;; SETF still not supported - Need to make caller SETF-aware
@@ -4819,7 +4837,7 @@ TYPE."
 	      ;; Need to first make caller PSETF-aware probably
 	      #+:ignore 
 	      ((and (consp f) (case (car f) ((psetq psetf) t)))
-	       (cl:multiple-value-bind (vars lastbind binds) (split-assignment (cdr f))
+	       (cl:multiple-value-bind (vars lastbind binds) (detangle2 (cdr f))
 		 (unless (cdr lastbind)
 		   (ers 50 "~%Missing value in assignment: " f))
 		 (push (cons 'psetf (mapcan #'xform-assignment vars binds))
