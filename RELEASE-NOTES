@@ -69,13 +69,10 @@ o Fix bugs:
 o A bug in scan-fn-opt causing unbound variables in some situations
   has been fixed.  (From Joe Marshall.)
 o The original (ASCII) documentation for series is now included in
-  s-doc.txt.
-
-o ISSUES:
-  o Currently Clisp 2.29 (and perhaps later) expands extended loop
-    into forms containing macrolet.  This doesn't work with series
-    because we don't have a macroexpand walker for Clisp.  Until this
-    is fixed, you will not be able to use extended loop with series.
+  s-doc.txt.  
+o Added a code walker for walking macrolet forms for
+  Clisp.  Useful since Clisp macroexpands extended loop forms into
+  forms containing macrolet.
 
 Series 2.2.6 Release Notes
 --------------------------
