@@ -58,6 +58,15 @@
 
                           Many unknown others
 
+Series 2.2.4 Release Notes
+--------------------------
+
+o Fixed a bug wherein Clisp fails on test 530.  (Some variables were
+  sharing structure?)  Clisp passes all tests now.
+
+o Made changes to support MCL.  MCL now passes all tests.  (Thanks to
+  Rainer Joswig for testing and debugging this version!)
+
 Series 2.2.3 Release Notes
 --------------------------
 
