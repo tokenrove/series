@@ -1,4 +1,4 @@
-;-*- syntax:COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
+;-*- syntax:ANSI-COMMON-LISP; Package: (SERIES :use "COMMON-LISP" :colon-mode :external) -*-
 
 ;This is the November, 26 1991 version of
 ;Richard C. Waters' Series macro package.
@@ -8,11 +8,15 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.7 1997/01/16 14:20:23 toy Exp $
+;;;; $Id: s-code.lisp,v 1.8 1997/01/16 14:23:59 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.8  1997/01/16 14:23:59  toy
+;;;; Put in changes from Tim (tfb@aiai.ed.ac.uk) to conditionalize on
+;;;; Series-ANSI.
+;;;;
 ;;;; Revision 1.7  1997/01/16 14:20:23  toy
 ;;;; GCL normally doesn't have defpackage, so don't use defpackage form.
 ;;;; It also doesn't have a "CL" package, so rename "LISP" to
@@ -102,11 +106,24 @@
 
 ;The companion file "SDOC.TXT" contains brief documentation.
 
+
+;;; Add a feature to say if we are a Lisp that can hack ansi-cl style
+;;; stuff, as far as series goes anyway.  This implies:
+;;;	ansi style packages (DEFPACKAGE, CL not LISP as main package)
+;;;
+;;; if you don't have this you need to make the LISP package have CL
+;;; as a nickname somehow, in any case.
+;;;
+;;; Note this is really too early, but we need it here
+#+(or allegro CMU Genera)
+(cl:eval-when (load eval compile)
+  (cl:pushnew ':SERIES-ANSI cl:*features*))
+
 (provide "SERIES")
 
 #-gcl
 (defpackage "SERIES"
-    (:use "LISP")
+    (:use "CL")
   (:export 
    ;;(2) readmacros (#M and #Z)
 
@@ -152,18 +169,19 @@
 (eval-when (compile load eval)
   (rename-package "LISP" "COMMON-LISP" '("LISP" "CL")))
 
-#+cmu
+
+#+Series-ANSI
 (in-package "SERIES")
 
-#-cmu
-(in-package "SERIES" :use '("LISP"))
-#-cmu
-(shadow '(let let* multiple-value-bind funcall defun))
+#-Series-ANSI
+(progn
+  (in-package "SERIES" :use '("LISP"))
+  (shadow '(let let* multiple-value-bind funcall defun)))
 
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
-#-cmu
+#-Series-ANSI
 (export ;74 total concepts in the interface
   '(;(2) readmacros (#M and #Z)
 
@@ -194,7 +212,9 @@
     *suppress-series-warnings*))
 
 (proclaim '(declaration optimizable-series-function off-line-port
-			series propagate-alterability))
+			;; Genera barfs at this (correctly I think)
+			#-Genera series
+			propagate-alterability))
 
 (defvar *suppress-series-warnings* nil
   "Suppress warnings when the restrictions are violated.")
@@ -884,8 +904,8 @@
    e.g., they have the same template as expr-template.")
 
 (cl:defun not-expr-like-special-form-p (sym)
-  (and #-ansi-cl(special-form-p sym)
-       #+ansi-cl(special-operator-p sym)
+  (and #-Series-ANSI(special-form-p sym)
+       #+Series-ANSI(special-operator-p sym)
        (not (member sym *expr-like-special-forms*))))
 #+symbolics
 (eval-when (eval load)
