@@ -8,9 +8,12 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.9 2001/12/23 16:54:44 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.10 2001/12/23 17:11:17 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.10  2001/12/23 17:11:17  rtoy
+;;;; COMPILER-LET is in the EXT package in Clisp now.
+;;;;
 ;;;; Revision 1.9  2001/12/23 16:54:44  rtoy
 ;;;; Make series support Allegro "modern" lisp with its case-sensitive
 ;;;; reader.  Mostly just making every that needs to be lower case actually
@@ -121,7 +124,7 @@
   #+allegro
   (:import-from #:cltl1 #:compiler-let)
   #+CLISP
-  (:import-from "LISP" "COMPILER-LET")
+  (:import-from "EXT" "COMPILER-LET")
   #+cmu
   (:import-from "EXT" "COMPILER-LET")
   #+mcl
