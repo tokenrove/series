@@ -8,11 +8,15 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.14 1998/05/24 19:19:22 toy Exp $
+;;;; $Id: s-code.lisp,v 1.15 1998/05/26 16:23:25 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.15  1998/05/26 16:23:25  toy
+;;;; One last fix from Reginald:  Don't make series a declaration.  With
+;;;; this fix, this should now run correctly for lispworks.
+;;;;
 ;;;; Revision 1.14  1998/05/24 19:19:22  toy
 ;;;; Fixes from Reginald S. Perry were incompletely applied:  Forgot to
 ;;;; import compiler-let and messed up a fix for uninterning SERIES for
@@ -242,10 +246,10 @@
     *last-series-error*
     *suppress-series-warnings*))
 
-(proclaim '(declaration optimizable-series-function off-line-port
-			;; Genera barfs at this (correctly I think)
-			#-Genera series
-			propagate-alterability))
+(declaim (declaration optimizable-series-function off-line-port
+		      ;; Genera barfs at this (correctly I think)
+		      #-(or Genera lispworks4) series
+		      propagate-alterability))
 
 (defvar *suppress-series-warnings* nil
   "Suppress warnings when the restrictions are violated.")
