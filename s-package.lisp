@@ -2,18 +2,19 @@
 
 ;;;; The package initialization stuff is done here now, instead of in s-code.lisp.  This is based a comment by Bruno Haible who said
 ;;;;
-;;;; "The difference with Harlequin LW might be due to the way symbols
-;;;; are represented in .fas files. ANSI CL describes two approaches,
-;;;; CLISP has taken one of them, other CLs the other one. The
-;;;; important point is that the packages setup when you compile a
-;;;; file must be identical to the packages setup when you load the
+;;;; "The important point is that the packages setup when you compile
+;;;; a file must be identical to the packages setup when you load the
 ;;;; file....  What will help, 100%, is to have a file which issues
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.1 1999/07/02 19:52:32 toy Exp $
+;;;; $Id: s-package.lisp,v 1.2 1999/07/02 20:38:13 toy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.2  1999/07/02 20:38:13  toy
+;;;; Forgot a few items from s-code.lisp, and had to put the in-package
+;;;; stuff back into s-code.lisp.
+;;;;
 ;;;; Revision 1.1  1999/07/02 19:52:32  toy
 ;;;; Initial revision
 ;;;;
@@ -34,8 +35,6 @@
 #+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp CLISP)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
-
-(provide "SERIES")
 
 #+(or Series-ANSI)
 (defpackage "SERIES"
@@ -82,12 +81,33 @@
   (:import-from "LISP" "COMPILER-LET")
 )
 
-#+(or Series-ANSI)
-(in-package "SERIES")
-
 #-(or Series-ANSI)
-(progn
-  (in-package "SERIES" :use '("LISP"))
-  (shadow '(let let* multiple-value-bind funcall defun)))
+(export ;74 total concepts in the interface
+  '(;(2) readmacros (#M and #Z)
 
+    ;(5) declarations and types (note dual meaning of series)
+    optimizable-series-function off-line-port ;series
+    series-element-type propagate-alterability
+
+    ;(10) special functions
+    alter to-alter encapsulated terminate-producing
+    next-in next-out generator gatherer result-of gathering
+
+    ;(55) main line functions
+    make-series series scan scan-multiple scan-range scan-sublists scan-fn
+    scan-fn-inclusive scan-lists-of-lists scan-lists-of-lists-fringe scan-file
+    scan-stream scan-hash scan-alist scan-plist scan-symbols collect-fn collect
+    collect-append collect-nconc collect-file collect-alist collect-plist
+    collect-hash collect-length collect-sum collect-max collect-min
+    collect-last collect-first collect-nth collect-and collect-or
+    previous map-fn iterate mapping collecting-fn cotruncate
+    latch until until-if positions choose choose-if
+    spread expand mask subseries mingle catenate split split-if
+    producing chunk 
+
+    ;(5) variables
+    *series-expression-cache*
+    *last-series-loop*
+    *last-series-error*
+    *suppress-series-warnings*))
 
