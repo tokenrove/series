@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.11 1997/10/02 13:25:18 toy Exp $
+;;;; $Id: s-code.lisp,v 1.12 1997/10/02 13:36:45 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.12  1997/10/02 13:36:45  toy
+;;;; Forgot to export scan-stream.
+;;;;
 ;;;; Revision 1.11  1997/10/02 13:25:18  toy
 ;;;; Added canonical-type function to extract out the "real" type if
 ;;;; something has been deftype'd.  Changed code to support this new
@@ -163,7 +166,7 @@
    ;;(55) main line functions
    "MAKE-SERIES" "SERIES" "SCAN" "SCAN-MULTIPLE" "SCAN-RANGE"
    "SCAN-SUBLISTS" "SCAN-FN" "SCAN-FN-INCLUSIVE" "SCAN-LISTS-OF-LISTS"
-   "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-HASH" "SCAN-ALIST"
+   "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-STREAM" "SCAN-HASH" "SCAN-ALIST"
    "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
    "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
    "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-SUM" "COLLECT-MAX"
@@ -213,7 +216,7 @@
     ;(55) main line functions
     make-series series scan scan-multiple scan-range scan-sublists scan-fn
     scan-fn-inclusive scan-lists-of-lists scan-lists-of-lists-fringe scan-file
-    scan-hash scan-alist scan-plist scan-symbols collect-fn collect
+    scan-stream scan-hash scan-alist scan-plist scan-symbols collect-fn collect
     collect-append collect-nconc collect-file collect-alist collect-plist
     collect-hash collect-length collect-sum collect-max collect-min
     collect-last collect-first collect-nth collect-and collect-or
