@@ -9,12 +9,18 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.89 2002/06/03 17:53:14 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.90 2002/12/10 17:55:46 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.90  2002/12/10 17:55:46  rtoy
+;;;; Bug [ 516952 ] only optimized split-if works
+;;;;
+;;;; A gross hack to fix this has been applied.  The wrong things were
+;;;; passed to pos-if in some situations.
+;;;;
 ;;;; Revision 1.89  2002/06/03 17:53:14  rtoy
 ;;;; From Joe Marshall:
 ;;;;
@@ -8836,11 +8842,11 @@ order of scanning the hash table is not specified."
 (defS split (items bools &rest more-bools)
     "Divides a series into multiple outputs based on BOOLS."
   (cl:let* ((pos-lists
-                (apply #'map-fn t
-                       #'(lambda (item &rest bools)
-                           (cons (apply #'pos bools) item))
-                       (promote-series items)
-                       (list* bools (copy-list more-bools)))))
+	     (apply #'map-fn t
+		    #'(lambda (item &rest bools)
+			(cons (apply #'pos bools) item))
+		    (promote-series items)
+		    (list* bools (copy-list more-bools)))))
     (values-list
       (mapcar #'(lambda (i)
                   (make-image-series :alter-fn (alter-fn items)
@@ -8855,10 +8861,40 @@ order of scanning the hash table is not specified."
 (defS split-if (items pred &rest more-pred)
     "Divides a series into multiple outputs based on PRED."
   (cl:let* ((preds (list* pred (copy-list more-pred)))
-              (pos-lists
-                (map-fn t #'(lambda (item)
-                              (cons (apply #'pos-if item preds) item))
-                        (promote-series items))))
+	    (ps (promote-series items))
+	    (pos-lists
+	     ;; FIXME
+	     ;;
+	     ;; This is a really gross hack because I don't know how
+	     ;; this works.  According to bug 516952, the following
+	     ;; doesn't work
+	     ;;
+	     ;; (split-if (scan '(1 2 1 2 3)) (lambda (item) (evenp item)))
+	     ;;
+	     ;; What happens is something like '(1 (1 2 1 2 3) ..) 
+	     ;; gets passed to pos-if, which is not expecting a list.
+	     ;;
+	     ;; However the obvious fix of just taking the car then fails for
+	     ;;
+	     ;; (split-if #z(1 2 1 2 3) (lambda (item) (evenp item)))
+	     ;;
+	     ;; because pos-if would have been passed the individual items.
+	     ;;
+	     ;; So the hack is to see if there is a generator function
+	     ;; for the promoted series.  If so, we want to take the
+	     ;; car of each item before calling pos-if.  If not, just
+	     ;; pass the item in as is.
+	     ;;
+	     ;; If I (rtoy) were smarter I'd fix this better, but I'm
+	     ;; too stupid.
+	     (let ((car-item-p (if (gen-fn ps) t nil)))
+	       (map-fn t
+		       #'(lambda (item)
+			   (let ((it (if car-item-p
+					 (car item)
+					 item)))
+			   (cons (apply #'pos-if it preds) item)))
+		       ps))))
     (values-list
       (mapcar #'(lambda (i)
                   (make-image-series :alter-fn (alter-fn items)
