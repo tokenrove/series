@@ -8,12 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.56 2000/03/05 16:21:56 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.57 2000/03/06 12:11:53 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.57  2000/03/06 12:11:53  matomira
+;;;; Fixed declaration handling in GATHERING.
+;;;;
 ;;;; Revision 1.56  2000/03/05 16:21:56  matomira
 ;;;; Fixed missing CL: before FUNCALL bug.
 ;;;; Removed NULL-ORs by using THE.
@@ -559,22 +562,37 @@
 
 ;;; Code generation utilities
 
-(cl:defun extract-decls (forms)
+(cl:defun extract-declarations (forms)
   "Grab all the DECLARE expressions at the beginning of the list forms"
-  (loop for i in forms
-    while (eq-car i 'declare)
-    collect i into decls
-    finally (return decls)))
+  (cl:let ((decls nil))
+    (do* ((r forms (cdr r))
+	  (i (car r) (car r)))
+	 ((not (eq-car i 'declare)) (values decls r))
+      (push i decls))))
+
+(cl:defun collect-decls (category decls)
+  (mapcan #'(lambda (d)
+	      (remove-if-not #'(lambda (x)
+				 (string-equal (string-upcase (symbol-name (car x)))
+					       (string-upcase (symbol-name category))))
+			     (cdr d)))
+	  decls))
+
+(cl:defun collect-other-decls (category decls)
+  (mapcan #'(lambda (d)
+	      (remove-if #'(lambda (x)
+				 (string-equal (string-upcase (symbol-name (car x)))
+					       (string-upcase (symbol-name category))))
+			     (cdr d)))
+	  decls))
+
+(cl:defun merge-decs (decls)
+  (when decls
+    (mapcan #'cdr decls)))
 
 (cl:defun collect-declared (category decls)
   "Given a list of DECLARE forms, concatenate all declarations of the same category, with  DECLAREs and category removed"
-  (when decls
-    (mapcan #'cdr (mapcan #'(lambda (d)
-			      (remove-if-not #'(lambda (x)
-					         (string-equal (string-upcase (symbol-name (car x)))
-							       (string-upcase (symbol-name category))))
-					     (cdr d)))
-			  decls))))
+  (merge-decs (collect-decls category decls)))
   
 (cl:defun destarrify (base binds &rest forms)
   "Covert a BASE* form into a nested set of BASE forms"
@@ -1863,15 +1881,14 @@
 (cl:defun coerce-to-types (types frag)
   (when (not (eq types '*))
     (cl:let ((n (length types))
-               (current-n (length (rets frag))))
+	     (current-n (length (rets frag))))
       (cond ((= n current-n))
             ((< n current-n)
              (mapc #'(lambda (r) (when (not (free-out r)) (kill-ret r)))
                    (nthcdr n (rets frag))))
             (T (dolist (v (n-gensyms (- n current-n) "XTRA-"))
                  (+ret (make-sym :var v) frag)
-                 (push (list v T) (aux frag))
-                 (push `(setq ,v nil) (prolog frag)))))
+                 (push (list v T nil) (aux frag)))))
       (mapc #'coerce-to-type types (rets frag))))
   frag)
 
@@ -1949,8 +1966,8 @@
   (cl:multiple-value-bind (exp free-ins free-outs)
       (handle-non-series-stuff code)
     (cl:let* ((vars (n-gensyms n "OUT-"))
-                (mapped-inputs nil)
-                (frag (make-frag :aux (mapcar #'(lambda (v) (list v T)) vars))))
+	      (mapped-inputs nil)
+	      (frag (make-frag :aux (mapcar #'(lambda (v) (list v T)) vars))))
       (dolist (entry free-ins)
         (cl:let ((arg (make-sym :var (car entry))))
            (when (and *series-implicit-map* (series-var-p (cdr entry)))
@@ -1984,8 +2001,8 @@
 ;; FRAGMENTATION
 (cl:defun fragify (code type)
   (cl:let* ((expansion (my-macroexpand code))
-              (ret (if (symbolp expansion) (cdr (assoc expansion *renames*))))
-              (types (decode-type-arg type T)))
+	    (ret (if (symbolp expansion) (cdr (assoc expansion *renames*))))
+	    (types (decode-type-arg type T)))
     (coerce-to-types types
                      (cond ((frag-p expansion) expansion) ;must always make a new frag
                            ((sym-p ret) (annotate code (pass-through-frag (list ret))))
@@ -4307,6 +4324,25 @@
     (gatherlet-1 binder bindifier decls var-collector-pairs *env*
 		  `(,@body ,(if (= (length returns) 1) (car returns) `(values ,@returns))))))
 
+#+:cltl2-series
+(defun dynamize-declarations (vars forms test)
+  (declare (ignore vars test))
+  (values nil forms))
+
+#-:cltl2-series
+(defun dynamize-declarations (vars forms test)
+  (cl:multiple-value-bind (declarations body) (extract-declarations forms)
+    (cl:let ((indef (collect-declared 'indefinite-extent declarations))
+	     (notindecls (collect-other-decls 'indefinite-extent declarations)))
+      (values
+        `(,@(when-bind (dynvars (set-difference vars indef :test test))			  
+	     `((declare ,(cons 'dynamic-extent dynvars))))
+	  ,@(when-bind (indefvars (set-difference indef vars :test test))
+	     `((declare ,(cons 'indefinite-extent indefvars))))	
+	  ,@(when notindecls
+	     `((declare ,@notindecls))))
+	body))))
+
 (eval-when #-(or :cltl2 :x3j13 :ansi-cl) (load)
            #+(or :cltl2 :x3j13 :ansi-cl) (:load-toplevel)
 	   
@@ -4336,25 +4372,18 @@
 (defmacro fgatherlet (var-collector-pairs &environment *env* &body body)
   (gatherlet-1 'cl:flet #'cdadr nil var-collector-pairs *env* body))
 
-(defmacro gathering (var-collector-pairs &environment *env* &body body)
-  (cl:let ((decls #+:cltl2-series nil
-		  #-:cltl2-series
-		  (when-bind (vars (set-difference (mapcar #'car var-collector-pairs)
-								     (collect-declared 'indefinite-extent
-										       (extract-decls body))))
-		    `((declare ,(cons 'dynamic-extent vars))))))
+(defmacro gathering (var-collector-pairs &environment *env* &body forms)
+  (cl:multiple-value-bind (decls body)
+      (dynamize-declarations (mapcar #'car var-collector-pairs) forms #'eq)
     (gathering-1 'cl:let #'list 'gather-result decls var-collector-pairs *env* body)))
 
-(defmacro fgathering (var-collector-pairs &environment *env* &body body)
-  (cl:let ((decls #+:cltl2-series nil
-		  #-:cltl2-series
-		  (when-bind (vars (set-difference (mapcar #'(lambda (x)
-								`(function ,(car x)))
-							    var-collector-pairs)
-						    (collect-declared 'indefinite-extent
-								      (extract-decls body))
-						    :test #'equal))
-	            `((declare ,(cons 'dynamic-extent vars))))))
+(defmacro fgathering (var-collector-pairs &environment *env* &body forms)
+  (cl:multiple-value-bind (decls body)
+      (dynamize-declarations (mapcar #'(lambda (x)
+					 `(function ,(car x)))
+				     var-collector-pairs)
+			     forms
+			     #'equal)
     (gathering-1 'cl:flet #'cdadr 'fgather-result decls var-collector-pairs *env* body)))
 ) ; end of eval-when
 ;;;;                  ---- SERIES FUNCTION LIBRARY ----
