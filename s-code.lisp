@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.93 2002/12/12 04:27:41 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.94 2003/01/21 20:12:40 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.94  2003/01/21 20:12:40  rtoy
+;;;; Add support for CMUCL 18e which no longer has
+;;;; pcl::walk-form-macroexpand.  It's walker::macroexpand-all.
+;;;;
 ;;;; Revision 1.93  2002/12/12 04:27:41  rtoy
 ;;;; Add support for a macrolet code-walker for Clisp.
 ;;;;
@@ -2951,7 +2955,7 @@
                (t nil)))
       (return code))
     (setq code (cons 'progn (cddr (walker::walk-form code)))))
-  #+cmu
+  #+(and cmu (not :cmu18e))
   (cl:let ((pcl::walk-form-macroexpand-p t))
     (loop 
 	(unless (and (listp code)
@@ -2960,6 +2964,14 @@
 		       (t nil)))
 	  (return code))
 	(setq code (cons 'progn (cddr (walker::walk-form code))))))
+  #+(and cmu :cmu18e)
+  (loop 
+      (unless (and (listp code)
+		   (case (car code)
+		     ((cl:macrolet cl:symbol-macrolet) t)
+		     (t nil)))
+	(return code))
+      (setq code (cons 'progn (cddr (walker::macroexpand-all code)))))
   #+clisp
   (loop 
       (unless (and (listp code)
