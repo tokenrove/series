@@ -9,12 +9,21 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.75 2000/09/30 21:44:41 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.76 2000/10/01 23:07:28 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.76  2000/10/01 23:07:28  rtoy
+;;;; o Add some comments.
+;;;; o Add a template for LOCALLY.  (MCL works now!!!!)
+;;;; o Move the OPTIF macro before it's first use in EOPTIF-Q. Seems that
+;;;;   this is required according to the CLHS.  (Noticed by Rainer Joswig.)
+;;;;
+;;;; Thanks to Rainer for testing this on MCL.  MCL passes all of the
+;;;; tests!
+;;;;
 ;;;; Revision 1.75  2000/09/30 21:44:41  rtoy
 ;;;; Bug #115738:
 ;;;;
@@ -2482,7 +2491,11 @@
 (defmacro deft (name head rest)
   `(setf (get ',name 'scan-template) (make-template ,head ,rest)))
 
-;; These two should de DEFCONSTANTs, but CMUCL gets confused by circularity
+;; These two should de DEFCONSTANTs, but CMUCL gets confused by
+;; circularity.  This happens when you load up series and then try to
+;; reload series.  CMUCL tries to compare the old value with the new
+;; value to see if they differ.  If the objects are circular, CMUCL
+;; gets stuck.
 
 (defvar /expr-template/ (make-template (Q) (E)))
 
@@ -2520,6 +2533,10 @@
 
 ;; Expand a MACROLET form
 (cl:defun expand-macrolet (code)
+  ;; LispWork's WALKER can handle MACROLET. Remove the expanded
+  ;; MACROLET still sticking around - Seems correct (see
+  ;; above). Optimization hint: Walking once and just removing
+  ;; MACROLETs later?
   #+:lispworks
   (loop 
     (unless (and (listp code)
@@ -2527,9 +2544,7 @@
                ((cl:macrolet cl:symbol-macrolet) t)
                (t nil)))
       (return code))
-    (setq code (cons 'progn (cddr (walker::walk-form code))))) ; LispWork's WALKER can handle MACROLET
-               ; Remove the expanded MACROLET still sticking around - Seems correct (see above).
-               ; Optimization hint: Walking once and just removing MACROLETs later?
+    (setq code (cons 'progn (cddr (walker::walk-form code))))) 
   #-:lispworks
   code)
 
@@ -2563,12 +2578,12 @@
         (when (frag-p code) 
           (annotate original-code code) 
           (return code))
-        (when (get (car code) 'scan-template) 
+        (when (get (car code) 'scan-template)
           (return code))
         ;; protects from any macro side-effects
         (when (eq code original-code) 
 	  (setq code (expand-macrolet (iterative-copy-tree code))))
-        (multiple-value-setq (code flag) 
+	(multiple-value-setq (code flag) 
           (macroexpand-1 code *env*))
         (setq code (expand-macrolet code))
         ))))
@@ -2637,7 +2652,7 @@
 	code
       (cl:let* ((head (car code))
 		(template (and (symbolp head) (get head 'scan-template))))
-        (when (or (member head /fexprs-not-handled/)
+        (when (or (member head /fexprs-not-handled/) 
 		  (and (not-expr-like-special-form-p head) (null template))
 		  (and *in-series-expr* (eq head 'multiple-value-call)))
 	  (rrs 6 "~%The form " head " not allowed in SERIES expressions."))
@@ -2980,8 +2995,9 @@
 (deft             macrolet (Q)    (E))
 (deft               labels (F)    (E))
 (deft                 type (Q Q)  (E))
+(deft                  setf (Q)   (E))   ;fixes weird interaction with lispm setf 
 
-(deft                  setf (Q)    (E))   ;fixes weird interaction with lispm setf 
+(deft               locally (Q)   (E))
 
 #+symbolics
 (cl:eval-when (eval load)
@@ -5482,14 +5498,14 @@
 ;; this forms are useful for making code that comes out one way in the
 ;; body and another way in the optimizer
 
+(defmacro optif (f1 f2)
+  `(if *optimize-series-expressions* ,f1 ,f2))
+
 (defmacro eoptif (f1 f2)
   (if *optimize-series-expressions* f1 f2))
 
 (defmacro eoptif-q (f1 f2)
   (optif `,f1 `,f2))
-
-(defmacro optif (f1 f2)
-  `(if *optimize-series-expressions* ,f1 ,f2))
 
 (defmacro optif-q (f1 f2)
   `(optif ',f1 ',f2))
