@@ -9,12 +9,18 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.71 2000/03/28 10:23:49 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.72 2000/06/26 15:28:19 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.72  2000/06/26 15:28:19  rtoy
+;;;; DECODE-SEQ-TYPE was getting BASE-STRING and STRING mashed together,
+;;;; and didn't even handle BASE-STRING.  They are slightly different:
+;;;; BASE-STRING is composed of BASE-CHAR's and STRING is composed of
+;;;; CHARACTER's.
+;;;;
 ;;;; Revision 1.71  2000/03/28 10:23:49  matomira
 ;;;; polycall et all are now tail recursive.
 ;;;; LETIFICATION WORKS COMPLETELY!!
@@ -1087,22 +1093,39 @@
 			    (when (numberp (cadr type))
 			      (cadr type))
 			    'character))
-		   ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
-		   ((or (eq type 'simple-string)
-			(eq type 'simple-base-string))
+		   ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY
+		   ;; CHARACTER (*))
+		   ((eq type 'simple-string)
 		    (values 'simple-array nil 'character))
-		   ((or (eq-car type 'simple-string)
-			(eq-car type 'simple-base-string))
+		   ((eq-car type 'simple-string)
 		    (values 'simple-array
 			    (when (numberp (cadr type))
 			      (cadr type))
 			    'character))
-		   ;; A BIT-VECTOR is (vector bit)
+		   ;; A BASE-STRING is (VECTOR BASE-CHAR)
+		   ((eq type 'base-string)
+		    (values 'vector nil 'base-char))
+		   ((eq-car type 'base-string)
+		    (values 'vector
+			    (when (numberp (cadr type))
+			      (cadr type))
+			    'base-char))
+		   ;; But SIMPLE-BASE-STRING's are really (SIMPLE-ARRAY
+		   ;; BASE-CHAR (*))
+		   ((or (eq type 'simple-base-string))
+		    (values 'simple-array nil 'base-char))
+		   ((or (eq-car type 'simple-base-string))
+		    (values 'simple-array
+			    (when (numberp (cadr type))
+			      (cadr type))
+			    'base-char))
+		   ;; A BIT-VECTOR is (VECTOR BIT)
 		   ((eq type 'bit-vector)
 		    (values 'vector nil 'bit))
 		   ((eq-car type 'bit-vector)
 		    (values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
-		   ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
+		   ;; But a SIMPLE-BIT-VECTOR is really a
+		   ;; (SIMPLE-ARRAY BIT (*))
 		   ((eq type 'simple-bit-vector)
 		    (values 'simple-array nil 'bit))
 		   ((eq-car type 'simple-bit-vector)
@@ -1132,6 +1155,8 @@
 			    (if (not (eq (cadr type) '*))
 				(cadr type)
 			      T)))
+		   ;; An ARRAY is an ARRAY.  We treat arrays
+		   ;; essentially as 1D array, in row-major order.
 		   ((eq type 'array)
 		    (values 'array nil T))
 		   ((eq-car type 'array)
