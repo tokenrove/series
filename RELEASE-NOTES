@@ -115,6 +115,7 @@ IMPROVEMENTS:
   Make source `FLET and LABELS ready'.
   Renamed old fragL *fragL. Used new `*type*-free' fragL whenever possible.
   `readability/documentation' release.
+  Abstracted use of aux component of frags.
   Some work done towards multiple assignment support in PRODUCING.
 
 

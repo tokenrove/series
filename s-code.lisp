@@ -8,12 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.60 2000/03/07 08:54:20 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.61 2000/03/07 13:47:23 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.61  2000/03/07 13:47:23  matomira
+;;;; Removed gratuitous sorting in CODIFY.
+;;;;
 ;;;; Revision 1.60  2000/03/07 08:54:20  matomira
 ;;;; Abstracted all uses of a frag's aux component.
 ;;;;
@@ -3724,7 +3727,6 @@
     (setq code (nconc code (list rets)))
     (setq code (codify-1 aux code))
     (use-user-names aux code)
-    ;; THIS IS UNNECESSARY: (setf (cadr code) (sort (cadr code) #'aux-ordering))
     (setq *last-series-loop* code)))
 
 ); end of eval-when
@@ -4877,7 +4879,6 @@ TYPE."
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p T) frag))
     (setf (aux frag)
-	  ;;(makeaux (mapcar #'list out-vars (mapcar #'type-or-list-of-type types))))
 	  (makeaux (mapcar #'list out-vars types)))
     (multiple-value-setq (function params)
       (handle-fn-arg frag function params))
