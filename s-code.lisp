@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.4 1997/01/10 22:37:03 toy Exp $
+;;;; $Id: s-code.lisp,v 1.5 1997/01/13 16:04:11 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.5  1997/01/13 16:04:11  toy
+;;;; Don't install the package on load.  Let the user do it himself.
+;;;;
 ;;;; Revision 1.4  1997/01/10 22:37:03  toy
 ;;;; A patch from Tim Bradshaw that fixes a bug.  The code walker
 ;;;; improperly handles nth-value.  Doesn't seem to have any affect in
@@ -5143,7 +5146,8 @@
 
 ;-------------------------------------------------------------------------
 
+#+nil ;; Don't think I really want to do this
 (eval-when (load)
   (in-package "SERIES")
-  (install :pkg "USER")
-  (in-package "USER"))
+  (install :pkg "COMMON-LISP-USER")
+  (in-package "COMMON-LISP-USER"))
