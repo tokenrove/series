@@ -9,12 +9,17 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.84 2001/04/09 22:18:47 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.85 2001/04/10 17:22:33 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.85  2001/04/10 17:22:33  rtoy
+;;;; o Change series printer to output items one at a time instead of
+;;;;   gathering up everything before printing.
+;;;; o Add more detailed doc strings for some functions.
+;;;;
 ;;;; Revision 1.84  2001/04/09 22:18:47  rtoy
 ;;;; o Random re-indents so I can read the code better
 ;;;; o The latest versions of CMUCL's PCL have a better code walker that
@@ -3386,7 +3391,9 @@
 			(- *print-level* depth)))))
     (write-char #\) stream)))
 
-#+cmu
+;; Hmm.  This works, but now output happens until we get all the
+;; elements of the series, and if the series is infinite....
+#+nil
 (cl:defun print-series (series stream depth)
   (cl:let ((generator (generator series))
 	   (s '()))
@@ -3397,6 +3404,17 @@
     (setf s (nreverse s))
     (pprint-logical-block (stream s :prefix "#Z")
       (write s :stream stream))))
+
+;; This works by doing an output for each element.
+#+cmu
+(cl:defun print-series (series stream depth)
+  (cl:let ((generator (generator series)))
+    (pprint-logical-block (stream nil :prefix "#Z(" :suffix ")")
+      (loop
+	  (cl:let ((element (next-in generator (return nil))))
+	    (write element :stream stream)
+	    (write-char #\Space stream)
+	    (pprint-newline :fill stream))))))
 
  );end of eval-when
 
@@ -5830,7 +5848,10 @@
 
 ;; API
 (defS collect (seq-type &optional (items nil items-p))
-    "Collects the elements of a series into a sequence."
+    "(collect [type] series)
+Creates a sequence containing the elements of SERIES.  The TYPE
+argument specifies the type of sequence to be created.  This type must
+be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
   (cl:let (*type* limit el-type)
     (when (not items-p) ;it is actually seq-type that is optional
       (setq items seq-type)
@@ -6458,8 +6479,15 @@
 
 ;; API
 (defS map-fn (type function &rest args)
-    "Maps FUNCTION over the input series.  The result type of FUNCTION is
-TYPE."
+    "(map-fn type function &rest series-inputs)
+
+The higher-order function map-fn supports the general concept of
+mapping. The TYPE argument is a type specifier indicating the type of
+values returned by FUNCTION. The values construct can be used to
+indicate multiple types; however, TYPE cannot indicate zero values. If
+TYPE indicates m types , then map-fn returns m series T1, ..., Tm,
+where Ti has the type (series ). The argument FUNCTION is a
+function. The remaining arguments (if any) are all series. "
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
     (cond ((= n 1)
@@ -6690,7 +6718,9 @@ TYPE."
 
 ;; API
 (defS collect-fn (type inits function &rest args)
-   "Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
+   "(collect-fn type init-function function &rest args)
+
+Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
     (cond ((= n 1) (apply #'basic-collect-fn inits function args))
@@ -6865,7 +6895,17 @@ TYPE."
 
 ;; API
 (defS mapping (var-value-list &rest body)
-    "Applies body to each element of the series"
+    "(mapping ({({var | ({var}*)} value)}*) {declaration}* {form}*)
+
+The macro MAPPING makes it easy to specify uses of MAP-FN where TYPE
+is T and the FUNCTION is a literal lambda. The syntax of mapping is
+analogous to that of let. The binding list specifies zero or more
+variables that are bound in parallel to successive values of
+series. The value part of each pair is an expression that must produce
+a series. The declarations and forms are treated as the body of a
+lambda expression that is mapped over the series values. A series of
+the first values returned by this lambda expression is returned as the
+result of mapping."
   mapping-mac
  :optimizer
   (cl:let* ((bindings (mapcan #'(lambda (p) (process-let-series-pair p nil T))
@@ -7277,7 +7317,7 @@ TYPE."
 
 ;; API
 (defS series (expr &rest expr-list)
-  "Creates an infinite series of the results of the expressions."
+  "Creates an infinite series that endlessly repeats the given items.."
   (cond ((null expr-list)
          (fragL ((expr)) ((expr T)) () () () () () () :args))
         (T (cl:let ((full-expr-list
@@ -7344,7 +7384,31 @@ TYPE."
                        (upto nil) (below nil)
                        (downto nil) (above nil)
                        (length nil) (type 'number))
-    "Creates a series of numbers by counting from :FROM by :BY."
+    "(scan-range &key (:start 0) (:by 1) (:type 'number):upto :below
+:downto :above :length)
+
+The function SCAN-RANGE returns a series of numbers starting with the
+:start argument (default integer 0) and counting up by the :by
+argument (default integer 1). The :type argument (default number) is a
+type specifier indicating the type of numbers in the series
+produced. The :type argument must be a (not necessarily proper)
+subtype of number. The :start and :by arguments must be of that
+type.
+
+One of the last five arguments may be used to specify the kind of end
+test to be used; these are called termination arguments. If :upto is
+specified, counting continues only so long as the numbers generated
+are less than or equal to :upto. If :below is specified, counting
+continues only so long as the numbers generated are less than
+:below. If :downto is specified, counting continues only so long as
+the numbers generated are greater than or equal to :downto. If :above
+is specified, counting continues only so long as the numbers generated
+are greater than :above. If :length is specified, it must be a
+non-negative integer and the output series has this length.
+
+If none of the termination arguments are specified, the output has
+unbounded length. If more than one termination argument is specified,
+it is an error.  "
   (cl:let ((*type* (optif (if (eq-car type 'quote)
 			      (cadr type)
 			    'number)
@@ -7557,7 +7621,12 @@ TYPE."
 
 ;; API
 (defS scan (seq-type &optional (seq nil seq-p))
-    "Enumerates a series of the values in a sequence"
+    "(scan [type] sequence)
+
+SCAN returns a series containing the elements of sequence in
+order. The type argument is a type specifier indicating the type of
+sequence to be scanned; it must be a (not necessarily proper) subtype
+of sequence. If type is omitted, it defaults to list."
   (cl:let (type limit *limit* *type*)
     (when (not seq-p) ;it is actually seq-type that is optional
       (setq seq seq-type)
@@ -7963,8 +8032,17 @@ TYPE."
 
 ;; API
 (defS scan-file (name &optional (reader #'read))
-    "Creates a series of the forms in the file named NAME.  Uses READER to
-read from the file."
+    "(scan-file file-name &optional (reader #'read)
+
+SCAN-FILE opens the file named by the string FILE-NAME and applies the
+function READER to it repeatedly until the end of the file is
+reached. READER must accept the standard input function arguments
+input-stream, eof-error-p, and eof-value as its arguments. (For
+instance, reader can be read, read-preserving-white-space, read-line,
+or read-char.) If omitted, READER defaults to READ. SCAN-FILE returns
+a series of the values returned by READER, up to but not including the
+value returned when the end of the file is reached. The file is
+correctly closed, even if an abort occurs. "
   (fragL ((name) (reader)) ((items T))
 	 ((items T)
 	  (lastcons cons (list nil))
@@ -8045,7 +8123,14 @@ SCAN-FILE, except we read from an existing stream."
 
 ;; API
 (defS scan-hash (table)
-    "Creates two series containing the keys and values in a hash table."
+    "(scan-hash table)
+
+Scans the entries of teh hash table and returns two series containing
+the keys and their associated values.  The first element of key series
+is the key of the first entry in the hash table, and the first element
+of the values series is the value of the first entry, and so on.  The
+order of scanning the hash table is not specified."
+
   #-CLISP
   (fragL ((table))
 	 ((keys T) (values T))
@@ -8716,7 +8801,8 @@ SCAN-FILE, except we read from an existing stream."
 
 ;; API
 (defS collect-sum (numbers &optional (type 'number))
-    "Computes the sum of the elements in NUMBERS."
+    "Computes the sum of the elements in NUMBERS.  TYPE specifies the
+type of sum to be created."
   (fragL ((numbers T) (type)) ((sum))
 	 ((sum T (coerce 0 type)))
 	 ()
@@ -8754,7 +8840,12 @@ SCAN-FILE, except we read from an existing stream."
 
 ;; API
 (defS collect-max (numbers &optional (items numbers items-p) (default nil))
-    "Returns the ITEM corresponding to the maximum NUMBER."
+    "(collect numbers &optional (items numbers items-p) (default nil))
+
+Returns the element of ITEMS that corresponds to the maximum element
+of NUMBERS.  If ITEMS is omitted, then the maximum of NUMBERS itself
+is returned.  The value DEFAULT is returned if either NUMBERS or ITEMS
+has zero length."
   (if items-p
       (fragL ((numbers T) (items T) (default)) ((result))
              ((number T nil)
