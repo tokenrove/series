@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.15 1998/05/26 16:23:25 toy Exp $
+;;;; $Id: s-code.lisp,v 1.16 1998/06/08 17:34:59 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.16  1998/06/08 17:34:59  toy
+;;;; Couple of small changes for CLISP.
+;;;;
 ;;;; Revision 1.15  1998/05/26 16:23:25  toy
 ;;;; One last fix from Reginald:  Don't make series a declaration.  With
 ;;;; this fix, this should now run correctly for lispworks.
@@ -1046,6 +1049,10 @@
 			 (:conc-name nil)
 			 (:print-function print-series))
   image-fn image-base (image-datum nil))
+
+#+(or CLISP) ; handle multiple definition of ALTER-FN
+(defstruct (foundation-series (:conc-name nil))
+  (alter-fn nil))
 
 (defmacro make-phys (&key (gen-fn nil) (alter-fn nil) (data-list T))
   `(make-basic-series :gen-fn ,gen-fn :alter-fn ,alter-fn
@@ -2992,7 +2999,7 @@
 					 `',var-type
 					 (if (eq len '*) 0 len)))))
 		 (t
-		  (list var-name #()))))
+		  (list var-name '#()))))
 	  ((subtypep var-type 'vector)
 	   (cond ((and (consp var-type))
 		  (cond ((= 3 (length var-type))
@@ -3004,7 +3011,7 @@
 			 (list var-name (list 'make-sequence
 					      `',var-type 0)))))
 		 (t
-		  (list var-name #()))))
+		  (list var-name '#()))))
 	  ((subtypep var-type 'cons)
 	   (list var-name '(cons nil nil)))
 	  (T var-name))))
