@@ -8,12 +8,15 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.53 2000/03/01 14:46:22 toy Exp $
+;;;; $Id: s-code.lisp,v 1.54 2000/03/02 17:49:29 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.54  2000/03/02 17:49:29  toy
+;;;; Even more changes from Fernando.
+;;;;
 ;;;; Revision 1.53  2000/03/01 14:46:22  toy
 ;;;; Some more changes from Fernando (actually two sets of changes):
 ;;;;
@@ -32,7 +35,6 @@
 ;;;;   flet defined before top-level macro def)
 ;;;; - Additional defS and defS-1 simplification (and slet*)
 ;;;; - renamed LETIZE as DESTARRIFY
-;;;;
 ;;;; Revision 1.51  2000/02/23 15:27:02  toy
 ;;;; o Fernando added an indefinite-extent declaration and uses
 ;;;;   it in the one place where it's needed.
@@ -650,8 +652,8 @@
   (cl:let ((spkg (find-package "SERIES")))
     (when (not remove)
       (when macro
-        (set-dispatch-macro-character #\# #\Z (function series-reader))
-        (set-dispatch-macro-character #\# #\M (function abbreviated-map-fn-reader)))
+        (set-dispatch-macro-character #\# #\Z (cl:function series-reader))
+        (set-dispatch-macro-character #\# #\M (cl:function abbreviated-map-fn-reader)))
         (when (not (eq pkg spkg))
 	  ;;This is here because UNTIL and COLLECT are loop clauses.
 	  (cl:multiple-value-bind (sym code) (find-symbol "UNTIL" pkg)
@@ -1747,9 +1749,11 @@
 
 ;; assumes opt result cannot be NIL
 (defmacro top-starting-series-expr (call opt non-opt)
-  `(cond ((catch :series-restriction-violation
-            (starting-series-expr ,call ,opt)))
-         (T ,non-opt)))
+  (let ((res (gensym)))
+  `(let ((,res (catch :series-restriction-violation (starting-series-expr ,call ,opt))))
+     (if ,res
+	 (values ,res t)
+       (values ,non-opt nil)))))
 
 (cl:defun ers (id &rest args)  ;Fatal errors.
   (declare (dynamic-extent args))	  
@@ -3813,9 +3817,9 @@
     (dolist (v (aux frag)) (propagate-types (cdr v) (aux frag) input-info))
     frag))
 
-(cl:defun define-optimizable-series-fn (name lambda-list expr-list)
+(cl:defun compute-optimizable-series-fn (definer name lambda-list expr-list)
   "Defines a series function, see lambda-series."
-  (cl:let ((call (list* 'defun name lambda-list expr-list))
+  (cl:let ((call (list* definer name lambda-list expr-list))
            (*optimize-series-expressions* T)
            (*suppress-series-warnings* nil))
     (dolist (v lambda-list)
@@ -3857,7 +3861,7 @@
             (when (and (not series-p) (notany #'series-var-p (args frag)))
               (wrs 44 t
                    "~%OPTIMIZABLE-SERIES-FUNCTION neither uses nor returns a series."))
-            `(defS ,name ,(reverse rev-arglist)
+            `(,name ,(reverse rev-arglist)
                ,(if (not dcls) doc (cons doc `(declare . ,dcls)))
                ,(frag->physical frag used-vars)
                :optimizer
@@ -3865,12 +3869,19 @@
                :trigger ,(not series-p)))))
       (cl:multiple-value-bind (forms decls doc)
           (decode-dcls expr-list '(no-complaints doc opts))
-        `(cl:defun ,name ,lambda-list
+        `(,name ,lambda-list
            ,@(if doc (list doc))
            ,@(if decls `((declare ,@ decls)))
            (compiler-let ((*optimize-series-expressions* nil)) ,@ forms))))))
 
-
+(cl:defun define-optimizable-series-fn (name lambda-list expr-list)
+  (cl:multiple-value-bind (form opt-p)
+			 (compute-optimizable-series-fn 'defun name lambda-list expr-list)
+    (if opt-p
+	(cons 'defS form)
+      (cons 'cl:defun form))))
+		       
+     
 (cl:defun undefine-optimizable-series-fn (name)
   (when (symbolp name)
     (remprop name 'series-optimizer)
@@ -3915,43 +3926,61 @@
 	(compiler-let ((*optimize-series-expressions* ,opt-p)) 
           ,body-code)))
 
-  (cl:defun compute-series-macform-2 (name arglist doc body-code trigger unopt-expansion)
+  (cl:defun compute-series-macform-2 (name arglist doc body-code trigger 
+					   local-p disc-expr opt-expr
+					   unopt-expansion)
     #-:symbolics (declare (ignore arglist))
     `(,name (&whole call &rest stuff &environment *env*)
 	#+:symbolics (declare (zl:arglist ,@(copy-list arglist)))
 	,@(if doc (list doc))
 	(if (and *optimize-series-expressions* ,trigger)
-	    (process-top call)
+	    ,(if local-p
+		 (cl:let ((retprop (gensym))
+			  (optprop (gensym))
+			  (result  (gensym)))
+		   `(cl:let ((,retprop (get ',name 'returns-series))
+			     (,optprop (get ',name 'series-optimizer)))
+		      (setf (get ',name 'returns-series)  (function ,disc-expr))
+		      (setf (get ',name 'series-optimizer) (function ,opt-expr))
+		      (setq ,result (process-top call))
+		      (setf (get ',name 'series-optimizer) ,optprop)
+		      (setf (get ',name 'returns-series) ,retprop)
+		      ,result))
+	       `(process-top call))
 	  ,(if (symbolp body-code)
 	       `(cons ',body-code stuff)
 	     unopt-expansion))))
 
-  (cl:defun compute-series-macform-1 (name arglist body-code body-fn trigger)
+  (cl:defun compute-series-macform-1 (name arglist body-code body-fn trigger
+					   local-p disc-expr opt-expr)
     (compute-series-macform-2 name arglist nil body-code trigger
-      `(list* 'cl:funcall #',body-fn stuff)))	      
+			      local-p disc-expr opt-expr
+      `(list* 'cl:funcall #',body-fn stuff))) ; Explicit FUNCALL to bypass SERIES processing
 
   ;; It's a macro and body can refer to it
-  (cl:defun compute-series-macform (name arglist doc dcl body-code body-fn trigger)
+  (cl:defun compute-series-macform (name arglist doc dcl body-code body-fn trigger
+					 local-p disc-expr opt-expr)
     (compute-series-macform-2 name arglist doc body-code trigger
+			      local-p disc-expr opt-expr
       `(macrolet (,(compute-series-macform-1
-		    name arglist body-code body-fn trigger))
+		    name arglist body-code body-fn trigger
+		    local-p disc-expr opt-expr))
 	 (cl:labels (,(compute-series-funform
 		       body-fn arglist doc dcl body-code nil))
-	    (list* 'cl:funcall #',body-fn stuff)))))
+	    (list* 'cl:funcall #',body-fn stuff))))) ; Explicit FUNCALL to bypass SERIES processing
 
   ;;The body runs when optimization is not happening.
   ;;The optimizer runs when optimization is happening.
   ;;The trigger says whether or not a series expression is beginning.
   ;;  it forces NAME to be a macro instead of a function.
   ;;The discriminator says whether or not series are being returned.
-  (cl:defun defS-1 (name arglist doc body optimizer trigger discriminator)
+  (cl:defun defS-1 (name arglist doc body optimizer trigger discriminator local-p)
     (cl:let* ((body-code body)
               (dcl (if (consp doc) (prog1 (cdr doc) (setq doc (car doc)))))
               (opt-code (or optimizer body))
               (body-fn (cond ((symbolp body-code) body-code)
                              (trigger (gentemp (string name)))))
-              (opt-fn (gentemp (string name)))
-              (desc-fn (cond (discriminator (gentemp (string name)))
+              (desc-fn (cond (discriminator nil)
                              (trigger 'no)
                              (t 'yes)))
               (opt-arglist      ;makes up for extra level of evaluation.
@@ -3959,10 +3988,16 @@
                             (if (and (listp a) (listp (cdr a)))
                                 (list* (car a) `(copy-tree ',(cadr a)) (cddr a))
                                 a))
-                        arglist)))
+                        arglist))
+	      (disc-expr (if discriminator
+			     `(lambda (call) ,discriminator)
+			   desc-fn))
+	      (opt-expr `(lambda ,@(cdr (compute-series-funform
+					   nil opt-arglist nil dcl opt-code t)))))
 	(values (cond (trigger 
 		       (cons 'defmacro (compute-series-macform
-					 name arglist doc dcl body-code body-fn trigger)))
+					 name arglist doc dcl body-code body-fn trigger
+					 local-p disc-expr opt-expr)))
 		      ((symbolp body-code)
 		       (cons 'defmacro
 			     (compute-prologing-macform name body-code)))
@@ -3970,29 +4005,22 @@
 		       (cons 'cl:defun
 			      (compute-series-funform
 				name arglist doc dcl body-code nil))))
-		(if discriminator
-		    `(cl:flet ((,desc-fn (call) ,discriminator))
-                       (function ,desc-fn))
-		  `(function ,desc-fn))
-		(compute-series-funform
-		  opt-fn opt-arglist nil dcl opt-code t))))
+		disc-expr
+		opt-expr)))
        
 
     (defmacro defS (name arglist doc body &key optimizer trigger discriminator)
       (cl:multiple-value-bind (topdef
 			       discriminator-expr
-			       optimizer-funform)
-	  (defS-1 name arglist doc body optimizer trigger discriminator)
+			       optimizer-expr)
+	  (defS-1 name arglist doc body optimizer trigger discriminator nil)
 	`(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
 		    #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
                                                   :load-toplevel
                                                   :execute)          
 	   ,topdef
-	   (setf (get ',name 'returns-series)
-		 ,discriminator-expr)
-	   (cl:flet (,optimizer-funform)
-             (setf (get ',name 'series-optimizer) 
-		   (function ,(car optimizer-funform))))
+	   (setf (get ',name 'returns-series) (cl:function ,discriminator-expr))
+	   (setf (get ',name 'series-optimizer) (cl:function ,optimizer-expr))
 	   ',name)))
 
     ;; PROTOTYPE VERSION ONLY - DO NOT USE YET
@@ -4002,23 +4030,14 @@
 	    (cl:multiple-value-bind (topdef
 				     discriminator-expr
 				     optimizer-funform)
-		(defS-1 name arglist doc body optimizer trigger discriminator)
-	             (list (case (car topdef)
-			     ((defmacro) 'macrolet)
-			     ((cl:defun) 'cl:flet))
-			   (list (cdr topdef)))
-			`(,@(if (eq (car discriminator-expr) 'cl:flet)
-			       (append discriminator-expr
-				       `((setf (get ',name 'returns-series)
-					       ,(caadr discriminator-expr))))
-			     `(progn
-				(setf (get ',name 'returns-series)
-				      ,discriminator-expr)))
-			   (cl:flet (,optimizer-funform)
-			     (setf (get ',name 'series-optimizer) 
-				   (function ,(car optimizer-funform)))
-			     ,@forms))))
-            `(progn ,@forms)))
+		(defS-1 name arglist doc body optimizer trigger discriminator t)
+	      (declare (ignore discriminator-expr optimizer-funform))	 		    	    
+	      (list* (case (car topdef)
+		       ((defmacro) 'macrolet)
+		       ((cl:defun) 'cl:flet))
+		     (list (cdr topdef))
+		     forms)))
+	`(progn ,@forms)))
 
     ;; DO NOT USE YET
     (defmacro slet* (defs &body forms)
@@ -4166,6 +4185,15 @@
       (ers 61 "~%Input to GATHERER fails to be one-input one-output collector."))
     frag))
 
+
+(cl:defun gather-sanitize (collector)
+  (cl:let ((x (new-var 'gather)))
+    `#'(lambda (,x) (funcall ,collector (scan (collect ,x))))))
+
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load)
+           #+(or :cltl2 :x3j13 :ansi-cl) (:load-toplevel
+                                          :execute)
+	   
 (defmacro gatherer (collector &environment *env*)
   (when (not (eq-car collector 'function))
     (cl:let ((x (new-var 'gather)))
@@ -4179,10 +4207,6 @@
                      `(lambda (,x) (funcall ,collector (scan (collect ,x))))
                      *env*))))
     (gathererify frag)))
-
-(cl:defun gather-sanitize (collector)
-  (cl:let ((x (new-var 'gather)))
-    `#'(lambda (,x) (funcall ,collector (scan (collect ,x))))))
 
 (defmacro gathering (var-collector-pairs &environment *env* &body body)
   (cl:let* ((frags (mapcar #'(lambda (p) (frag-for-collector (cadr p) *env*))
@@ -4202,7 +4226,7 @@
     (dolist (wrp wrappers)
       (setq body (cl:funcall (eval wrp) body)))
     body))
-
+) ; end of eval-when
 ;;;;                  ---- SERIES FUNCTION LIBRARY ----
 
 (cl:defun process-top (call)
@@ -4860,7 +4884,7 @@ TYPE."
     (otherwise
       (error "The numeric argument to #M must be between 1 and 5 inclusive"))))
 
-; (set-dispatch-macro-character #\# #\M (function abbreviated-map-fn-reader))
+; (set-dispatch-macro-character #\# #\M (cl:function abbreviated-map-fn-reader))
 
 (defmacro \#M (fn &rest args) (mapit T fn args))
 (defmacro \#1M (fn &rest args) (mapit T fn args))
