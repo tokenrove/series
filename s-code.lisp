@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.87 2001/12/23 16:54:44 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.88 2002/03/29 23:53:38 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.88  2002/03/29 23:53:38  rtoy
+;;;; Should not macroexpand declarations?  I think this is right.  I think
+;;;; I did it right, but needs more testing.
+;;;;
 ;;;; Revision 1.87  2001/12/23 16:54:44  rtoy
 ;;;; Make series support Allegro "modern" lisp with its case-sensitive
 ;;;; reader.  Mostly just making every that needs to be lower case actually
@@ -3021,10 +3025,15 @@
 	code
       (cl:let* ((head (car code))
 		(template (and (symbolp head) (get head 'scan-template))))
+	;;(format t "code = ~A~%" code)
         (when (or (member head /fexprs-not-handled/) 
 		  (and (not-expr-like-special-form-p head) (null template))
 		  (and *in-series-expr* (eq head 'multiple-value-call)))
 	  (rrs 6 "~%The form " head " not allowed in SERIES expressions."))
+	#+nil
+	(let ((*print-circle* t))
+	  (format t "template = ~A~%" template))
+	  
 	(m-&-r2 code
 		(if (symbolp head)
 		    (or template /expr-template/) 
@@ -3340,7 +3349,14 @@
 
 (deft                block (q q)  (el))
 (deft                catch (q e)  (el))
-(deft              declare (q)    (ex))  ;needed by xerox cl
+;;
+;; I (RLT) changed this.  I don't think the rest of a declaration
+;; should be macro-expanded at all.  Is this right?  Did I do this
+;; right?
+
+;;(deft declare (q) (ex)) ;needed by xerox cl
+(deft              declare (q)    (q))
+
 (deft            eval-when (q q)  (e))
 (deft             function (q fun)())
 (deft                   go (q q)  ())
