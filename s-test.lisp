@@ -40,9 +40,37 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.22 2002/12/12 04:28:50 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.23 2004/12/15 17:18:57 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.23  2004/12/15 17:18:57  rtoy
+;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
+;;;; support.  His comments:
+;;;;
+;;;;
+;;;; 	* series.asd:
+;;;; 	  * Initial checkin.
+;;;; 	* series.system:
+;;;; 	  * Removed logical pathname stuff and made this "self-sufficient", i.e. it is
+;;;; 	    sufficient to just load it; no need to edit pathname translations.
+;;;; 	  * Removed s-install from series system; we certainly don't want Series to
+;;;; 	    install itself to CL-USER whenever the system is compiled/loaded.
+;;;;
+;;;; 	* s-test.lisp:
+;;;; 	  * Replaced all uses of defconstant with series::defconst-once.
+;;;;
+;;;; 	* s-package.lisp:
+;;;; 	  * sb-cltl2 module is now required at compile time too.
+;;;;
+;;;; 	* s-code.lisp:
+;;;; 	  * (defconst-once) New macro.
+;;;; 	  * Replaced all uses of defconstant with it.
+;;;;
+;;;; 	* RELEASE-NOTES:
+;;;; 	  * Installation instructions based on system definition files.
+;;;; 	  * Updated the list of contributors.
+;;;; 	  * Some cosmetic changes.
+;;;;
 ;;;; Revision 1.22  2002/12/12 04:28:50  rtoy
 ;;;; Add another test.  (Forgot exactly why this is here, but it's a good
 ;;;; test of the macrolet walker for Clisp.)
@@ -2420,7 +2448,7 @@
   (1 2 3))
 
 (eval-when (compile load eval)
-(defconstant +constant+
+(series::defconst-once +constant+
   '#(1 2 3 4))
 )
 

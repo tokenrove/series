@@ -1,19 +1,22 @@
 ;;; -*- Mode: lisp -*-
 
-;;; This is just a sample of building series with MK defsystem. You
-;;; may need to change :source-pathname appropriately for your system.
+(defpackage #:series-system
+  (:use #:common-lisp))
 
+(in-package #:series-system)
+
+(defparameter *series-base-directory*
+  (make-pathname :name nil :type nil :version nil
+                 :defaults (parse-namestring *load-truename*)))
+  
 (mk:defsystem series
-    :source-pathname #.(logical-pathname "series:;")
+    :source-pathname *series-base-directory*
     :source-extension "lisp"
     :components ((:file "s-package")
-		 (:file "s-code")
-		 (:file "s-install"
-			:load-only t)))
-
+                 (:file "s-code")))
 
 (mk:defsystem series-tests
-    :source-pathname "lisp:series;"
+    :source-pathname *series-base-directory*
+    :source-extension "lisp"
     :depends-on (series)
     :components ((:file "s-test")))
-    

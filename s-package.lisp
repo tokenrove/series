@@ -8,9 +8,37 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.11 2003/06/08 12:53:21 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.12 2004/12/15 17:18:57 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.12  2004/12/15 17:18:57  rtoy
+;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
+;;;; support.  His comments:
+;;;;
+;;;;
+;;;; 	* series.asd:
+;;;; 	  * Initial checkin.
+;;;; 	* series.system:
+;;;; 	  * Removed logical pathname stuff and made this "self-sufficient", i.e. it is
+;;;; 	    sufficient to just load it; no need to edit pathname translations.
+;;;; 	  * Removed s-install from series system; we certainly don't want Series to
+;;;; 	    install itself to CL-USER whenever the system is compiled/loaded.
+;;;;
+;;;; 	* s-test.lisp:
+;;;; 	  * Replaced all uses of defconstant with series::defconst-once.
+;;;;
+;;;; 	* s-package.lisp:
+;;;; 	  * sb-cltl2 module is now required at compile time too.
+;;;;
+;;;; 	* s-code.lisp:
+;;;; 	  * (defconst-once) New macro.
+;;;; 	  * Replaced all uses of defconstant with it.
+;;;;
+;;;; 	* RELEASE-NOTES:
+;;;; 	  * Installation instructions based on system definition files.
+;;;; 	  * Updated the list of contributors.
+;;;; 	  * Some cosmetic changes.
+;;;;
 ;;;; Revision 1.11  2003/06/08 12:53:21  rtoy
 ;;;; From Alexey Dejneka:
 ;;;;
@@ -83,7 +111,8 @@
     (cl:pushnew ':allegro-modern cl:*features*)))
 
 #+sbcl
-(require :sb-cltl2)
+(eval-when (:execute :load-toplevel :compile-toplevel)
+  (require :sb-cltl2))
 
 (defpackage #:series
     (:use #:cl)

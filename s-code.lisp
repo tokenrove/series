@@ -9,12 +9,40 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.95 2003/06/08 12:52:40 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.96 2004/12/15 17:18:53 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.96  2004/12/15 17:18:53  rtoy
+;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
+;;;; support.  His comments:
+;;;;
+;;;;
+;;;; 	* series.asd:
+;;;; 	  * Initial checkin.
+;;;; 	* series.system:
+;;;; 	  * Removed logical pathname stuff and made this "self-sufficient", i.e. it is
+;;;; 	    sufficient to just load it; no need to edit pathname translations.
+;;;; 	  * Removed s-install from series system; we certainly don't want Series to
+;;;; 	    install itself to CL-USER whenever the system is compiled/loaded.
+;;;;
+;;;; 	* s-test.lisp:
+;;;; 	  * Replaced all uses of defconstant with series::defconst-once.
+;;;;
+;;;; 	* s-package.lisp:
+;;;; 	  * sb-cltl2 module is now required at compile time too.
+;;;;
+;;;; 	* s-code.lisp:
+;;;; 	  * (defconst-once) New macro.
+;;;; 	  * Replaced all uses of defconstant with it.
+;;;;
+;;;; 	* RELEASE-NOTES:
+;;;; 	  * Installation instructions based on system definition files.
+;;;; 	  * Updated the list of contributors.
+;;;; 	  * Some cosmetic changes.
+;;;;
 ;;;; Revision 1.95  2003/06/08 12:52:40  rtoy
 ;;;; From Alexey Dejneka:
 ;;;;
@@ -686,17 +714,24 @@
 
 ;;; END OF TUNABLES
 
+(defmacro defconst-once (name value &optional documentation)
+  "Like `defconstant' except that if the variable already has a
+value, the old value is not clobbered."
+  `(defconstant ,name (if (boundp ',name) (symbol-value ',name) ,value)
+    ,@(when documentation (list documentation))))
+
+
 ;; SERIES::INSTALL changes this
 (defvar *series-implicit-map* nil 
   "T enables implicit mapping in optimized expressions")
 
-(defconstant /ext-conflicts/
+(defconst-once /ext-conflicts/
   #+cmu '(collect iterate)
   #+allegro-v6.1 '(until)
   #-(or cmu allegro-v6.1) '())
 
 
-(defconstant /series-forms/
+(defconst-once /series-forms/
   '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
@@ -1411,25 +1446,18 @@
 ;;; The function (foldable-constant-expression-p '(+ 2 3) nil)
 ;;; returns T.
 
-(defconstant *foldable-operator-table*
-  (if (boundp '*foldable-operator-table*)
-      *foldable-operator-table*
-      (make-hash-table)))
-
-(defconstant *unfoldable-operator-table*
-  (if (boundp '*unfoldable-operator-table*)
-      *unfoldable-operator-table*
-      (make-hash-table)))
+(defconst-once /foldable-operator-table/ (make-hash-table))
+(defconst-once /unfoldable-operator-table/ (make-hash-table))
 
 (defmacro declare-foldable-constant-operators (&rest names)
   `(eval-when (:compile-toplevel :load-toplevel :execute)
      (dolist (name (quote (,@names)))
-       (setf (gethash name *foldable-operator-table*) t))))
+       (setf (gethash name /foldable-operator-table/) t))))
 
 (defmacro declare-unfoldable-constant-operators (&rest names)
   `(eval-when (:compile-toplevel :load-toplevel :execute)
      (dolist (name (quote (,@names)))
-       (setf (gethash name *unfoldable-operator-table*) t))))
+       (setf (gethash name /unfoldable-operator-table/) t))))
 
 (declare-foldable-constant-operators
  * + - / /= 1+ 1- < <= = > >=
@@ -1564,16 +1592,16 @@
 		  ;; Otherwise, look it up in the table.
 		      (t
 
-		   (unless (gethash operator *unfoldable-operator-table*)
+		   (unless (gethash operator /unfoldable-operator-table/)
 		       #||
-		       (cond ((gethash operator *foldable-operator-table*)
+		       (cond ((gethash operator /foldable-operator-table/)
 			      (foldable-constant-expression-p* operands env))
 			     ((foldable-constant-expression-p* operands env)
 			      (warn "Couldn't fold ~s ~s" operator operands)
 			      nil)
 			     (t nil))
 		       ||#
-			 (and (gethash operator *foldable-operator-table*)
+			 (and (gethash operator /foldable-operator-table/)
 			      (foldable-constant-expression-p* operands env))))))
 
 	       ;; A literal lambda can be folded if it is in operator
@@ -1851,13 +1879,13 @@
 ;;
 ;; 3- nil, var is rebound and protected from renaming.
 
-(defconstant /short-hand-types/
-        '(array atom bignum bit bit-vector character common compiled-function
-          complex cons double-float fixnum float function hash-table integer
-          keyword list long-float nil null number package pathname random-state
-          ratio rational readtable sequence short-float simple-array
-          simple-bit-vector simple-string simple-vector single-float standard-char
-          stream string string-char symbol t vector series)
+(defconst-once /short-hand-types/
+  '(array atom bignum bit bit-vector character common compiled-function
+    complex cons double-float fixnum float function hash-table integer
+    keyword list long-float nil null number package pathname random-state
+    ratio rational readtable sequence short-float simple-array
+    simple-bit-vector simple-string simple-vector single-float standard-char
+    stream string string-char symbol t vector series)
   "table 4.1 from CLTL")
 
 (defvar *standard-function-reader* (get-dispatch-macro-character #\# #\'))
@@ -3062,9 +3090,9 @@
   (cl:let ((*being-setqed* nil))
     (m-&-r1 code)))
 
-(defconstant /fexprs-not-handled/ '(flet labels #-:lispworks macrolet))
+(defconst-once /fexprs-not-handled/ '(flet labels #-:lispworks macrolet))
 
-(defconstant /expr-like-special-forms/ 
+(defconst-once /expr-like-special-forms/ 
   '(multiple-value-call multiple-value-prog1 progn progv the throw
     ;;some simple additions for lispm
     *catch multiple-value-return progw return-list 
@@ -3845,11 +3873,10 @@
   (apply-frag frag values))
 
 ;; Macroexpansion may result in unexpected arcana we should let through.
-(defconstant /allowed-generic-opts/ 
-    (list 'optimize 
-          #+:lispworks '(CLOS::VARIABLE-REBINDING)
-	  #+:clisp 'system::read-only
-          ))
+(defconst-once /allowed-generic-opts/ 
+  '(optimize 
+    #+:lispworks (CLOS::VARIABLE-REBINDING)
+    #+:clisp system::read-only))
 
 ;; This takes a list of forms that may have documentation and/or
 ;; declarations in the initial forms.  It parses the declarations and

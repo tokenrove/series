@@ -40,12 +40,15 @@
                            Featuring Fixes by:
 
                               Tim Bradshaw    (Symbolics)
+                             Alexey Dejneka
                               Bruno Haible    (CLISP)
+                             Hannu Koivisto
                              Arthur Lemmens
                              Dave Linenberg
                              Lieven Marchand  (Allegro)
+                               Joe Marshall
                             Reginald S. Perry
-                             Pekka Pirinen    (Liquid)
+                              Pekka Pirinen   (Liquid)
                              Paul Werkowski   (CMUCL)
 
  
@@ -58,8 +61,41 @@
 
                           Many unknown others
 
-Series 2.2.7 Release Notes
---------------------------
+
+Installation
+------------
+
+Both MK-DEFSYSTEM and ASDF system definitions are provided.  Assuming
+you have properly set up either (or both) of those and taken care that
+they can find the respective system definition files from the Series
+installation directory (or in the case of ASDF alternatively symlinked
+series.asd to a directory in the search path), you can use Series as a
+dependency in your own systems and compile and load Series as follows:
+
+ASDF:
+
+(asdf:operate 'asdf:compile-op :series) ; compile only
+(asdf:operate 'asdf:load-op :series)    ; compile if needed, load
+
+MK-DEFSYSTEM:
+
+(mk:oos :series :compile) ; compile if needed, load
+(mk:oos :series :load)    ; just load
+
+If you want to run the tests, [compile and] load the `series-test'
+system and call CL-USER::DO-TESTS.  Don't get scared about
+"compilation aborted" messages.  If it's reported that all tests
+passed, it means it was just the error testing.
+
+You can use SERIES::INSTALL for "use-package"ing Series in a way that
+extended special forms are shadow-import'ed and reader macros are
+installed.
+
+
+Release notes
+-------------
+
+* Series 2.2.7 Release Notes
 
 o Some changes for CLISP 2.29.  The declaration SYSTEM::READ-ONLY was
   blocking optimization.
@@ -74,8 +110,9 @@ o Added a code walker for walking macrolet forms for
   Clisp.  Useful since Clisp macroexpands extended loop forms into
   forms containing macrolet.
 
-Series 2.2.6 Release Notes
---------------------------
+
+* Series 2.2.6 Release Notes
+
 o Use list pretty-printer for printing out series (for CMUCL).
 o Some more doc strings.
 o Some optimizations from Joe Marshall for Allegro.  Allegro
@@ -83,23 +120,24 @@ o Some optimizations from Joe Marshall for Allegro.  Allegro
 o Make series work with Allegro in modern mode (case-sensitive
   reader).
 
-(2.2.6 was never released)
 
-Series 2.2.5 Release Notes
---------------------------
+* Series 2.2.6 was never released
+
+
+* Series 2.2.5 Release Notes
+
 o Fixed a bug in scan-stream returning the wrong stuff.
 
-Series 2.2.4 Release Notes
---------------------------
+
+* Series 2.2.4 Release Notes
 
 o Fixed a bug wherein Clisp fails on test 530.  (Some variables were
   sharing structure?)  Clisp passes all tests now.
-
 o Made changes to support MCL.  MCL now passes all tests.  (Thanks to
   Rainer Joswig for testing and debugging this version!)
 
-Series 2.2.3 Release Notes
---------------------------
+
+* Series 2.2.3 Release Notes
 
 Two small bugs are fixed in this release:
 
@@ -107,11 +145,10 @@ Two small bugs are fixed in this release:
    (See Bug #108331.)
 2. scan fails sometimes when scanning a constant. (See Bug #113625.)
 
-Series 2.2.2 Release Notes
---------------------------
 
-***NEW SPECIFICATION RESTRICTIONS***
-------------------------------------
+* Series 2.2.2 Release Notes
+
+NEW SPECIFICATION RESTRICTIONS
 
 1. The consequences of using the gatherers introduced by GATHERING
    outside the dynamic scope of the form are now explicitly stated to
