@@ -8,51 +8,22 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.37 1999/10/04 17:46:55 toy Exp $
+;;;; $Id: s-code.lisp,v 1.38 2000/01/20 18:19:21 toy Exp $
 ;;;;
-;;;; This is a modified version of Richard Water's Series package,
-;;;; based on his November 26, 1991 version.
+;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
-;;;; Revision 1.37  1999/10/04 17:46:55  toy
-;;;; o The backquoting of make-sequence added in 1.35 is wrong, I think.
-;;;;   To make it worse, I lost my test cases that caused me to do this.
-;;;;   Stupid!
+;;;; Revision 1.38  2000/01/20 18:19:21  toy
+;;;; Merged 1.32.2.2 (Fernando's changes) with 1.37.
+;;;; I hope I got this right.
 ;;;;
-;;;; o Updated a few doc strings.  Should really add some more so that
-;;;;   series is a little bit more self-documenting.
+;;;; Revision 1.32.2.2  2000/01/20 18:05:26  toy
+;;;; Merged the changes between 1.32 and 1.37 into this revision.
+;;;; This should merge my changes with Fernando's.
 ;;;;
-;;;; Revision 1.36  1999/09/15 14:30:55  toy
-;;;; The change in 1.17 for scan-range was backwards: The CMUCL version
-;;;; should get the coercion stuff and the non-CMUCL version shouldn't.
-;;;; (Hmm, should I remove this dependency on platform?  Probably.)
-;;;;
-;;;; Revision 1.35  1999/09/15 14:11:29  toy
-;;;; Backed out the changes in INIT-ELEM:  they were mostly correct I
-;;;; think.  Just needed to stick a backquote before the make-sequence
-;;;; stuff so we create the sequences at run-time, not compile-time.
-;;;;
-;;;; Revision 1.34  1999/09/14 21:25:01  toy
-;;;; o  Some changes to init-elem:  Test for array before sequence.  Then,
-;;;;    if it's an array, use `(make-array ...) for the initializer.  I
-;;;;    think this is needed because specialized arrays can't be printed
-;;;;    readably, and we need correct initializer for specialized arrays.
-;;;;
-;;;;    This probably needs some additional work.
-;;;;
-;;;; o  Removed some unused variables from collect-stream.
-;;;;
-;;;; Revision 1.33  1999/09/14 20:17:52  toy
-;;;; o Added collect-stream.  Same as collect-file, except the results go
-;;;;   to a stream instead of a new file.
-;;;;
-;;;; o I received an updated version (09/02/92) from James Bushnell who got
-;;;;   it from Richard Waters.  I quick diff indicates that the only real
-;;;;   change was renaming collect, mask, and until were renamed collect-s,
-;;;;   mask-s, and until-s, respectively.  Apparently this was to prevent
-;;;;   conflicts with loop clauses (until and collect).  (Don't know about
-;;;;   mask-s).  However, I'm not going to make these changes (yet?)
-;;;;   because it will break any existing code.
+;;;; Revision 1.32.2.1  2000/01/20 17:51:45  toy
+;;;; Checking in the changes from Fernando Mato Mira <matomira@iname.com>
+;;;; with the hope of merging our two versions together.
 ;;;;
 ;;;; Revision 1.32  1999/07/02 20:37:39  toy
 ;;;; Moved the package stuff out to a separate file.
@@ -281,6 +252,10 @@
 ;The companion file "SDOC.TXT" contains brief documentation.
 
 
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
+	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
+					  :load-toplevel
+					  :execute)
 #+(or Series-ANSI)
 (in-package "SERIES")
 
@@ -288,7 +263,12 @@
 (progn
   (in-package "SERIES" :use '("LISP"))
   (shadow '(let let* multiple-value-bind funcall defun)))
+) ; end of eval-when
 
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
+	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
+					  :load-toplevel
+					  :execute)
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
@@ -311,6 +291,94 @@
 
 (defvar *series-implicit-map* nil 
   "T enables implicit mapping in optimized expressions")
+
+) ; end of eval-when
+
+
+;;; Generic stuff that should be moved to/imported from EXTENSIONS
+
+(cl:defun atom-or-car (x)
+  (if (listp x)
+      (car x)
+    x))
+
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
+	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
+					  :load-toplevel
+					  :execute)
+(cl:defun nsubst-inline (new-list old list &optional (save-spot nil))
+  (cl:let ((tail (member old list)))
+    (cond ((not tail) old)
+	  (save-spot (rplacd tail (nconc new-list (cdr tail))))
+	  (new-list (rplaca tail (car new-list))
+		    (rplacd tail (nconc (cdr new-list) (cdr tail))))
+	  ((cdr tail) (rplaca tail (cadr tail))
+		      (rplacd tail (cddr tail)))
+	  (T (setq list (nbutlast list)))))
+    list)
+
+  ;;Making unique variables.
+  ;;Each call on this uses a different atom, so that you can tell
+  ;;where a given variable came from when debugging.
+  (cl:defun new-var (atom)
+    (cl:let ((root (string atom)))
+      (if (not (eql (aref root (1- (length root))) #\-))
+	  (setq root (concatenate 'string root "-")))
+      (gensym root)))
+) ; end of eval-when
+
+(cl:defun n-gensyms (n root)
+  (do ((i n (1- i))
+       (l nil (cons (gensym root) l)))
+      ((zerop i) l)))
+
+(cl:defun variable-p (thing)
+  (and thing (symbolp thing) (not (eq thing T)) (not (keywordp thing))))
+
+(cl:defun simple-quoted-lambda (form)
+  (and (eq-car form 'function) (eq-car (cadr form) 'lambda)
+       (every #'variable-p (cadr (cadr form)))))
+
+;; Make a type specifier of the form: (or FOO NULL)
+(cl:defun type-or-null (typ)
+  `(or ,typ null))
+
+;; Make a type specifier of the form: (or FOO (list FOO))
+(cl:defun type-or-list-of-type (typ)
+  `(or ,typ list))
+
+(cl:defun never (&rest stuff) (declare (ignore stuff)) nil)
+
+(cl:defun make-general-setq (vars value)
+  (cond ((= (length vars) 0) value)
+	((= (length vars) 1) `(setq ,(car vars) ,value))
+	((and (eq-car value 'values)
+	      (= (length (cdr value)) (length vars)))
+	 `(psetq ,@(mapcan #'list vars (cdr value))))
+	(T `(multiple-value-setq ,vars ,value))))
+
+(cl:defun pos (&rest bools)
+  (do ((bs bools (cdr bs))
+       (i 0 (1+ i)))
+      ((null bs) i)
+    (if (car bs) (return i))))
+
+(cl:defun pos-if (item &rest fns)
+  (do ((fs fns (cdr fs))
+       (i 0 (1+ i)))
+      ((null fs) i)
+    (if (cl:funcall (car fs) item) (return i))))
+
+(cl:defun forceL (n list)
+  (if (= n (length list)) list
+      (cl:let* ((new (make-list n :initial-element nil))
+		  (ptr new))
+	(do ((i (min n (length list)) (1- i))) ((zerop i))
+	  (setf (car ptr) (pop list))
+	  (pop ptr))
+	new)))
+
+;;;; SERIES-specific code
 
 (cl:defun install (&key (pkg *package*) (macro T) (shadow T) (implicit-map nil)
 			  (remove nil))
@@ -337,8 +405,7 @@
 	(and ext
 	     (unintern 'collect ext)
 	     (unintern 'iterate ext))
-	(unintern 'series "COMMON-LISP-USER"))
-      
+	(unintern 'series "COMMON-LISP-USER"))      
       (use-package "SERIES" pkg)
       (when shadow (shadowing-import *series-forms* pkg))))
   (when (and remove (member (find-package "SERIES") (package-use-list pkg)))
@@ -347,15 +414,18 @@
       (unintern sym pkg)))
   T)
 
-;Internally used special variables.  Every one is collected here except some
-;scan templates used in macro expansion.
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (eval load compile)
+	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
+					  :load-toplevel
+					  :execute)
+;;Internally used special variables.  Every one is collected here except some
+;;scan templates used in macro expansion.
 
 (defvar *optimize-series-expressions* T)
 (defvar *in-series-expr* nil "the topmost series expression")
 (defvar *testing-errors* nil "Used only be the file of tests")
 (defvar *not-straight-line-code* nil "not-nil if nested in non-straight-line code")
 
-(eval-when (eval load compile) 
   (proclaim
     '(special *graph*                   ;list of frags in expression
 	      *renames*                 ;alist of variable renamings
@@ -364,7 +434,12 @@
 	      *call*                    ;bound to whole form when running optimizer
 	      *being-setqed*            ;T if in the assignment part of a setq
 	      *fn*                      ;FN being scanned over code
-	      *type*)))                 ;Communicates types to frag instantiations
+	      *type*))                  ;Communicates types to frag instantiations
+
+;; DEBUG
+;; With these two assigments you can use (SERIES::PROCESS-TOP <quoted form>) to view series expansions
+;;(setq *renames* nil)
+;;(setq *env* nil)
 
 ;*renames* has three kinds of entries on it.  Each is a cons of a
 ;variable and something else:  (type 1 cannot ever be setqed.)
@@ -384,8 +459,6 @@
 (defvar *standard-function-reader* (get-dispatch-macro-character #\# #\'))
 
 ;;;;             ---- UTILITIES FOR MANIPULATING FRAGMENTS ----
-
-(eval-when (eval load compile)
 
 (defvar end 'END "used to force copying of frag lists")
 
@@ -591,16 +664,6 @@
   (when mask
     (setq body `((when (marked-p ,(car mask) ,var) ,@ body))))
   `(dolist (,var *graph*) ,@ body))
-
-;Making unique variables.
-;Each call on this uses a different atom, so that you can tell
-;where a given variable came from when debugging.
-
-(cl:defun new-var (atom)
-  (cl:let ((root (string atom)))
-    (if (not (eql (aref root (1- (length root))) #\-))
-	(setq root (concatenate 'string root "-")))
-    (gensym root)))
 
 ;many of the functions in this file depend on the fact that frags and
 ;syms are list structures.  However, only the following functions
@@ -756,7 +819,9 @@
 
 (cl:defun yes (call) (declare (ignore call)) T)
 (cl:defun no (call) (declare (ignore call)) nil)
+
 );end of eval-when
+
 
 ;                ---- FUNCTIONS FOR CODE WALKING ----
 
@@ -792,6 +857,24 @@
 (defvar *expr-template* (make-template (Q) (E)))
 
 (defvar *eval-all-template* (make-template () (E)))
+
+(cl:defun report-error (info)
+  (setq *last-series-error* info)
+  (loop (if (null info) (return nil))
+	(if (stringp (car info))
+	    (format *error-output* (pop info))
+	    (write (pop info) :stream *error-output* :escape T :pretty T
+			      :level nil :length nil :case :upcase))))
+
+(cl:defun rrs (id &rest args) ;Restriction violations.
+  (when (not *suppress-series-warnings*)
+    (report-error (list* "~&Restriction violation " id
+			 " in series expression:~%"
+			 (or *in-series-expr* *not-straight-line-code*)
+			 (copy-list args)))
+    (when (not *testing-errors*)
+      (warn "")))
+  (throw :series-restriction-violation nil))
 
 ;on lispm '(lambda ...) macroexpands to (function (lambda ...)) ugh!
 
@@ -852,6 +935,19 @@
     (m-&-r1 code)))
 
 (defvar *fexprs-not-handled* '(FLET LABELS MACROLET))
+
+(defvar *expr-like-special-forms* 
+  '(multiple-value-call multiple-value-prog1 progn progv the throw
+    ;;some simple additions for lispm
+    *catch multiple-value-return progw return-list 
+    variable-boundp variable-location variable-makunbound)
+  "special forms that can be treated like ordinary functions.
+   e.g., they have the same template as expr-template.")
+
+(cl:defun not-expr-like-special-form-p (sym)
+  (and #-Series-ANSI(special-form-p sym)
+       #+Series-ANSI(special-operator-p sym)
+       (not (member sym *expr-like-special-forms*))))
 
 (cl:defun m-&-r1 (code)
   (cl:let ((*renames* *renames*))
@@ -980,18 +1076,6 @@
 
 (deft                  setf (Q)    (E))   ;fixes weird interaction with lispm setf 
 
-(defvar *expr-like-special-forms* 
-  '(multiple-value-call multiple-value-prog1 progn progv the throw
-    ;;some simple additions for lispm
-    *catch multiple-value-return progw return-list 
-    variable-boundp variable-location variable-makunbound)
-  "special forms that can be treated like ordinary functions.
-   e.g., they have the same template as expr-template.")
-
-(cl:defun not-expr-like-special-form-p (sym)
-  (and #-Series-ANSI(special-form-p sym)
-       #+Series-ANSI(special-operator-p sym)
-       (not (member sym *expr-like-special-forms*))))
 #+symbolics
 (eval-when (eval load)
 (cl:defun WSLB (list)
@@ -1000,17 +1084,27 @@
 (deft   scl:WITH-STACK-LIST (Q WSLB) (E))
 (deft  scl:WITH-STACK-LIST* (Q WSLB) (E)))
 
-;This macro-expands everything in the code making sure that all free
-;variables (that are not free in the whole series expression)
-;are appropriately changed to gensyms.  It returns the new code plus
-; (a) list of pairs of internal var gensyms and external values.
-;     Typically, dflow should be inserted from the external values to
-;     ports made with these gensyms.
-; (b) list of pairs of output gensyms and the actual var names they modify.
-; (c) list of vars from the list CHECK-SETQ that are setqed.
-; If the state argument is supplied, it contains lists of input and output
-; info that is used to initialize things.
-;error messages are issued if a series value is used in an improper context.
+;;Have to be careful not to macroexpand things twice.
+;;If you did, you could get two copies of some frags on *graph*.
+;;Note that a type of '* means any number of arguments.
+(cl:defun retify (code &optional (type T))
+  (if (sym-p code) code ;might have been retified/fragified before.
+      (cl:let* ((expansion (my-macroexpand code))
+		  (ret (if (symbolp expansion)
+			   (cdr (assoc expansion *renames*)))))
+        (if (sym-p ret) ret (car (rets (fragify expansion type)))))))
+
+;;This macro-expands everything in the code making sure that all free
+;;variables (that are not free in the whole series expression)
+;;are appropriately changed to gensyms.  It returns the new code plus
+;; (a) list of pairs of internal var gensyms and external values.
+;;     Typically, dflow should be inserted from the external values to
+;;     ports made with these gensyms.
+;; (b) list of pairs of output gensyms and the actual var names they modify.
+;; (c) list of vars from the list CHECK-SETQ that are setqed.
+;; If the state argument is supplied, it contains lists of input and output
+;; info that is used to initialize things.
+;;error messages are issued if a series value is used in an improper context.
 
 (cl:defun handle-non-series-stuff (code &optional (state nil) (check-setq nil))
   (cl:let ((free-ins (car state)) (free-outs (cadr state)) (setqed nil))
@@ -1202,19 +1296,20 @@
 (cl:defun image-of-datum-th (g datum)
   (nth datum (basic-do-next-in g)))
 
-(cl:defun values-lists (n series-of-lists &optional (alterers nil))
-  (values-list
-    (mapcar #'(lambda (i)
-		(make-image-series :alter-fn (pop alterers)
-				   :image-fn #'image-of-datum-th
-				   :image-datum i
-				   :image-base series-of-lists))
-	    (n-integers n))))
+  (cl:defun n-integers (n)
+    (do ((i (1- n) (1- i))
+	 (l nil (cons i l)))
+	((minusp i) l)))
 
-(cl:defun n-integers (n)
-  (do ((i (1- n) (1- i))
-       (l nil (cons i l)))
-      ((minusp i) l)))
+  (cl:defun values-lists (n series-of-lists &optional (alterers nil))
+    (values-list
+     (mapcar #'(lambda (i)
+		 (make-image-series :alter-fn (pop alterers)
+				    :image-fn #'image-of-datum-th
+				    :image-datum i
+				    :image-base series-of-lists))
+	     (n-integers n))))
+
 
 (cl:defun print-series (series stream depth)
   (cl:let ((generator (generator series)))
@@ -1229,91 +1324,82 @@
                :level (if *print-level* (- *print-level* depth)))))
     (write-char #\) stream)))
 
-;This is used to allow a fragment to accept a physical series in lieu of
-;one computed be another frag.
+  ;;alter-info has priority
 
-(cl:defun add-physical-interface (arg)
-  (cl:let ((frag (fr arg))
+  (cl:defun out-value (ret alter-prop flag-off-line?)
+    (cl:let* ((var (var ret))
+	      (alter-info (cdr (assoc var (alterable (fr ret))))))
+      (values (cond (alter-info `(list ,var ,@ (cdr alter-info)))
+		    (alter-prop `(do-alter-prop ,var ,(cdr alter-prop)))
+		    ((and flag-off-line? (off-line-spot ret)) `(list ,var))
+		    (T var))
+	      (cond (alter-info
+		     (cl:let ((alter (new-var 'alter)))
+		       `#'(lambda (,alter ,@(cdr alter-info))
+			    ,(subst alter '*alt* (car alter-info)))))
+		    (alter-prop `(alter-fn ,(car alter-prop)))))))
+
+
+  ;;This is used to allow a fragment to accept a physical series in lieu of
+  ;;one computed be another frag.
+
+  (cl:defun add-physical-interface (arg)
+    (cl:let ((frag (fr arg))
 	     (var (var arg))
 	     (off-line-spot (off-line-spot arg))
 	     (off-line-exit (off-line-exit arg))
 	     (series (new-var 'series))
 	     (generator (new-var 'generator)))
-    (setf (var arg) series)
-    (setf (series-var-p arg) nil)
-    (setf (off-line-spot arg) nil)
-    (setf (off-line-exit arg) nil)
-    (push (list var T) (aux frag))
-    (push `(setq ,generator (generator ,series)) (prolog frag))
-    (push (list generator T) (aux frag))
-    (if (not off-line-spot)
-	(push `(setq ,var (next-in ,generator (go ,END))) (body frag))
+      (setf (var arg) series)
+      (setf (series-var-p arg) nil)
+      (setf (off-line-spot arg) nil)
+      (setf (off-line-exit arg) nil)
+      (push (list var T) (aux frag))
+      (push `(setq ,generator (generator ,series)) (prolog frag))
+      (push (list generator T) (aux frag))
+      (if (not off-line-spot)
+	  (push `(setq ,var (next-in ,generator (go ,END))) (body frag))
 	(setf (body frag)
 	      (nsubst-inline
-		`((setq ,var (next-in ,generator
-				      (go ,(cond (off-line-exit) (T END))))))
-		off-line-spot (body frag))))
-    generator))
+	       `((setq ,var (next-in ,generator
+				     (go ,(cond (off-line-exit) (T END))))))
+	       off-line-spot (body frag))))
+      generator))
 
-;This turns a series output into a non-series output returning a physical series.
-;(Note this assumes that if alterability is being propogated, the corresponding
-;input has already been changed using add-physical-interface.  Alter-prop is a
-;cons of the new input var (a physical series) and the var holding the generator.)
 
-(cl:defun add-physical-out-interface (ret alter-prop)
-  (cl:let* ((frag (fr ret))
-	    (off-line-spot (off-line-spot ret))
-	    (new-list (new-var 'list))
-	    (new-out (new-var 'out)))
-    (cl:multiple-value-bind (out-value alterer) (out-value ret alter-prop nil)
-      (cl:let* ((new-body-code `((push ,out-value ,new-list)))
-		(new-epilog-code
-		  `(setq ,new-out (make-phys :data-list (nreverse ,new-list)
-                                             :alter-fn ,alterer))))
-	(setf (var ret) new-out)
-	(setf (series-var-p ret) nil)
-	(setf (off-line-spot ret) nil)
-	(push (list new-list 'list) (aux frag))
-	(push (list new-out 'series) (aux frag))
-	(push `(setq ,new-list '()) (prolog frag))
-	(if (not off-line-spot)
-	    (setf (body frag) (nconc (body frag) new-body-code))
+  ;;This turns a series output into a non-series output returning a physical series.
+  ;;(Note this assumes that if alterability is being propogated, the corresponding
+  ;;input has already been changed using add-physical-interface.  Alter-prop is a
+  ;;cons of the new input var (a physical series) and the var holding the generator.)
+
+  (cl:defun add-physical-out-interface (ret alter-prop)
+    (cl:let* ((frag (fr ret))
+	      (off-line-spot (off-line-spot ret))
+	      (new-list (new-var 'list))
+	      (new-out (new-var 'out)))
+      (cl:multiple-value-bind (out-value alterer) (out-value ret alter-prop nil)
+        (cl:let* ((new-body-code `((push ,out-value ,new-list)))
+		  (new-epilog-code
+		   `(setq ,new-out (make-phys :data-list (nreverse ,new-list)
+					      :alter-fn ,alterer))))
+	  (setf (var ret) new-out)
+	  (setf (series-var-p ret) nil)
+	  (setf (off-line-spot ret) nil)
+	  (push (list new-list 'list) (aux frag))
+	  (push (list new-out 'series) (aux frag))
+	  (push `(setq ,new-list '()) (prolog frag))
+	  (if (not off-line-spot)
+	      (setf (body frag) (nconc (body frag) new-body-code))
 	    (setf (body frag)
 		  (nsubst-inline new-body-code off-line-spot (body frag))))
-	(push new-epilog-code (epilog frag))
-	frag))))
-
+	  (push new-epilog-code (epilog frag))
+	  frag))))
 
-;alter-info has priority
-
-(cl:defun out-value (ret alter-prop flag-off-line?)
-  (cl:let* ((var (var ret))
-	      (alter-info (cdr (assoc var (alterable (fr ret))))))
-    (values (cond (alter-info `(list ,var ,@ (cdr alter-info)))
-		  (alter-prop `(do-alter-prop ,var ,(cdr alter-prop)))
-		  ((and flag-off-line? (off-line-spot ret)) `(list ,var))
-		  (T var))
-	    (cond (alter-info
-		   (cl:let ((alter (new-var 'alter)))
-		     `#'(lambda (,alter ,@(cdr alter-info))
-			  ,(subst alter '*alt* (car alter-info)))))
-		  (alter-prop `(alter-fn ,(car alter-prop)))))))
 
 (cl:defun do-alter-prop (value gen)
   (if (alter-fn (gen-base gen))
       (cons value (current-alter-info gen))
       value))
-
-(cl:defun nsubst-inline (new-list old list &optional (save-spot nil))
-  (cl:let ((tail (member old list)))
-    (cond ((not tail) old)
-	  (save-spot (rplacd tail (nconc new-list (cdr tail))))
-	  (new-list (rplaca tail (car new-list))
-		    (rplacd tail (nconc (cdr new-list) (cdr tail))))
-	  ((cdr tail) (rplaca tail (cadr tail))
-		      (rplacd tail (cddr tail)))
-	  (T (setq list (nbutlast list)))))
-    list)
 
 ;This is used when optimization is not possible.
 ;It makes one main physical frag that computes the series returned by frag.
@@ -1321,30 +1407,56 @@
 ; created to pick the right values out.)
 ;It assumes that actual-args must be a list of variables.
 
-(cl:defun frag->physical (frag actual-args &optional (force-precompute? nil))
-  (cl:let ((alter-prop-alist
-	       (mapcar #'(lambda (a actual)
-			   (prog1 (when (series-var-p a)
-				    (list* (var a) actual
-					   (add-physical-interface a)))
-				  (nsubst actual (var a) frag)))
-		       (args frag) actual-args)))
-    (setf (args frag) nil)
-    (if (or force-precompute? (wrappers frag)
-	    (some #'(lambda (r) (not (series-var-p r))) (rets frag)))
-	(precompute-frag->physical frag alter-prop-alist)
-	(series-frag->physical frag alter-prop-alist))))
+  (cl:defun precompute-frag->physical (frag alter-prop-alist)
+    (dolist (r (rets frag))
+      (when (series-var-p r)
+	(add-physical-out-interface r (cdr (assoc (var r) alter-prop-alist)))))
+    (cl:let ((*last-series-loop* nil) (*user-names* nil))
+      (declare (special *last-series-loop* *user-names*))
+      (codify frag)))
 
-(cl:defun precompute-frag->physical (frag alter-prop-alist)
-  (dolist (r (rets frag))
-    (when (series-var-p r)
-      (add-physical-out-interface r (cdr (assoc (var r) alter-prop-alist)))))
-  (cl:let ((*last-series-loop* nil) (*user-names* nil))
-    (declare (special *last-series-loop* *user-names*))
-    (codify frag)))
-
+  (cl:defun f->p-off-line (i frag new-out out-values done flag)
+    (cl:let* ((ret (nth i (rets frag)))
+	      (off-line-spot (off-line-spot ret))
+	      (restart (new-var 'restart))
+	      (out-value (if (null (cdr out-values)) (car out-values)
+			   `(list ,@(mapcar #'(lambda (r o)
+						(when (eq r ret) o))
+					    (rets frag) out-values))))
+	      (new-body-code `((setq ,new-out (cons ,out-value T))
+			       (setq ,flag ,i)
+			       (go ,done)
+			       ,restart)))
+      (push `(if (= ,flag ,i) (go ,restart)) (body frag))
+      (setf (body frag) (nsubst-inline new-body-code off-line-spot (body frag)))))
+
+  (cl:defun f->p-on-line (frag new-out out-values done flag)
+    (cl:let* ((out-value (if (null (cdr out-values)) (car out-values)
+			   `(list ,@(mapcar #'(lambda (r o)
+						(when (not (off-line-spot r)) o))
+					    (rets frag) out-values))))
+	      (new-body-code `((setq ,new-out (cons ,out-value T))
+			       ,@(if flag `((setq ,flag -1)))
+			       (go ,done))))
+      (setf (body frag) (nconc (body frag) new-body-code))))
+
+  (cl:defun image-of-non-null-datum-th (g datum)
+    (cl:let (item)
+      (loop (setq item (nth datum (basic-do-next-in g)))
+	(if (or (null (gen-state g)) (not (null item))) (return item)))))
+
+  (cl:defun car-image-of-non-null-datum-th (g datum)
+    (car (image-of-non-null-datum-th g datum)))
+
+  (cl:defun codify-1 (aux code)
+    (multiple-value-setq (aux code) (clean-code aux code))
+    (when aux
+      (cl:let ((dcls (clean-dcls aux)))
+        (if dcls (push `(declare ,@ dcls) code))))
+    `(cl:let ,(mapcar #'aux-init aux) ,@ code))
+
 (cl:defun series-frag->physical (frag alter-prop-alist)
-  (cl:let* ((out-values nil)
+    (cl:let* ((out-values nil)
 	      (alterers nil)
 	      (done-on-line nil)
 	      (new-out (new-var 'item))
@@ -1352,87 +1464,68 @@
 	      (done (new-var 'done))
 	      (flag (if (some #'off-line-spot (rets frag)) (new-var 'flag)))
 	      (label (if flag (new-var 'l))))
-    (dolist (r (reverse (rets frag)))
-      (cl:multiple-value-bind (out-value alterer)
+      (dolist (r (reverse (rets frag)))
+	(cl:multiple-value-bind (out-value alterer)
 	  (out-value r (cdr (assoc (var r) alter-prop-alist)) (not (= n 1)))
-	(push out-value out-values)
-	(push alterer alterers)))
-    (when flag
-      (push `(setq ,flag -1) (prolog frag))
-      (push (list flag 'fixnum) (aux frag))
-      (push label (body frag)))
-    (dotimes (i n)
-      (cond ((off-line-spot (nth i (rets frag)))
-	     (f->p-off-line i frag new-out out-values done flag))
-	    ((not done-on-line)
-	     (setq done-on-line T)
-	     (f->p-on-line frag new-out out-values done flag))))
-    (cl:let* ((basic-out (new-var 'series-of-lists))
+	  (push out-value out-values)
+	  (push alterer alterers)))
+      (when flag
+	(push `(setq ,flag -1) (prolog frag))
+	(push (list flag 'fixnum) (aux frag))
+	(push label (body frag)))
+      (dotimes (i n)
+	(cond ((off-line-spot (nth i (rets frag)))
+	       (f->p-off-line i frag new-out out-values done flag))
+	      ((not done-on-line)
+	       (setq done-on-line T)
+	       (f->p-on-line frag new-out out-values done flag))))
+      (cl:let* ((basic-out (new-var 'series-of-lists))
 		(code `(make-phys
-			 :alter-fn ,(if (= n 1) (car alterers))
-			 :gen-fn #'(lambda ()
-				     (cl:let (,new-out)
-				       (tagbody ,@ (body frag)
-						,@(if (and flag (not done-on-line))
-						      `((go ,label)))
-						,END ,@(epilog frag)
-						(setq ,new-out nil)
-						,DONE)
-				       ,new-out)))))
-      (when (not (= n 1))
-	(setq code
-	      `(cl:let ((,basic-out ,code))
-		 (values
-		   ,@(mapcar
+			:alter-fn ,(if (= n 1) (car alterers))
+			:gen-fn #'(lambda ()
+				    (cl:let (,new-out)
+				      (tagbody ,@ (body frag)
+					       ,@(if (and flag (not done-on-line))
+						     `((go ,label)))
+					       ,END ,@(epilog frag)
+					       (setq ,new-out nil)
+					       ,DONE)
+					    ,new-out)))))
+	(when (not (= n 1))
+	  (setq code
+		`(cl:let ((,basic-out ,code))
+		   (values
+		    ,@(mapcar
 		       #'(lambda (i r a)
 			   `(make-image-series
-			      :alter-fn ,a
-			      :image-base ,basic-out
-			      :image-datum ,i
-			      :image-fn ,(cond ((and (not a) (off-line-spot r))
-						'#'car-image-of-non-null-datum-th)
-					       ((notany #'off-line-spot (rets frag))
-						'#'image-of-datum-th)
-					       (T '#'image-of-non-null-datum-th))))
+			     :alter-fn ,a
+			     :image-base ,basic-out
+			     :image-datum ,i
+			     :image-fn ,(cond ((and (not a) (off-line-spot r))
+					       '#'car-image-of-non-null-datum-th)
+					      ((notany #'off-line-spot (rets frag))
+					       '#'image-of-datum-th)
+					      (T '#'image-of-non-null-datum-th))))
 		       (n-integers n) (rets frag) alterers)))))
-      (codify-1 (aux frag) `(,@(prolog frag) ,code)))))
-
-(cl:defun image-of-non-null-datum-th (g datum)
-  (cl:let (item)
-    (loop (setq item (nth datum (basic-do-next-in g)))
-	  (if (or (null (gen-state g)) (not (null item))) (return item)))))
+	(codify-1 (aux frag) `(,@(prolog frag) ,code)))))
 
-(cl:defun car-image-of-non-null-datum-th (g datum)
-  (car (image-of-non-null-datum-th g datum)))
-
-(cl:defun f->p-off-line (i frag new-out out-values done flag)
-  (cl:let* ((ret (nth i (rets frag)))
-	      (off-line-spot (off-line-spot ret))
-	      (restart (new-var 'restart))
-	      (out-value (if (null (cdr out-values)) (car out-values)
-			     `(list ,@(mapcar #'(lambda (r o)
-						  (when (eq r ret) o))
-					      (rets frag) out-values))))
-	      (new-body-code `((setq ,new-out (cons ,out-value T))
-			       (setq ,flag ,i)
-			       (go ,done)
-			       ,restart)))
-    (push `(if (= ,flag ,i) (go ,restart)) (body frag))
-    (setf (body frag) (nsubst-inline new-body-code off-line-spot (body frag)))))
-
-(cl:defun f->p-on-line (frag new-out out-values done flag)
-  (cl:let* ((out-value (if (null (cdr out-values)) (car out-values)
-			     `(list ,@(mapcar #'(lambda (r o)
-						  (when (not (off-line-spot r)) o))
-					      (rets frag) out-values))))
-	      (new-body-code `((setq ,new-out (cons ,out-value T))
-			       ,@(if flag `((setq ,flag -1)))
-			       (go ,done))))
-    (setf (body frag) (nconc (body frag) new-body-code))))
+  (cl:defun frag->physical (frag actual-args &optional (force-precompute? nil))
+    (cl:let ((alter-prop-alist
+	      (mapcar #'(lambda (a actual)
+			  (prog1 (when (series-var-p a)
+				   (list* (var a) actual
+					  (add-physical-interface a)))
+			    (nsubst actual (var a) frag)))
+		      (args frag) actual-args)))
+      (setf (args frag) nil)
+      (if (or force-precompute? (wrappers frag)
+	      (some #'(lambda (r) (not (series-var-p r))) (rets frag)))
+	  (precompute-frag->physical frag alter-prop-alist)
+	(series-frag->physical frag alter-prop-alist))))
 
 );end of eval-when
-
 
+
 ;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
 
 ;The form below has to be called to set things up right, before
@@ -1461,16 +1554,6 @@
     (report-error (list* "~&Error " id (copy-list args))))
   (error ""))
 
-(cl:defun rrs (id &rest args) ;Restriction violations.
-  (when (not *suppress-series-warnings*)
-    (report-error (list* "~&Restriction violation " id
-			 " in series expression:~%"
-			 (or *in-series-expr* *not-straight-line-code*)
-			 (copy-list args)))
-    (when (not *testing-errors*)
-      (warn "")))
-  (throw :series-restriction-violation nil))
-
 (cl:defun wrs (id always-report-p &rest args) ;Warnings.
   (when (or always-report-p (not *suppress-series-warnings*))
     (report-error (list* "~&Warning " id
@@ -1481,98 +1564,6 @@
 			 (copy-list args)))
     (when (not *testing-errors*)
       (warn ""))))
-
-(cl:defun report-error (info)
-  (setq *last-series-error* info)
-  (loop (if (null info) (return nil))
-	(if (stringp (car info))
-	    (format *error-output* (pop info))
-	    (write (pop info) :stream *error-output* :escape T :pretty T
-			      :level nil :length nil :case :upcase))))
-
-;  This parses code down to fundamental chunks creating a graph of the
-;expression.  Note that macroexpanding and renaming is applied while
-;this happens.
-
-(cl:defun graphify (code &optional (return-type '*))
-  (cl:let ((*graph* nil))
-    (fragify code return-type)
-    *graph*))
-
-;Have to be careful not to macroexpand things twice.
-;If you did, you could get two copies of some frags on *graph*.
-;Note that a type of '* means any number of arguments.
-
-(cl:defun retify (code &optional (type T))
-  (if (sym-p code) code ;might have been retified/fragified before.
-      (cl:let* ((expansion (my-macroexpand code))
-		  (ret (if (symbolp expansion)
-			   (cdr (assoc expansion *renames*)))))
-        (if (sym-p ret) ret (car (rets (fragify expansion type)))))))
-
-(cl:defun fragify (code type)
-  (cl:let* ((expansion (my-macroexpand code))
-	      (ret (if (symbolp expansion) (cdr (assoc expansion *renames*))))
-	      (types (decode-type-arg type T)))
-    (coerce-to-types types
-                     (cond ((frag-p expansion) expansion) ;must always make a new frag
-                           ((sym-p ret) (annotate code (pass-through-frag (list ret))))
-                           ((eq-car expansion 'the)
-                            (fragify (caddr expansion) (cadr expansion)))
-                           ((eq-car expansion 'values)
- 			    ;; It used to map over the cdr of CODE here, which is
- 			    ;; obviously not right -- for instance in the case where
- 			    ;; (NTH-VALUE 0 x) --> (VALUES x) but it maps over (0 x)
- 			    ;; and then thinks there is more than one value.  However
- 			    ;; I'm not sure it's right to just blithly map over the
- 			    ;; expansion either...
-			    (cl:let ((rets (mapcar #'(lambda (form)
-							 (car (rets (fragify form T))))
-						     (cdr expansion))))
-                              (when (and (cdr rets) (some #'series-var-p rets))
-                                (rrs 7 "~%VALUES returns multiple series:~%" code))
-                              (annotate code (pass-through-frag rets))))
-                           (T (annotate code (isolate-non-series
-                                              (if (listp types) (length types) 1)
-                                              expansion)))))))
-
-(cl:defun decode-type-arg (type &optional (allow-zero nil))
-  (cond ((eq type '*) '*)
-	((eq-car type 'values)
-	 (if (and (not allow-zero) (equal type '(values)))
-	     (ers 62
-	      "~%The type (VALUES) specified where at least one value required."))
-	 (subst T '* (cdr type)))
-	((and (not (symbolp type)) (functionp type))
-	 (ers 70 "~%Function supplied where type expected."))
-	(T (list type))))
-
-(cl:defun pass-through-frag (rets)
-  (cl:let ((frag (make-frag)))
-    (dolist (ret rets)
-      (cl:let* ((series-p (series-var-p ret))
-		  (in (new-var 'passin))
-		  (in-sym (make-sym :var in :series-var-p series-p))
-		  (out-sym (make-sym :var in :series-var-p series-p)))
-	(+arg in-sym frag)
-	(+ret out-sym frag)
-	(+dflow ret in-sym)))
-    (+frag frag)))
-
-(cl:defun coerce-to-types (types frag)
-  (when (not (eq types '*))
-    (cl:let ((n (length types))
-	       (current-n (length (rets frag))))
-      (cond ((= n current-n))
-	    ((< n current-n)
-	     (mapc #'(lambda (r) (when (not (free-out r)) (kill-ret r)))
-		   (nthcdr n (rets frag))))
-	    (T (dolist (v (n-gensyms (- n current-n) "XTRA-"))
-		 (+ret (make-sym :var v) frag)
-		 (push (list v T) (aux frag))
-		 (push `(setq ,v nil) (prolog frag)))))
-      (mapc #'coerce-to-type types (rets frag))))
-  frag)
 
 ;this is also used by PROTECT-FROM-SETQ in an odd way.
 (cl:defun coerce-to-type (type ret)
@@ -1588,14 +1579,80 @@
     (cl:let ((aux (assoc (var ret) (aux (fr ret)))))
       (if (and aux (not (subtypep (cadr aux) type)))
 	  (setf (cadr aux) type)))))
-
-;note that this does implicit mapping when appropriate.  Note also that it
-;only maps the absolute minimum necessary.  This is to ensure that things
-;will come out the same no matter how they were syntactically expresssed in
-;the input.  Also mapping of special forms other than if is not allowed.
-;If it were it could lead to all kinds of problems with binding scopes and
-;scopes for gos and the like.
 
+(cl:defun coerce-to-types (types frag)
+  (when (not (eq types '*))
+    (cl:let ((n (length types))
+	       (current-n (length (rets frag))))
+      (cond ((= n current-n))
+	    ((< n current-n)
+	     (mapc #'(lambda (r) (when (not (free-out r)) (kill-ret r)))
+		   (nthcdr n (rets frag))))
+	    (T (dolist (v (n-gensyms (- n current-n) "XTRA-"))
+		 (+ret (make-sym :var v) frag)
+		 (push (list v T) (aux frag))
+		 (push `(setq ,v nil) (prolog frag)))))
+      (mapc #'coerce-to-type types (rets frag))))
+  frag)
+
+;  This parses code down to fundamental chunks creating a graph of the
+;expression.  Note that macroexpanding and renaming is applied while
+;this happens.
+
+(cl:defun decode-type-arg (type &optional (allow-zero nil))
+  (cond ((eq type '*) '*)
+	((eq-car type 'values)
+	 (if (and (not allow-zero) (equal type '(values)))
+	     (ers 62
+	      "~%The type (VALUES) specified where at least one value required."))
+	 (subst T '* (cdr type)))
+	((and (not (symbolp type)) (functionp type))
+	 (ers 70 "~%Function supplied where type expected."))
+	(T (list type))))
+
+(cl:defun pass-through-frag (rets)
+  (cl:let ((frag (make-frag)))
+    (dolist (ret rets)
+      (cl:let* ((series-p (series-var-p ret))
+		  (in (new-var 'passin))
+		  (in-sym (make-sym :var in :series-var-p series-p))
+		  (out-sym (make-sym :var in :series-var-p series-p)))
+	(+arg in-sym frag)
+	(+ret out-sym frag)
+	(+dflow ret in-sym)))
+    (+frag frag)))
+
+;;note this can assume that the vars are gensyms that they only appear where
+;;they are really used. 
+;;HERE with the way if works, because it will not catch nested lets!
+(cl:defun map-exp (exp vars)
+  (cl:let ((prolog-exps nil)
+             (new-aux nil))
+    (labels ((map-exp0 (exp) ;can assume exp contains vars
+               (cond ((symbolp exp) exp)
+                     ((eq (car exp) 'if) exp)
+		     ((not-expr-like-special-form-p (car exp))
+                      (ers 99 "~%Implicit mapping cannot be applied to the special form "
+			   (car exp)))
+                     (T `(,(car exp)
+                          ,@(mapcar #'(lambda (x)
+                                        (cond ((contains-any vars x) (map-exp0 x))
+                                              ((or (symbolp x) (constantp x)
+						   (eq-car x 'function)) x)
+                                              (T (cl:let ((v (new-var 'M)))
+						   (push v new-aux)
+						   (push `(setq ,v ,x) prolog-exps)
+						   v))))
+                                    (cdr exp)))))))
+      (cl:let ((body-exp (map-exp0 exp)))
+        (values (nreverse prolog-exps) body-exp (nreverse new-aux))))))
+
+;;note that this does implicit mapping when appropriate.  Note also that it
+;;only maps the absolute minimum necessary.  This is to ensure that things
+;;will come out the same no matter how they were syntactically expresssed in
+;;the input.  Also mapping of special forms other than if is not allowed.
+;;If it were it could lead to all kinds of problems with binding scopes and
+;;scopes for gos and the like.
 (cl:defun isolate-non-series (n code)
   (cl:multiple-value-bind (exp free-ins free-outs)
       (handle-non-series-stuff code)
@@ -1631,66 +1688,38 @@
 	  (+ret new frag)
 	  (rplacd (assoc v *renames*) new)))
       (+frag frag))))
+
+(cl:defun fragify (code type)
+  (cl:let* ((expansion (my-macroexpand code))
+	      (ret (if (symbolp expansion) (cdr (assoc expansion *renames*))))
+	      (types (decode-type-arg type T)))
+    (coerce-to-types types
+                     (cond ((frag-p expansion) expansion) ;must always make a new frag
+                           ((sym-p ret) (annotate code (pass-through-frag (list ret))))
+                           ((eq-car expansion 'the)
+                            (fragify (caddr expansion) (cadr expansion)))
+                           ((eq-car expansion 'values)
+ 			    ;; It used to map over the cdr of CODE here, which is
+ 			    ;; obviously not right -- for instance in the case where
+ 			    ;; (NTH-VALUE 0 x) --> (VALUES x) but it maps over (0 x)
+ 			    ;; and then thinks there is more than one value.  However
+ 			    ;; I'm not sure it's right to just blithly map over the
+ 			    ;; expansion either...
+			    (cl:let ((rets (mapcar #'(lambda (form)
+							 (car (rets (fragify form T))))
+						     (cdr expansion))))
+                              (when (and (cdr rets) (some #'series-var-p rets))
+                                (rrs 7 "~%VALUES returns multiple series:~%" code))
+                              (annotate code (pass-through-frag rets))))
+                           (T (annotate code (isolate-non-series
+                                              (if (listp types) (length types) 1)
+                                              expansion)))))))
 
-;note this can assume that the vars are gensyms that they only appear where
-;they are really used. 
-;HERE with the way if works, because it will not catch nested lets!
+(cl:defun graphify (code &optional (return-type '*))
+  (cl:let ((*graph* nil))
+    (fragify code return-type)
+    *graph*))
 
-(cl:defun map-exp (exp vars)
-  (cl:let ((prolog-exps nil)
-             (new-aux nil))
-    (labels ((map-exp0 (exp) ;can assume exp contains vars
-               (cond ((symbolp exp) exp)
-                     ((eq (car exp) 'if) exp)
-		     ((not-expr-like-special-form-p (car exp))
-                      (ers 99 "~%Implicit mapping cannot be applied to the special form "
-			   (car exp)))
-                     (T `(,(car exp)
-                          ,@(mapcar #'(lambda (x)
-                                        (cond ((contains-any vars x) (map-exp0 x))
-                                              ((or (symbolp x) (constantp x)
-						   (eq-car x 'function)) x)
-                                              (T (cl:let ((v (new-var 'M)))
-						   (push v new-aux)
-						   (push `(setq ,v ,x) prolog-exps)
-						   v))))
-                                    (cdr exp)))))))
-      (cl:let ((body-exp (map-exp0 exp)))
-        (values (nreverse prolog-exps) body-exp (nreverse new-aux))))))
-
-(cl:defun n-gensyms (n root)
-  (do ((i n (1- i))
-       (l nil (cons (gensym root) l)))
-      ((zerop i) l)))
-
-(cl:defun make-general-setq (vars value)
-  (cond ((= (length vars) 0) value)
-	((= (length vars) 1) `(setq ,(car vars) ,value))
-	((and (eq-car value 'values)
-	      (= (length (cdr value)) (length vars)))
-	 `(psetq ,@(mapcan #'list vars (cdr value))))
-	(T `(multiple-value-setq ,vars ,value))))
-
-(cl:defun simple-quoted-lambda (form)
-  (and (eq-car form 'function) (eq-car (cadr form) 'lambda)
-       (every #'variable-p (cadr (cadr form)))))
-
-(defmacro defun (name lambda-list &environment *env* &body body)
-  (if (dolist (form body)
-        (cond ((and (stringp form) (eq form (car body))))
-              ((and (consp form) (eq-car form 'declare))
-               (if (assoc 'optimizable-series-function (cdr form)) (return T)))
-              (T (return nil))))
-    (define-optimizable-series-fn name lambda-list body)
-    (progn (undefine-optimizable-series-fn name)
-	   `(cl:defun ,name ,lambda-list
-	      . ,body))))
-
-#+symbolics(setf (gethash 'defun zwei:*lisp-indentation-offset-hash-table*)
-		 '(2 1))
-#+Symbolics
-(setf (get 'defun 'zwei:definition-function-spec-parser)
-      (get 'cl:defun 'zwei:definition-function-spec-parser))
 
 (cl:defun define-optimizable-series-fn (name lambda-list expr-list)
   "Defines a series function, see lambda-series."
@@ -1749,6 +1778,31 @@
 	   ,@(if decls `((declare ,@ decls)))
 	   (compiler-let ((*optimize-series-expressions* nil)) ,@ forms))))))
 
+
+(cl:defun undefine-optimizable-series-fn (name)
+  (when (symbolp name)
+    (remprop name 'series-optimizer)
+    (remprop name 'returns-series))
+  name)
+
+(defmacro defun (name lambda-list &environment *env* &body body)
+  (if (dolist (form body)
+        (cond ((and (stringp form) (eq form (car body))))
+              ((and (consp form) (eq-car form 'declare))
+               (if (assoc 'optimizable-series-function (cdr form)) (return T)))
+              (T (return nil))))
+    (define-optimizable-series-fn name lambda-list body)
+    (progn (undefine-optimizable-series-fn name)
+	   `(cl:defun ,name ,lambda-list
+	      . ,body))))
+
+#+symbolics(setf (gethash 'defun zwei:*lisp-indentation-offset-hash-table*)
+		 '(2 1))
+#+Symbolics
+(setf (get 'defun 'zwei:definition-function-spec-parser)
+      (get 'cl:defun 'zwei:definition-function-spec-parser))
+
+
 (cl:defun check-off-line-ports (frag vars off-line-ports)
   (do ((vars vars (cdr vars))
        (args (args frag) (cdr args)))
@@ -1766,12 +1820,6 @@
 	  (wrs 42 t "~%The " i "th output unexpectedly off-line."))
 	(when (member i off-line-ports)
 	  (wrs 43 t "~%The " i "th output unexpectedly on-line.")))))
-
-(cl:defun undefine-optimizable-series-fn (name)
-  (when (symbolp name)
-    (remprop name 'series-optimizer)
-    (remprop name 'returns-series))
-  name)
 
 (cl:defun vars-of (arg)
   (cond ((member arg lambda-list-keywords) nil)
@@ -2087,90 +2135,40 @@
 
 ;                           (3) DO SPLITTING
 
-;Splitting cuts up the graph at all of the correct places, and creates a
-;lisp expression which, when evaluated will merge everything together.
-;Things area done this way so that all of the splitting will happen
-;before any of the merging.  This makes error messages better and allows
-;all the right code motion to happen easily.
+;;;Splitting cuts up the graph at all of the correct places, and creates a
+;;;lisp expression which, when evaluated will merge everything together.
+;;;Things area done this way so that all of the splitting will happen
+;;;before any of the merging.  This makes error messages better and allows
+;;;all the right code motion to happen easily.
 
-(cl:defun do-splitting (*graph*)
-  (reset-marks 0)
-  (non-series-split *graph*))
-
-(defmacro doing-splitting (&body body)
-  `(cond ((null (cdr *graph*)) (list 'quote (car *graph*)))
-	 (T (reset-marks 1) (prog1 (progn ,@ body) (reset-marks 0)))))
-
-(defmacro doing-splitting1 (&body body)
-  `(cond ((null (cdr *graph*)) *graph*)
-	 (T (reset-marks 1) (prog1 (progn ,@ body) (reset-marks 0)))))
-
-;  The following breaks the expression up at all the points where there is no series
-;data flow between the subexpressions.  Non-series port isolation
-;guarantees that this split is possible, cutting only non-series dflows.
-;(If there is no data flow, you might not have to cut any data flow.)  If
-;*graph* is a complete expression (i.e., one that does not have any series
-;inputs or outputs overall), then the subexpressions cannot have external
-;series inputs or outputs.
-;  Non-series splitting typically breaks the expression up into a large
-;number of fragments.  Great care is taken to make sure that these
-;fragments will be reassembled without changing their order.  This is
-;important so that the user's side-effects will look reasonable.  Careful
-;attention has to be paid to the dflow constraints when figuring out where
-;to put the series subexpressions.  They are put where the last fn in them
-;suggests, within the limits of dflow.
-;  Note that the only way the user can write something that has some
-;side-effects is to write a side-effect expression that turns into a
-;non-series-computation (via isolate-non-series) or to write something in a
-;functional argument to a higher-order series function.  the functions here
-;make things come out pretty well in the first case; there is not much
-;anybody could do about the second case.
-
-(cl:defun non-series-split (*graph*)
-  (cl:let ((subexprs (disconnected-split *graph*)))
-    (setq subexprs (reorder-frags subexprs))
-    (cons 'non-series-merge-list
-	  (mapcar #'(lambda (s) (off-line-split s)) subexprs))))
-
-(cl:defun reorder-frags (form)
-  (cond ((eq-car form 'dflow) (mapcan #'reorder-frags (cdr form)))
-        ((eq-car form 'no-dflow)
-         (cl:let ((sublists (mapcar #'reorder-frags (cdr form)))
-		    (result nil) min-num min-sublist)
-           (setq sublists
-                 (mapcar #'(lambda (l) (cons (order-num (car l)) l)) sublists))
-           (loop (if (null (cdr sublists))
-                   (return (nreconc result (cdr (car sublists)))))
-                 (setq min-num (car (car sublists)) min-sublist (car sublists))
-                 (dolist (sub (cdr sublists))
-                   (when (< (car sub) min-num)
-                     (setq min-num (car sub) min-sublist sub)))
-                 (push (pop (cdr min-sublist)) result)
-                 (if (null (cdr min-sublist))
-                   (setq sublists (delete min-sublist sublists))
-                   (setf (car min-sublist) (order-num (cadr min-sublist)))))))
-        (T (list form))))
-
-(cl:defun order-num (frags)
-  (position (car (last frags)) *graph*))
-
-;We have to do non-dflow splitting and non-series-dflow-splitting separately
-;in order to get error messages about non-isolated non-series dflow right.
-;This breaks the expression up at points where there is no data flow
-;between the subexpressions.  Since the size of part1 is minimized it is
-;known that part1 must be fully connected.
-
-(cl:defun disconnected-split (*graph*)
-  (doing-splitting1
-    (cl:multiple-value-bind (part1 part2)
-	(split-after (car *graph*) #'(lambda (r a) (declare (ignore r a)) nil))
-      (cond ((null part2) (non-series-dflow-split part1))
-	    (T (setq part1 (non-series-dflow-split part1))
-	       (setq part2 (disconnected-split part2))
-	       `(no-dflow ,part1
-			  ,@(if (eq-car part2 'no-dflow)
-				(cdr part2)
-				(list part2))))))))
+;;This splits the graph by dividing it into two parts (part1 and part2)
+;;so that to-follow is in part1, there is no data flow from part2 to
+;;part1 and all of the data flow from part1 to part2 satisfies the
+;;predicate CROSSABLE.
+;;  The splitting is done by marker propagation (using the marker 2).
+;;The algorithm used has the effect of minimizing part1, which among
+;;other things, guarantees that it is fully connected.
+(cl:defun split-after (frag crossable)
+  (mark 2 frag)
+  (cl:let ((to-follow (list frag)))
+    (loop (if (null to-follow) (return nil))
+	  (cl:let ((frag (pop to-follow)))
+	    (dolist (a (args frag))
+	      (cl:let* ((r (prv a)))
+	       (when (= (marks (fr r)) 1) ;ie 1 but not 2
+		 (push (fr r) to-follow)
+		 (mark 2 (fr r)))))
+	    (dolist (r (rets frag))
+	      (dolist (a (nxts r))
+		(when (and (= (marks (fr a)) 1) ;ie 1 but not 2
+			   (not (cl:funcall crossable r a)))
+		  (push (fr a) to-follow)
+		  (mark 2 (fr a))))))))
+  (cl:let ((part1 nil) (part2 nil))
+    (dofrags (f 1)
+      (if (marked-p 2 f) (push f part1) (push f part2)))
+    (reset-marks 0)
+    (values (nreverse part1) (nreverse part2))))
 
 ;This finds internal non-series dflows and splits the graph at that point.
 ;It may be necessary to cut more than one dflow when splitting.  Therefore,
@@ -2196,17 +2194,6 @@
 ;would fail to detect some problems, and the overall theory would be
 ;overly strict.
 
-(cl:defun non-series-dflow-split (*graph*)
-  (doing-splitting1
-    (block top
-      (dofrags (f)
-	(dolist (ret (rets f))
-	  (when (not (series-var-p ret))
-	    (dolist (arg (nxts ret))
-	      (when (marked-p 1 (fr arg))
-		(return-from top (do-non-series-dflow-split ret arg)))))))
-      *graph*)))
-
 (cl:defun do-non-series-dflow-split (ret arg)
   (cl:let ((frag1 (fr ret))
 	     (frag2 (fr arg)))
@@ -2222,6 +2209,88 @@
       (setq part2 (disconnected-split part2))
       `(dflow ,@(if (eq-car part1 'dflow) (cdr part1) (list part1))
 	      ,@(if (eq-car part2 'dflow) (cdr part2) (list part2))))))
+
+(defmacro doing-splitting (&body body)
+  `(cond ((null (cdr *graph*)) (list 'quote (car *graph*)))
+	 (T (reset-marks 1) (prog1 (progn ,@ body) (reset-marks 0)))))
+
+(defmacro doing-splitting1 (&body body)
+  `(cond ((null (cdr *graph*)) *graph*)
+	 (T (reset-marks 1) (prog1 (progn ,@ body) (reset-marks 0)))))
+
+(cl:defun non-series-dflow-split (*graph*)
+  (doing-splitting1
+    (block top
+      (dofrags (f)
+	(dolist (ret (rets f))
+	  (when (not (series-var-p ret))
+	    (dolist (arg (nxts ret))
+	      (when (marked-p 1 (fr arg))
+		(return-from top (do-non-series-dflow-split ret arg)))))))
+      *graph*)))
+
+
+;We have to do non-dflow splitting and non-series-dflow-splitting separately
+;in order to get error messages about non-isolated non-series dflow right.
+;This breaks the expression up at points where there is no data flow
+;between the subexpressions.  Since the size of part1 is minimized it is
+;known that part1 must be fully connected.
+
+(cl:defun disconnected-split (*graph*)
+  (doing-splitting1
+    (cl:multiple-value-bind (part1 part2)
+	(split-after (car *graph*) #'(lambda (r a) (declare (ignore r a)) nil))
+      (cond ((null part2) (non-series-dflow-split part1))
+	    (T (setq part1 (non-series-dflow-split part1))
+	       (setq part2 (disconnected-split part2))
+	       `(no-dflow ,part1
+			  ,@(if (eq-car part2 'no-dflow)
+				(cdr part2)
+				(list part2))))))))
+
+;  The following breaks the expression up at all the points where there is no series
+;data flow between the subexpressions.  Non-series port isolation
+;guarantees that this split is possible, cutting only non-series dflows.
+;(If there is no data flow, you might not have to cut any data flow.)  If
+;*graph* is a complete expression (i.e., one that does not have any series
+;inputs or outputs overall), then the subexpressions cannot have external
+;series inputs or outputs.
+;  Non-series splitting typically breaks the expression up into a large
+;number of fragments.  Great care is taken to make sure that these
+;fragments will be reassembled without changing their order.  This is
+;important so that the user's side-effects will look reasonable.  Careful
+;attention has to be paid to the dflow constraints when figuring out where
+;to put the series subexpressions.  They are put where the last fn in them
+;suggests, within the limits of dflow.
+;  Note that the only way the user can write something that has some
+;side-effects is to write a side-effect expression that turns into a
+;non-series-computation (via isolate-non-series) or to write something in a
+;functional argument to a higher-order series function.  the functions here
+;make things come out pretty well in the first case; there is not much
+;anybody could do about the second case.
+
+(cl:defun order-num (frags)
+  (position (car (last frags)) *graph*))
+
+(cl:defun reorder-frags (form)
+  (cond ((eq-car form 'dflow) (mapcan #'reorder-frags (cdr form)))
+        ((eq-car form 'no-dflow)
+         (cl:let ((sublists (mapcar #'reorder-frags (cdr form)))
+		    (result nil) min-num min-sublist)
+           (setq sublists
+                 (mapcar #'(lambda (l) (cons (order-num (car l)) l)) sublists))
+           (loop (if (null (cdr sublists))
+                   (return (nreconc result (cdr (car sublists)))))
+                 (setq min-num (car (car sublists)) min-sublist (car sublists))
+                 (dolist (sub (cdr sublists))
+                   (when (< (car sub) min-num)
+                     (setq min-num (car sub) min-sublist sub)))
+                 (push (pop (cdr min-sublist)) result)
+                 (if (null (cdr min-sublist))
+                   (setq sublists (delete min-sublist sublists))
+                   (setf (car min-sublist) (order-num (cadr min-sublist)))))))
+        (T (list form))))
+
 
 ;At this next stage, we split based on off-line ports.  (Note that all
 ;non-series splitting must be totally complete at this time.)  Several
@@ -2265,25 +2334,6 @@
 ;which is now still in part1.  This forces complex merging cases
 ;to be handled.
 
-(cl:defun off-line-split (*graph*)
-  (doing-splitting
-   (block top
-     (dofrags (f)
-       (dolist (ret (rets f))
-         (cl:let ((args nil))
-           (dolist (arg (nxts ret))
-             (when (marked-p 1 (fr arg))
-               (cond ((off-line-spot arg)
-                      (setq args (list arg))
-                      (return nil))
-                     ((off-line-spot ret)
-                      (push arg args)))))
-           (when args
-             (when (and (cdr args) (off-line-spot ret))
-               (setq args (list (insert-off-line-dummy-frag ret args))))
-             (return-from top (do-off-line-split ret (car args)))))))
-     `(on-line-merge ',*graph*))))
-
 (cl:defun insert-off-line-dummy-frag (ret args)
   (cl:let* ((var (new-var 'oo))
 	      (dummy-ret (make-sym :var var :series-var-p T))
@@ -2316,36 +2366,36 @@
 		    (code frag1) "~%to:~%" (code frag2)))
       `(off-line-merge ,(off-line-split part1) ',ret
 		       ,(off-line-split part2) ',arg))))
-
-;This splits the graph by dividing it into two parts (part1 and part2)
-;so that to-follow is in part1, there is no data flow from part2 to
-;part1 and all of the data flow from part1 to part2 satisfies the
-;predicate CROSSABLE.
-;  The splitting is done by marker propagation (using the marker 2).
-;The algorithm used has the effect of minimizing part1, which among
-;other things, guarantees that it is fully connected.
 
-(cl:defun split-after (frag crossable)
-  (mark 2 frag)
-  (cl:let ((to-follow (list frag)))
-    (loop (if (null to-follow) (return nil))
-	  (cl:let ((frag (pop to-follow)))
-	    (dolist (a (args frag))
-	      (cl:let* ((r (prv a)))
-	       (when (= (marks (fr r)) 1) ;ie 1 but not 2
-		 (push (fr r) to-follow)
-		 (mark 2 (fr r)))))
-	    (dolist (r (rets frag))
-	      (dolist (a (nxts r))
-		(when (and (= (marks (fr a)) 1) ;ie 1 but not 2
-			   (not (cl:funcall crossable r a)))
-		  (push (fr a) to-follow)
-		  (mark 2 (fr a))))))))
-  (cl:let ((part1 nil) (part2 nil))
-    (dofrags (f 1)
-      (if (marked-p 2 f) (push f part1) (push f part2)))
-    (reset-marks 0)
-    (values (nreverse part1) (nreverse part2))))
+(cl:defun off-line-split (*graph*)
+  (doing-splitting
+   (block top
+     (dofrags (f)
+       (dolist (ret (rets f))
+         (cl:let ((args nil))
+           (dolist (arg (nxts ret))
+             (when (marked-p 1 (fr arg))
+               (cond ((off-line-spot arg)
+                      (setq args (list arg))
+                      (return nil))
+                     ((off-line-spot ret)
+                      (push arg args)))))
+           (when args
+             (when (and (cdr args) (off-line-spot ret))
+               (setq args (list (insert-off-line-dummy-frag ret args))))
+             (return-from top (do-off-line-split ret (car args)))))))
+     `(on-line-merge ',*graph*))))
+
+(cl:defun non-series-split (*graph*)
+  (cl:let ((subexprs (disconnected-split *graph*)))
+    (setq subexprs (reorder-frags subexprs))
+    (cons 'non-series-merge-list
+	  (mapcar #'(lambda (s) (off-line-split s)) subexprs))))
+
+(cl:defun do-splitting (*graph*)
+  (reset-marks 0)
+  (non-series-split *graph*))
+
 
 ;                         (4) DO MERGING
 
@@ -2952,6 +3002,11 @@
 
 (eval-when (eval load compile)
 
+(cl:defun aux-ordering (a b)
+  (when (consp a) (setq a (car a)))
+  (when (consp b) (setq b (car b)))
+  (string-lessp (string a) (string b)))
+
 (cl:defun codify (frag)
   (dolist (r (rets frag))
     (if (series-var-p r) (rrs 10 "~%Series value returned by~%" (code frag))))
@@ -2981,18 +3036,88 @@
     (use-user-names aux code)
     (setf (cadr code) (sort (cadr code) #'aux-ordering))
     (setq *last-series-loop* code)))
+
+;;; DECODE-SEQ-TYPE
+;;;
+;;; DECODE-SEQ-TYPE tries to canonicalize the given type into the
+;;; underlying type.  It returns three values: the sequence type
+;;; (string, vector, simple-array, sequence), the length of the
+;;; sequence (or NIL if not known) and the element type of the
+;;; sequence (or T if not known).
+(cl:defun decode-seq-type (type)
+  (cond ((not (and (eq-car type 'quote)
+		   (setq type (cadr type))))
+	 (values 'sequence nil T))
+	((and (symbolp type)
+	      (string= (string type) "BAG"))
+	 (values 'bag nil T))
+	((and (consp type)
+	      (symbolp (car type))
+	      (string= (string (car type)) "BAG"))
+	 (values 'bag nil (cadr type)))
+	(t
+	 ;; Hmm, should we use subtypep to handle these?  Might be easier.
+	 (cond ((eq type 'list)
+		(values 'list nil T))
+	       ((eq-car type 'list)
+		(values 'list nil (cadr type)))
+	       ((eq type 'sequence)
+		(values 'sequence nil T))
+	       ;; A STRING is canonicalized to (VECTOR CHARACTER)
+	       ((eq type 'string)
+		(values 'vector nil 'character))
+	       ((eq-car type 'string)
+		(values 'vector (if (numberp (cadr type)) (cadr type)) 'character))
+	       ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
+	       ((or (eq type 'simple-string)
+		    (eq type 'simple-base-string))
+		(values 'simple-array nil 'character))
+	       ((or (eq-car type 'simple-string)
+		    (eq-car type 'simple-base-string))
+		(values 'simple-array
+			(if (numberp (cadr type)) (cadr type))
+			'character))
+	       ;; A BIT-VECTOR is (vector bit)
+	       ((eq type 'bit-vector)
+		(values 'vector nil 'bit))
+	       ((eq-car type 'bit-vector)
+		(values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
+	       ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
+	       ((eq type 'simple-bit-vector)
+		(values 'simple-array nil 'bit))
+	       ((eq-car type 'simple-bit-vector)
+		(values 'simple-array
+			(if (numberp (cadr type)) (cadr type))
+			'bit))
+	       ;; A VECTOR is just a VECTOR
+	       ((eq type 'vector)
+		(values 'vector nil T))
+	       ((eq-car type 'vector)
+		(values 'vector (if (numberp (caddr type)) (caddr type))
+			(if (not (eq (cadr type) '*)) (cadr type) T)))
+	       ;; And a SIMPLE-VECTOR is just a SIMPLE-VECTOR
+	       ((eq type 'simple-vector)
+		(values 'simple-vector nil T))
+	       ((eq-car type 'simple-vector)
+		(values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
+	       ;; A SIMPLE-ARRAY is a SIMPLE-ARRAY.  This assumes you
+	       ;; specified a one-dimensional simple-array.  Results
+	       ;; are undefined if it's not a one-dimensional array.
+	       ((eq type 'simple-array)
+		(values 'simple-array nil T))
+	       ((eq-car type 'simple-array)
+		(values 'simple-array
+			(if (not (eq (caaddr type) '*)) (caaddr type))
+			(if (not (eq (cadr type) '*))
+			    (cadr type)
+			    T)))
+	       ;; We don't need to handle anything else like arrays
+	       ;; because series only handles 1-dimensional
+	       ;; sequences.
 
-(cl:defun codify-1 (aux code)
-  (multiple-value-setq (aux code) (clean-code aux code))
-  (when aux
-    (cl:let ((dcls (clean-dcls aux)))
-      (if dcls (push `(declare ,@ dcls) code))))
- `(cl:let ,(mapcar #'aux-init aux) ,@ code))
-
-(cl:defun aux-ordering (a b)
-  (when (consp a) (setq a (car a)))
-  (when (consp b) (setq b (car b)))
-  (string-lessp (string a) (string b)))
+	       ;; Everything else is a sequence
+	       (T
+		(values 'sequence nil T))))))
 
 ;this tries to get a correct init in situations where NIL won't do.
 ;it assumes that like maclisp, all that could really matter is whether
@@ -3057,21 +3182,17 @@
           ((subtypep var-type 'sequence)
            (cl:multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
-             (declare (ignorable arr elem-type))
-	     ;;(format t "is sequence: var-type = ~A~%" var-type)
-	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
+             (declare (ignore arr elem-type))
              ;; BUG: Only as good as DECODE-SEQ-TYPE.
              (make-sequence var-type (or len 0))))
           ((subtypep var-type 'array)
            ;; Heuristic: assume they mean vector.
-	   ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
+           ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
            (cl:multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
-             (declare (ignorable arr))
-	     ;;(format t "is array ~A~%" var-type)
-	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
+             (declare (ignore arr))
              ;; Probably no length, as that case is caught by previous branch
-	     (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
+             (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
 	  ((eq t (upgraded-array-element-type var-type))
 	   ;; Use NIL as the initializer if the resulting type would
 	   ;; be T for the given implementation.
@@ -3200,6 +3321,21 @@
 (cl:defun result-of (gatherer)
   (cl:funcall gatherer nil t))
 
+;;this assumes the frag is a one-in one-out collector and
+;;that if there are wrappers, they are only relevant to the epilog.
+(cl:defun gathererify (frag)
+  (when (off-line-spot (car (args frag)))
+    (convert-to-reducer (car (args frag))))
+  (cl:let ((code `(tagbody ,@(body frag)))
+	     (ecode `(progn ,@(epilog frag))))
+    (dolist (wrp (wrappers frag))
+      (setq ecode (cl:funcall (eval wrp) ecode)))
+    (codify-1 (aux frag)
+	      `(,@(prolog frag)
+		#'(lambda (,(var (car (args frag))) result-p)
+		    (cond ((null result-p) ,code)
+			  (T ,ecode ,(var (car (rets frag))))))))))
+
 (defmacro gatherer (collector &environment *env*)
   (when (not (eq-car collector 'function))
     (cl:let ((x (new-var 'gather)))
@@ -3263,22 +3399,6 @@
                     (not (series-var-p (car (rets frag))))))
       (ers 61 "~%Input to GATHERER fails to be one-input one-output collector."))
     frag))
-
-;this assumes the frag is a one-in one-out collector and
-;that if there are wrappers, they are only relevant to the epilog.
-
-(cl:defun gathererify (frag)
-  (when (off-line-spot (car (args frag)))
-    (convert-to-reducer (car (args frag))))
-  (cl:let ((code `(tagbody ,@(body frag)))
-	     (ecode `(progn ,@(epilog frag))))
-    (dolist (wrp (wrappers frag))
-      (setq ecode (cl:funcall (eval wrp) ecode)))
-    (codify-1 (aux frag)
-	      `(,@(prolog frag)
-		#'(lambda (,(var (car (args frag))) result-p)
-		    (cond ((null result-p) ,code)
-			  (T ,ecode ,(var (car (rets frag))))))))))
 
 ;                  ---- SERIES FUNCTION LIBRARY ----
 
@@ -3397,23 +3517,10 @@
 
 ;the next few things are optimizers that hang on standard symbols.
 
-(cl:defun setq-opt (var exp)
-  (my-multi-setq (list var) exp `(setq ,var ,exp)))
-
-(setf (get 'setq 'series-optimizer) #'setq-opt)
-(setf (get 'setq 'returns-series) #'no) ;here should be better than this
-
-(cl:defun multiple-value-setq-opt (vars exp)
-  (my-multi-setq vars exp `(multiple-value-setq ,vars ,exp)))
-
-(setf (get 'multiple-value-setq 'series-optimizer) #'multiple-value-setq-opt)
-(setf (get 'multiple-value-setq 'returns-series) #'no)  ;here should be better than this
-
-;Note the cludging we have to do when the first var is a let-series var.
-;This is necessary in case this value is going to have to be a return value as well.
-;We really should have done something better about specifing free variable outputs
-;so that this mess would not be necessary.
-
+;;Note the cludging we have to do when the first var is a let-series var.
+;;This is necessary in case this value is going to have to be a return value as well.
+;;We really should have done something better about specifing free variable outputs
+;;so that this mess would not be necessary.
 (cl:defun my-multi-setq (vars value form)
   (cl:let* ((type (if (null (cdr vars)) t
 			`(values ,@(make-list (length vars) :initial-element T))))
@@ -3454,7 +3561,36 @@
                  (when (not (eq out (car (rets frag))))
                    (kill-ret out))))))
     frag))
+
+(cl:defun setq-opt (var exp)
+  (my-multi-setq (list var) exp `(setq ,var ,exp)))
+
+(setf (get 'setq 'series-optimizer) #'setq-opt)
+(setf (get 'setq 'returns-series) #'no) ;here should be better than this
+
+(cl:defun multiple-value-setq-opt (vars exp)
+  (my-multi-setq vars exp `(multiple-value-setq ,vars ,exp)))
+
+(setf (get 'multiple-value-setq 'series-optimizer) #'multiple-value-setq-opt)
+(setf (get 'multiple-value-setq 'returns-series) #'no)  ;here should be better than this
+
 
+(cl:defun produces-optimizable-series (original-code)
+  (cl:let ((flag T) pred (code original-code))
+    (loop
+      (if (not (and flag (consp code) (symbolp (car code)))) (return nil))
+      (if (eq (car code) 'values)
+        (return (some #'produces-optimizable-series (cdr code))))
+      (if (eq (car code) 'the)
+        (return (produces-optimizable-series (caddr code))))
+      (setq pred (get (car code) 'returns-series))
+      (if pred (return (cl:funcall pred code)))
+      (if (not-expr-like-special-form-p (car code)) (return nil))
+      (if (not (macro-function (car code))) 
+        (return (some #'produces-optimizable-series (cdr code))))
+      (if (eq code original-code) (setq code (iterative-copy-tree code)))
+      (multiple-value-setq (code flag) (macroexpand-1 code *env*)))))
+
 (defS funcall (function &rest expr-list) "" cl:funcall
  :optimizer
   (cond ((and (eq-car function 'function) (symbolp (cadr function))
@@ -3479,23 +3615,53 @@
 	     (get (cadr function) 'series-optimizer))
 	(and (simple-quoted-lambda function)
 	     (produces-optimizable-series (car (last (cddr (cadr function)))))))))
+
+(cl:defun normalize-pair (p allow-multiple-vars)
+  (cond ((variable-p p) (list (list p) nil))
+	((and (consp p) (variable-p (car p)) (= (length p) 2))
+	 (list (list (car p)) (cadr p)))
+	((and (consp p) (variable-p (car p)) (= (length p) 1))
+	 (list (list (car p)) nil))
+	((and allow-multiple-vars (consp p) (consp (car p))
+	      (every #'variable-p (car p))
+	      (= (length p) 2)) p)
+	(T (ers 66 "~%Malformed binding pair " p "."))))
 
-(cl:defun produces-optimizable-series (original-code)
-  (cl:let ((flag T) pred (code original-code))
-    (loop
-      (if (not (and flag (consp code) (symbolp (car code)))) (return nil))
-      (if (eq (car code) 'values)
-        (return (some #'produces-optimizable-series (cdr code))))
-      (if (eq (car code) 'the)
-        (return (produces-optimizable-series (caddr code))))
-      (setq pred (get (car code) 'returns-series))
-      (if pred (return (cl:funcall pred code)))
-      (if (not-expr-like-special-form-p (car code)) (return nil))
-      (if (not (macro-function (car code))) 
-        (return (some #'produces-optimizable-series (cdr code))))
-      (if (eq code original-code) (setq code (iterative-copy-tree code)))
-      (multiple-value-setq (code flag) (macroexpand-1 code *env*)))))
+(cl:defun process-let-series-pair (p type-alist allow-multiple-vars)
+  (setq p (normalize-pair p allow-multiple-vars))
+  (cl:let* ((vars (car p))
+	      (types (mapcar #'(lambda (v) (or (cdr (assoc v type-alist)) T))
+			     vars))
+	      (rets
+		(if (= (length vars) 1)
+		    (list (retify (cadr p) (car types)))
+		    (rets (fragify (cadr p) `(values ,@ types))))))
+    (mapcar #'(lambda (v r)
+                (push (cons (var r) v) *user-names*)
+                (setf (free-out r) v)
+                (cons v r))
+            vars rets)))
 
+(cl:defun process-let-forms (forms)
+  (mapc #'(lambda (f) (fragify f '(values))) (butlast forms))
+  (fragify (car (last forms)) '*)) ;forces NIL if no forms.
+
+(cl:defun process-let-series-body (ignore-vars forms alist)
+  (cl:let* ((initial-alist (mapcar #'(lambda (e) (cons (car e) (cdr e))) alist))
+	      (frag (process-let-forms forms)))
+    (mapc #'(lambda (old new)
+	      (cond ((and (eq (cdr old) (cdr new))   ;not setqed.
+			  (null (nxts (cdr new))))   ;current value not used.
+		     (if (not (member (car old) ignore-vars))
+			 nil #| ;HERE can get false positives.
+			 (wrs 52 t "~%The variable "
+			      (car old) " is unused in:~%" *call*)|#))
+		    ((member (car old) ignore-vars)
+		     (wrs 53 t "~%The variable " (car old)
+			  " is declared IGNORE and yet used in:~%" *call*))))
+	  initial-alist alist)
+    frag))
+
 (defS multiple-value-bind (vars values &rest body) "" cl:multiple-value-bind
  :optimizer
   (cl:multiple-value-bind (forms type-alist ignore-vars)
@@ -3559,61 +3725,81 @@
 (setf (get 'cl:let* 'series-optimizer) (get 'let* 'series-optimizer))
 (setf (get 'cl:let* 'returns-series) (get 'let* 'returns-series))
 
-(cl:defun process-let-series-pair (p type-alist allow-multiple-vars)
-  (setq p (normalize-pair p allow-multiple-vars))
-  (cl:let* ((vars (car p))
-	      (types (mapcar #'(lambda (v) (or (cdr (assoc v type-alist)) T))
-			     vars))
-	      (rets
-		(if (= (length vars) 1)
-		    (list (retify (cadr p) (car types)))
-		    (rets (fragify (cadr p) `(values ,@ types))))))
-    (mapcar #'(lambda (v r)
-                (push (cons (var r) v) *user-names*)
-                (setf (free-out r) v)
-                (cons v r))
-            vars rets)))
-
-(cl:defun normalize-pair (p allow-multiple-vars)
-  (cond ((variable-p p) (list (list p) nil))
-	((and (consp p) (variable-p (car p)) (= (length p) 2))
-	 (list (list (car p)) (cadr p)))
-	((and (consp p) (variable-p (car p)) (= (length p) 1))
-	 (list (list (car p)) nil))
-	((and allow-multiple-vars (consp p) (consp (car p))
-	      (every #'variable-p (car p))
-	      (= (length p) 2)) p)
-	(T (ers 66 "~%Malformed binding pair " p "."))))
-
-(cl:defun variable-p (thing)
-  (and thing (symbolp thing) (not (eq thing T)) (not (keywordp thing))))
-
-(cl:defun process-let-series-body (ignore-vars forms alist)
-  (cl:let* ((initial-alist (mapcar #'(lambda (e) (cons (car e) (cdr e))) alist))
-	      (frag (process-let-forms forms)))
-    (mapc #'(lambda (old new)
-	      (cond ((and (eq (cdr old) (cdr new))   ;not setqed.
-			  (null (nxts (cdr new))))   ;current value not used.
-		     (if (not (member (car old) ignore-vars))
-			 nil #| ;HERE can get false positives.
-			 (wrs 52 t "~%The variable "
-			      (car old) " is unused in:~%" *call*)|#))
-		    ((member (car old) ignore-vars)
-		     (wrs 53 t "~%The variable " (car old)
-			  " is declared IGNORE and yet used in:~%" *call*))))
-	  initial-alist alist)
-    frag))
-
-(cl:defun process-let-forms (forms)
-  (mapc #'(lambda (f) (fragify f '(values))) (butlast forms))
-  (fragify (car (last forms)) '*)) ;forces NIL if no forms.
-
 ;Next we have the definitions of the basic higher order functions.
 
 (eval-when (eval load compile) (proclaim '(special *state*)))
 
+;Helping functions
+
+(cl:defun list-of-next (at-end list-of-generators)
+ (mapcar #'(lambda (g) (do-next-in g at-end)) list-of-generators))
+
+;;If function is not a simple quoted function, then a non-series input is
+;;added to frag, and a parameter is added to params so that the function
+;;will get processed right.
+(cl:defun handle-fn-arg (frag function params)
+  (when (not (and (eq-car function 'function)
+		  (or (symbolp (cadr function))
+		      (and (eq-car (cadr function) 'lambda)
+			   (every #'(lambda (a)
+				      (and (symbolp a)
+					   (or (zerop (length (string a)))
+					       (not (char= (char (string a) 0)
+							   #\&)))))
+				  (cadr (cadr function)))))))
+    (cl:let ((fn-var (new-var 'function)))
+      (+arg (make-sym :var fn-var) frag)
+      (setq params (nconc params (list function)))
+      (setq function fn-var)))
+  (values function params))
+
+;;This makes code for `(multiple-value-setq ,out-vars (funcall ,fn ,@ in-vars)).
+;;It always returns a list of a single statement.  Also,
+;;any free references to series::let vars are made
+;;non-series inputs of frag and hooked up to the right
+;;things.  (Note macro expansion has to be done in a
+;;nested context so that nested series expressions will be ok.)
+;;(Note also that this has to bypass what usually happens when macroexpanding
+;;function quoted things.  Things should be sructured differently so that this
+;;is not necessary.)
+(cl:defun handle-fn-call (frag out-vars fn in-vars &optional (last? nil))
+  (cl:let ((*in-series-expr* nil) (*not-straight-line-code* nil)
+	     (*user-names* nil) (*renames* *renames*) (fn-quoted? nil))
+    (when (eq-car fn 'function)
+      (setq fn-quoted? t)
+      (setq fn (cadr fn)))
+    (cl:multiple-value-bind (fn free-ins free-outs setqed state)
+	(handle-non-series-stuff fn *state*)
+      (declare (ignore setqed))
+      (setq *state* state)
+      (when last?
+        (dolist (entry free-ins)
+          (cl:let ((arg (make-sym :var (car entry))))
+            (+arg arg frag)
+            (+dflow (cdr entry) arg)))
+        (dolist (entry free-outs)
+          (cl:let ((new (make-sym :var (car entry)))
+		     (v (cdr entry)))
+            (when (not (find (car entry) (args frag) :key #'var))
+              (push (list (car entry) T) (aux frag)))
+            (setf (free-out new) v)
+            (+ret new frag)
+            (rplacd (assoc v *renames*) new))))
+      (setq fn (if (not fn-quoted?) `(cl:funcall ,fn) `(,fn)))
+      (cond ((null out-vars) `((,@ fn ,@ in-vars)))
+            ((= (length out-vars) 1)
+             `((setq ,(car out-vars) (,@ fn ,@ in-vars))))
+            (T `((multiple-value-setq ,out-vars (,@ fn ,@ in-vars))))))))
+
+(cl:defun must-be-quoted (type)
+  (cond ((eq-car type 'quote) (cadr type))
+	((member type '(t nil)) type)
+	(T (rrs 2 "~%Non-quoted type " type "."))))
+
+
+
 (defS map-fn (type function &rest args)
-    "Maps FUNCTION over the input series.  The result type of function is
+    "Maps FUNCTION over the input series.  The result type of FUNCTION is
 TYPE."
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
@@ -3646,83 +3832,43 @@ TYPE."
       (+arg (make-sym :var var :series-var-p T) frag))
     (setf (body frag) (handle-fn-call frag out-vars function in-vars t))
     (funcall-frag frag params)))
-
-(cl:defun list-of-next (at-end list-of-generators)
- (mapcar #'(lambda (g) (do-next-in g at-end)) list-of-generators))
 
-(defS encapsulated (encapsulating-fn scanner-or-collector)
-    "Specifies an encapsulating form to be used with a scanner or collector."
-  encapsulated-macro
- :optimizer
-  (progn
-    (when (not (eq-car encapsulating-fn 'function))
-      (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
-	   " is not quoted function."))
-    (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
-		    (eq-car scanner-or-collector 'scan-fn-inclusive))
-		(= (length scanner-or-collector) 5))
-	    (apply #'scan-fn-opt encapsulating-fn
-		  (eq-car scanner-or-collector 'scan-fn-inclusive)
-		  (cdr scanner-or-collector)))
-	  ((eq-car scanner-or-collector 'collect-fn)
-	   (apply #'collect-fn-opt encapsulating-fn (cdr scanner-or-collector)))
-	  (T (ers 69 "~%Malformed second arg to ENCAPSULATING arg "
-		  scanner-or-collector "."))))
-
- :trigger T
- :discriminator (or (eq-car (caddr call) 'scan-fn)
-		    (eq-car (caddr call) 'scan-fn-inclusive)))
-
-(defmacro encapsulated-macro (encapsulating-fn scanner-or-collector)
-  (when (not (eq-car encapsulating-fn 'function))
-    (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
-         " is not quoted function."))
-  (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
-                  (eq-car scanner-or-collector 'scan-fn-inclusive))
-              (= (length scanner-or-collector) 5))
-         (cl:let ((body `(basic-collect-list
-			     (scan-multi-out->scan-list-out
-			       #',(car scanner-or-collector)
-			       ,@(cdr scanner-or-collector)))))
-           `(cl:let ((data ,(cl:funcall (eval encapsulating-fn) body)))
-              (values-lists (length (car data)) (scan data)))))
-        ((eq-car scanner-or-collector 'collect-fn)
-         (cl:funcall (eval encapsulating-fn) scanner-or-collector))
-        (T (ers 69 "~%Malformed second arg to ENCAPSULATING arg "
-                scanner-or-collector "."))))
-
-(cl:defun scan-multi-out->scan-list-out (fn type init step test)
-  (compiler-let ((*optimize-series-expressions* nil))
-    (cl:let ((n (length (decode-type-arg type))))
-      (flet ((new-init () (forceL n (multiple-value-list (cl:funcall init))))
-	     (new-step (state) (forceL n (multiple-value-list (apply step state))))
-	     (new-test (state) (apply test state)))
-	(cl:funcall fn T #'new-init #'new-step #'new-test)))))
-
-;needed because collect is a macro
-(cl:defun basic-collect-list (items)
-  (compiler-let ((*optimize-series-expressions* nil))
-    (fragL ((items T)) ((result)) ((result list)) ()
-	   ((setq result nil))
-	   ((setq result (cons items result)))
-	   ((setq result (nreverse result))) ())))
-
-(defS collect-fn (type inits function &rest args)
-   "Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
-  (cl:let ((n (length (decode-type-arg type))))
-    (setq args (copy-list args))
-    (cond ((= n 1) (apply #'basic-collect-fn inits function args))
-	  (T (values-list
-	       (apply #'basic-collect-fn
-		      #'(lambda ()
-			  (forceL n (multiple-value-list (cl:funcall inits))))
-		      #'(lambda (state &rest args)
-			  (forceL n (multiple-value-list
-				      (apply function (nconc state args)))))
-		      args)))))
- :optimizer
-  (apply #'collect-fn-opt nil type inits function args)
- :trigger T)
+(cl:defun scan-fn-opt (wrap-fn inclusive-p type init step
+				 &optional (test nil test-p))
+  (cl:let* ((types (decode-type-arg (must-be-quoted type)))
+	      (params nil)
+	      (frag (make-frag))
+	      (state-vars (n-gensyms (length types) "STATE-"))
+	      (out-vars (n-gensyms (length types) "ITEMS-"))
+	      (*state* nil))
+    (if wrap-fn (push wrap-fn (wrappers frag)))
+    (dolist (var out-vars)
+      (+ret (make-sym :var var :series-var-p T) frag))
+    (setf (aux frag) (append (mapcar #'list state-vars types)
+			     (mapcar #'list out-vars types)))
+    (multiple-value-setq (init params) (handle-fn-arg frag init params))
+    (multiple-value-setq (step params) (handle-fn-arg frag step params))
+    (if test-p (multiple-value-setq (test params)
+		 (handle-fn-arg frag test params)))
+    (setq params (mapcar #'retify params))
+    (setf (prolog frag) (handle-fn-call frag state-vars init nil))
+    (cl:let ((output-expr `(setq ,@(mapcan #'list out-vars state-vars)))
+	       (step-code (car (handle-fn-call frag state-vars step state-vars))))
+      (if (not inclusive-p)
+	  (setf (body frag)
+		`(,@(if test-p
+			`((if ,(car (handle-fn-call frag nil test state-vars t))
+			      (go ,END))))
+		  ,output-expr ,step-code))
+		(cl:let ((done (new-var 'd)))
+	    (push (list done '(member T nil)) (aux frag))
+	    (push `(setq ,done nil) (prolog frag))
+	    (setf (body frag)
+		  `((if ,done (go ,END))
+		    ,(car (handle-fn-call frag (list done) test state-vars t))
+		    ,output-expr
+		    (if (not ,done) ,step-code))))))
+    (funcall-frag frag params)))
 
 (cl:defun collect-fn-opt (wrap-fn type inits function &rest args)
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
@@ -3746,7 +3892,64 @@ TYPE."
 	  (handle-fn-call frag out-vars function (append out-vars in-vars) t))
     (funcall-frag frag params)))
 
-;needed because collect-fn is macro
+(defmacro encapsulated-macro (encapsulating-fn scanner-or-collector)
+  (when (not (eq-car encapsulating-fn 'function))
+    (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
+         " is not quoted function."))
+  (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
+                  (eq-car scanner-or-collector 'scan-fn-inclusive))
+              (= (length scanner-or-collector) 5))
+         (cl:let ((body `(basic-collect-list
+			     (scan-multi-out->scan-list-out
+			       #',(car scanner-or-collector)
+			       ,@(cdr scanner-or-collector)))))
+           `(cl:let ((data ,(cl:funcall (eval encapsulating-fn) body)))
+              (values-lists (length (car data)) (scan data)))))
+        ((eq-car scanner-or-collector 'collect-fn)
+         (cl:funcall (eval encapsulating-fn) scanner-or-collector))
+        (T (ers 69 "~%Malformed second arg to ENCAPSULATING arg "
+                scanner-or-collector "."))))
+
+(defS encapsulated (encapsulating-fn scanner-or-collector)
+    "Specifies an encapsulating form to be used with a scanner or collector."
+  encapsulated-macro
+ :optimizer
+  (progn
+    (when (not (eq-car encapsulating-fn 'function))
+      (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
+	   " is not quoted function."))
+    (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
+		    (eq-car scanner-or-collector 'scan-fn-inclusive))
+		(= (length scanner-or-collector) 5))
+	    (apply #'scan-fn-opt encapsulating-fn
+		  (eq-car scanner-or-collector 'scan-fn-inclusive)
+		  (cdr scanner-or-collector)))
+	  ((eq-car scanner-or-collector 'collect-fn)
+	   (apply #'collect-fn-opt encapsulating-fn (cdr scanner-or-collector)))
+	  (T (ers 69 "~%Malformed second arg to ENCAPSULATING arg "
+		  scanner-or-collector "."))))
+
+ :trigger T
+ :discriminator (or (eq-car (caddr call) 'scan-fn)
+		    (eq-car (caddr call) 'scan-fn-inclusive)))
+
+(cl:defun scan-multi-out->scan-list-out (fn type init step test)
+  (compiler-let ((*optimize-series-expressions* nil))
+    (cl:let ((n (length (decode-type-arg type))))
+      (flet ((new-init () (forceL n (multiple-value-list (cl:funcall init))))
+	     (new-step (state) (forceL n (multiple-value-list (apply step state))))
+	     (new-test (state) (apply test state)))
+	(cl:funcall fn T #'new-init #'new-step #'new-test)))))
+
+;;needed because collect is a macro
+(cl:defun basic-collect-list (items)
+  (compiler-let ((*optimize-series-expressions* nil))
+    (fragL ((items T)) ((result)) ((result list)) ()
+	   ((setq result nil))
+	   ((setq result (cons items result)))
+	   ((setq result (nreverse result))) ())))
+
+;;needed because collect-fn is macro
 (cl:defun basic-collect-fn (inits function &rest args)
   (compiler-let ((*optimize-series-expressions* nil))
     (fragL ((inits) (function) (args)) ((result))
@@ -3756,6 +3959,23 @@ TYPE."
            ((cl:let ((vals (list-of-next #'(lambda () (go end))
 					   list-of-generators)))
               (setq result (apply function result vals)))) () ())))
+
+(defS collect-fn (type inits function &rest args)
+   "Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
+  (cl:let ((n (length (decode-type-arg type))))
+    (setq args (copy-list args))
+    (cond ((= n 1) (apply #'basic-collect-fn inits function args))
+	  (T (values-list
+	       (apply #'basic-collect-fn
+		      #'(lambda ()
+			  (forceL n (multiple-value-list (cl:funcall inits))))
+		      #'(lambda (state &rest args)
+			  (forceL n (multiple-value-list
+				      (apply function (nconc state args)))))
+		      args)))))
+ :optimizer
+  (apply #'collect-fn-opt nil type inits function args)
+ :trigger T)
 
 ;hint to users: to avoid inits, add an extra init that acts like a flag.
 
@@ -3835,120 +4055,6 @@ TYPE."
                (values-lists n data)))))
   :optimizer
   (scan-fn-opt nil T type init step test))
-
-(cl:defun scan-fn-opt (wrap-fn inclusive-p type init step
-				 &optional (test nil test-p))
-  (cl:let* ((types (decode-type-arg (must-be-quoted type)))
-	      (params nil)
-	      (frag (make-frag))
-	      (state-vars (n-gensyms (length types) "STATE-"))
-	      (out-vars (n-gensyms (length types) "ITEMS-"))
-	      (*state* nil))
-    (if wrap-fn (push wrap-fn (wrappers frag)))
-    (dolist (var out-vars)
-      (+ret (make-sym :var var :series-var-p T) frag))
-    (setf (aux frag) (append (mapcar #'list state-vars types)
-			     (mapcar #'list out-vars types)))
-    (multiple-value-setq (init params) (handle-fn-arg frag init params))
-    (multiple-value-setq (step params) (handle-fn-arg frag step params))
-    (if test-p (multiple-value-setq (test params)
-		 (handle-fn-arg frag test params)))
-    (setq params (mapcar #'retify params))
-    (setf (prolog frag) (handle-fn-call frag state-vars init nil))
-    (cl:let ((output-expr `(setq ,@(mapcan #'list out-vars state-vars)))
-	       (step-code (car (handle-fn-call frag state-vars step state-vars))))
-      (if (not inclusive-p)
-	  (setf (body frag)
-		`(,@(if test-p
-			`((if ,(car (handle-fn-call frag nil test state-vars t))
-			      (go ,END))))
-		  ,output-expr ,step-code))
-		(cl:let ((done (new-var 'd)))
-	    (push (list done '(member T nil)) (aux frag))
-	    (push `(setq ,done nil) (prolog frag))
-	    (setf (body frag)
-		  `((if ,done (go ,END))
-		    ,(car (handle-fn-call frag (list done) test state-vars t))
-		    ,output-expr
-		    (if (not ,done) ,step-code))))))
-    (funcall-frag frag params)))
-
-;Helping functions
-
-(cl:defun never (&rest stuff) (declare (ignore stuff)) nil)
-
-(cl:defun forceL (n list)
-  (if (= n (length list)) list
-      (cl:let* ((new (make-list n :initial-element nil))
-		  (ptr new))
-	(do ((i (min n (length list)) (1- i))) ((zerop i))
-	  (setf (car ptr) (pop list))
-	  (pop ptr))
-	new)))
-
-(cl:defun must-be-quoted (type)
-  (cond ((eq-car type 'quote) (cadr type))
-	((member type '(t nil)) type)
-	(T (rrs 2 "~%Non-quoted type " type "."))))
-
-;If function is not a simple quoted function, then a non-series input is
-;added to frag, and a parameter is added to params so that the function
-;will get processed right.
-
-(cl:defun handle-fn-arg (frag function params)
-  (when (not (and (eq-car function 'function)
-		  (or (symbolp (cadr function))
-		      (and (eq-car (cadr function) 'lambda)
-			   (every #'(lambda (a)
-				      (and (symbolp a)
-					   (or (zerop (length (string a)))
-					       (not (char= (char (string a) 0)
-							   #\&)))))
-				  (cadr (cadr function)))))))
-    (cl:let ((fn-var (new-var 'function)))
-      (+arg (make-sym :var fn-var) frag)
-      (setq params (nconc params (list function)))
-      (setq function fn-var)))
-  (values function params))
-
-;This makes code for `(multiple-value-setq ,out-vars (funcall ,fn ,@ in-vars)).
-;It always returns a list of a single statement.  Also,
-;any free references to series::let vars are made
-;non-series inputs of frag and hooked up to the right
-;things.  (Note macro expansion has to be done in a
-;nested context so that nested series expressions will be ok.)
-;(Note also that this has to bypass what usually happens when macroexpanding
-;function quoted things.  Things should be sructured differently so that this
-;is not necessary.)
-
-(cl:defun handle-fn-call (frag out-vars fn in-vars &optional (last? nil))
-  (cl:let ((*in-series-expr* nil) (*not-straight-line-code* nil)
-	     (*user-names* nil) (*renames* *renames*) (fn-quoted? nil))
-    (when (eq-car fn 'function)
-      (setq fn-quoted? t)
-      (setq fn (cadr fn)))
-    (cl:multiple-value-bind (fn free-ins free-outs setqed state)
-	(handle-non-series-stuff fn *state*)
-      (declare (ignore setqed))
-      (setq *state* state)
-      (when last?
-        (dolist (entry free-ins)
-          (cl:let ((arg (make-sym :var (car entry))))
-            (+arg arg frag)
-            (+dflow (cdr entry) arg)))
-        (dolist (entry free-outs)
-          (cl:let ((new (make-sym :var (car entry)))
-		     (v (cdr entry)))
-            (when (not (find (car entry) (args frag) :key #'var))
-              (push (list (car entry) T) (aux frag)))
-            (setf (free-out new) v)
-            (+ret new frag)
-            (rplacd (assoc v *renames*) new))))
-      (setq fn (if (not fn-quoted?) `(cl:funcall ,fn) `(,fn)))
-      (cond ((null out-vars) `((,@ fn ,@ in-vars)))
-            ((= (length out-vars) 1)
-             `((setq ,(car out-vars) (,@ fn ,@ in-vars))))
-            (T `((multiple-value-setq ,out-vars (,@ fn ,@ in-vars))))))))
 
 ;various easy ways of doing mapping
 
@@ -4039,23 +4145,18 @@ TYPE."
 
 ;This allows you to specify more or less arbitrary transducers.
 
-(defS producing (output-list input-list &rest body) "" non-opt-producing
- :optimizer
-   (optimize-producing output-list input-list body)
- :trigger
-   (dolist (pair (caddr call) nil)
-     (if (and (consp pair) (cdr pair) (produces-optimizable-series (cadr pair)))
-	 (return T)))
- :discriminator
-   (dolist (pair (cadr call) nil)
-     (if (not (consp pair)) (return T))))
-
-#+symbolics(setf (gethash 'producing zwei:*lisp-indentation-offset-hash-table*)
-		 '(2 1))
-
-(defmacro terminate-producing ()
-    "Causes the containing call on producing to terminate."
-  `(go ,END))
+(cl:defun protect-from-setq (in type)
+  (cl:let ((frag (fr in))
+	     (var (var in))
+	     (new (new-var 'in)))
+    (push (list var type) (aux (fr in)))
+    (coerce-to-type type in) ;why am I doing this?
+    (cond ((not (series-var-p in))
+	   (push `(setq ,var ,new) (prolog frag)))
+	  ((not (off-line-spot in))
+	   (push `(setq ,var ,new) (body frag)))
+	  (T (nsubst-inline `((setq ,var ,new)) (off-line-spot in) (body frag) T)))
+    (setf (var in) new)))
 
 (cl:defun validate-producing (output-list input-list body)
   (if (not (and (every #'(lambda (f) (eq-car f 'declare)) (butlast body))
@@ -4087,7 +4188,51 @@ TYPE."
 		 (ers 76 "~%Malformed NEXT-OUT call: " f))
 	     (push (cadr f) visited-outputs))))
     (values visited-inputs visited-outputs)))
-
+
+(cl:defun basic-prod-form->frag-body (forms input-alist series-output-alist)
+  (setq forms  ;this is dangerous, should be done more safely.
+        (subst `(go ,end) `(terminate-producing) forms :test #'equal))
+  (cl:let ((revbody nil)
+	     (state :prolog)
+	     (epilog-start
+	       (do ((l (cons nil (reverse forms)) (cdr l)))
+		   ((or (null (cdr l)) (not (eq-car (cadr l) 'next-out)))
+		    (car l)))))
+    (dolist (f forms)
+      (cond ((and (eq-car f 'setq) (eq-car (caddr f) 'next-in))
+             (cl:let* ((source (cadr (caddr f)))
+			 (arg (cdr (assoc source input-alist)))
+			 (actions (cddr (caddr f)))
+			 (destination (cadr f))
+			 (E (new-var 'ee))
+			 (D (new-var 'dd))
+			 (-X- (new-var '-xxx-)))
+               (setf (series-var-p arg) T)
+               (cond ((and (eq state :prolog)
+                           (equal actions '((terminate-producing)))))
+                     ((equal actions '((terminate-producing)))
+                      (setf (off-line-spot arg) -X-) (push -X- revbody))
+                     (T (setq state :middle)
+                        (setf (off-line-spot arg) -X-)
+                        (setf (off-line-exit arg) E)
+                        (setq revbody
+                              (append (reverse `(,-X- (go ,D) ,E ,@ actions ,D))
+                                      revbody))))
+               (push `(setq ,destination ,(var arg)) revbody)))
+            ((eq-car f 'next-out)
+             (setq state (if (or (eq state :epilog) (eq f epilog-start))
+                           :epilog :middle))
+             (cl:let* ((ret (cdr (assoc (cadr f) series-output-alist)))
+			 (-X- (new-var '-xxxx-)))
+               (setf (series-var-p ret) T)
+               (push `(setq ,(var ret) ,(caddr f)) revbody)
+               (when (not (eq state :epilog))
+                 (setf (off-line-spot ret) -X-)
+                 (push -X- revbody))))
+            (T (setq state :middle)
+               (push f revbody))))
+    (nreverse revbody)))
+
 (cl:defun optimize-producing (output-list input-list body)
   (cl:let ((series-ins (validate-producing output-list input-list body)))
     (cl:multiple-value-bind (bod type-alist propagations)
@@ -4166,63 +4311,25 @@ TYPE."
               (when (and input output)
                 (setf (var output) (var input)))))
           (+frag frag))))))
-
-(cl:defun basic-prod-form->frag-body (forms input-alist series-output-alist)
-  (setq forms  ;this is dangerous, should be done more safely.
-        (subst `(go ,end) `(terminate-producing) forms :test #'equal))
-  (cl:let ((revbody nil)
-	     (state :prolog)
-	     (epilog-start
-	       (do ((l (cons nil (reverse forms)) (cdr l)))
-		   ((or (null (cdr l)) (not (eq-car (cadr l) 'next-out)))
-		    (car l)))))
-    (dolist (f forms)
-      (cond ((and (eq-car f 'setq) (eq-car (caddr f) 'next-in))
-             (cl:let* ((source (cadr (caddr f)))
-			 (arg (cdr (assoc source input-alist)))
-			 (actions (cddr (caddr f)))
-			 (destination (cadr f))
-			 (E (new-var 'ee))
-			 (D (new-var 'dd))
-			 (-X- (new-var '-xxx-)))
-               (setf (series-var-p arg) T)
-               (cond ((and (eq state :prolog)
-                           (equal actions '((terminate-producing)))))
-                     ((equal actions '((terminate-producing)))
-                      (setf (off-line-spot arg) -X-) (push -X- revbody))
-                     (T (setq state :middle)
-                        (setf (off-line-spot arg) -X-)
-                        (setf (off-line-exit arg) E)
-                        (setq revbody
-                              (append (reverse `(,-X- (go ,D) ,E ,@ actions ,D))
-                                      revbody))))
-               (push `(setq ,destination ,(var arg)) revbody)))
-            ((eq-car f 'next-out)
-             (setq state (if (or (eq state :epilog) (eq f epilog-start))
-                           :epilog :middle))
-             (cl:let* ((ret (cdr (assoc (cadr f) series-output-alist)))
-			 (-X- (new-var '-xxxx-)))
-               (setf (series-var-p ret) T)
-               (push `(setq ,(var ret) ,(caddr f)) revbody)
-               (when (not (eq state :epilog))
-                 (setf (off-line-spot ret) -X-)
-                 (push -X- revbody))))
-            (T (setq state :middle)
-               (push f revbody))))
-    (nreverse revbody)))
 
-(cl:defun protect-from-setq (in type)
-  (cl:let ((frag (fr in))
-	     (var (var in))
-	     (new (new-var 'in)))
-    (push (list var type) (aux (fr in)))
-    (coerce-to-type type in) ;why am I doing this?
-    (cond ((not (series-var-p in))
-	   (push `(setq ,var ,new) (prolog frag)))
-	  ((not (off-line-spot in))
-	   (push `(setq ,var ,new) (body frag)))
-	  (T (nsubst-inline `((setq ,var ,new)) (off-line-spot in) (body frag) T)))
-    (setf (var in) new)))
+(defS producing (output-list input-list &rest body) "" non-opt-producing
+ :optimizer
+   (optimize-producing output-list input-list body)
+ :trigger
+   (dolist (pair (caddr call) nil)
+     (if (and (consp pair) (cdr pair) (produces-optimizable-series (cadr pair)))
+	 (return T)))
+ :discriminator
+   (dolist (pair (cadr call) nil)
+     (if (not (consp pair)) (return T))))
+
+#+symbolics(setf (gethash 'producing zwei:*lisp-indentation-offset-hash-table*)
+		 '(2 1))
+
+(defmacro terminate-producing ()
+    "Causes the containing call on producing to terminate."
+  `(go ,END))
+
 
 ;This turns a producing form into a frag that fits the requirements of a frag well
 ;enough that we can call FRAG->PHYSICAL on it.  The key to this is that we only
@@ -4274,6 +4381,15 @@ TYPE."
 ;This is ok because outputs never get renamed.  Also
 ;the input old to the frag most likely never gets used, but this
 ;makes sure that the dflow is logically correct.
+
+(cl:defun find-alter-form (ret)
+  (cl:let* ((v (var ret))
+	      (form (cadr (assoc v (alterable (fr ret))))))
+    (if form form
+	(dolist (a (args (fr ret)))
+	  (when (or (eq v (var a))
+		    (equal (prolog (fr ret)) `((setq ,v ,(var a)))))
+	    (return (find-alter-form (prv a))))))))
 
 (defS alter (destinations items)
     "Alters the values in DESTINATIONS to be ITEMS."
@@ -4330,15 +4446,6 @@ TYPE."
     (setf (alterable frag)
           `((,var (cl:funcall ,alter-function *alt* ,@ state-vars) ,@ state-vars)))
     (funcall-frag frag params)))
-
-(cl:defun find-alter-form (ret)
-  (cl:let* ((v (var ret))
-	      (form (cadr (assoc v (alterable (fr ret))))))
-    (if form form
-	(dolist (a (args (fr ret)))
-	  (when (or (eq v (var a))
-		    (equal (prolog (fr ret)) `((setq ,v ,(var a)))))
-	    (return (find-alter-form (prv a))))))))
 
 (defS series (expr &rest expr-list)
   "Creates an infinite series of the results of the expressions."
@@ -4421,7 +4528,7 @@ TYPE."
 		  ((setq numbers (coerce (- from by) '*type*)))
 		  ((setq numbers (+ numbers (coerce by '*type*)))
 		   (if (not (> numbers above)) (go END))) () ()))
-	  #-cmu
+	  #+cmu
 	  (length
 	   (fragL ((from) (length) (by)) ((numbers T))
 		  ((numbers *type*) (counter fixnum)) ()
@@ -4429,7 +4536,7 @@ TYPE."
 		  ((setq numbers (+ numbers by))
 		   (if (not (plusp counter)) (go END))
 		   (decf counter)) () ()))
-	  #+cmu
+	  #-cmu
 	  (length
 	   (fragL ((from) (length) (by)) ((numbers T))
 		  ((numbers *type*) (counter fixnum)) ()
@@ -4525,27 +4632,26 @@ TYPE."
 		     (if (not (< index limit)) (go END))
 		     (setq elements (elt seq index))) () ())))))
 
-(defS scan-multiple (type sequence &rest sequences)
-    "Scans multiple sequences in parallel"
-  (cl:let ((types (mapcar #'cadr
-			    (decode-multiple-types-arg (list 'quote type)
-						       (1+ (length sequences))))))
-    (apply #'cotruncate
-	   (scan (car types) sequence)
-	   (mapcar #'scan* (cdr types) sequences)))
- :optimizer
-  (cl:let ((types (decode-multiple-types-arg type (1+ (length sequences)))))
-    `(cotruncate (scan ,(car types) ,sequence)
-		 ,@(mapcar #'(lambda (type seq) `(scan* ,type ,seq))
-			   (cdr types) sequences))))
+(cl:defun promote-series (series)
+  (cond ((not (alter-fn series)) series)
+	(T (setq series (if (image-series-p series)
+			    (copy-image-series series)
+			    (copy-basic-series series)))
+	   (setf (alter-fn series) nil)
+	   series)))
 
-(cl:defun decode-multiple-types-arg (type n)
-  (cond ((or (not (eq-car type 'quote))
-	     (not (eq-car (cadr type) 'values)))
-	 (make-list n :initial-element type))
-	(T (if (not (= (length (cdadr type)) n))
-	       (ers 78 "~%SCAN-MULTIPLE: type and number of sequences conflict."))
-	 (mapcar #'(lambda (x) `(quote ,x)) (cdadr type)))))
+(defS cotruncate (&rest items-list)
+    "Truncates the inputs so that they are all no longer than the shortest one."
+  (values-lists (length items-list)
+		(apply #'map-fn t #'list (mapcar #'promote-series items-list))
+		(mapcar #'alter-fn items-list))
+ :optimizer
+  (cl:let* ((args (copy-list items-list))
+	      (vars (n-gensyms (length args) "COTRUNC-"))
+	      (ports (mapcar #'(lambda (v) (list v t)) vars)))
+    (funcall-frag
+      (literal-frag `(,ports ,(copy-list ports) nil nil nil nil nil nil))
+      args)))
 
 (defS scan* (seq-type seq)
     "Enumerates a series of the values in SEQ without checking for the end."
@@ -4573,88 +4679,28 @@ TYPE."
 		    ((setq index -1) (setq temp seq))
 		    ((incf index)
 		     (setq elements (elt seq index))) () ())))))
-
-;;; DECODE-SEQ-TYPE
-;;;
-;;; DECODE-SEQ-TYPE tries to canonicalize the given type into the
-;;; underlying type.  It returns three values: the sequence type
-;;; (string, vector, simple-array, sequence), the length of the
-;;; sequence (or NIL if not known) and the element type of the
-;;; sequence (or T if not known).
-(cl:defun decode-seq-type (type)
-  (cond ((not (and (eq-car type 'quote)
-		   (setq type (cadr type))))
-	 (values 'sequence nil T))
-	((and (symbolp type)
-	      (string= (string type) "BAG"))
-	 (values 'bag nil T))
-	((and (consp type)
-	      (symbolp (car type))
-	      (string= (string (car type)) "BAG"))
-	 (values 'bag nil (cadr type)))
-	(t
-	 ;; Hmm, should we use subtypep to handle these?  Might be easier.
-	 (cond ((eq type 'list)
-		(values 'list nil T))
-	       ((eq-car type 'list)
-		(values 'list nil (cadr type)))
-	       ((eq type 'sequence)
-		(values 'sequence nil T))
-	       ;; A STRING is canonicalized to (VECTOR CHARACTER)
-	       ((eq type 'string)
-		(values 'vector nil 'character))
-	       ((eq-car type 'string)
-		(values 'vector (if (numberp (cadr type)) (cadr type)) 'character))
-	       ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
-	       ((or (eq type 'simple-string)
-		    (eq type 'simple-base-string))
-		(values 'simple-array nil 'character))
-	       ((or (eq-car type 'simple-string)
-		    (eq-car type 'simple-base-string))
-		(values 'simple-array
-			(if (numberp (cadr type)) (cadr type))
-			'character))
-	       ;; A BIT-VECTOR is (vector bit)
-	       ((eq type 'bit-vector)
-		(values 'vector nil 'bit))
-	       ((eq-car type 'bit-vector)
-		(values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
-	       ;; But a SIMPLE-BIT-VECTOR is really a (SIMPLE-ARRAY BIT (*))
-	       ((eq type 'simple-bit-vector)
-		(values 'simple-array nil 'bit))
-	       ((eq-car type 'simple-bit-vector)
-		(values 'simple-array
-			(if (numberp (cadr type)) (cadr type))
-			'bit))
-	       ;; A VECTOR is just a VECTOR
-	       ((eq type 'vector)
-		(values 'vector nil T))
-	       ((eq-car type 'vector)
-		(values 'vector (if (numberp (caddr type)) (caddr type))
-			(if (not (eq (cadr type) '*)) (cadr type) T)))
-	       ;; And a SIMPLE-VECTOR is just a SIMPLE-VECTOR
-	       ((eq type 'simple-vector)
-		(values 'simple-vector nil T))
-	       ((eq-car type 'simple-vector)
-		(values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
-	       ;; A SIMPLE-ARRAY is a SIMPLE-ARRAY.  This assumes you
-	       ;; specified a one-dimensional simple-array.  Results
-	       ;; are undefined if it's not a one-dimensional array.
-	       ((eq type 'simple-array)
-		(values 'simple-array nil T))
-	       ((eq-car type 'simple-array)
-		(values 'simple-array
-			(if (not (eq (caaddr type) '*)) (caaddr type))
-			(if (not (eq (cadr type) '*))
-			    (cadr type)
-			    T)))
-	       ;; We don't need to handle anything else like arrays
-	       ;; because series only handles 1-dimensional
-	       ;; sequences.
 
-	       ;; Everything else is a sequence
-	       (T
-		(values 'sequence nil T))))))
+(cl:defun decode-multiple-types-arg (type n)
+  (cond ((or (not (eq-car type 'quote))
+	     (not (eq-car (cadr type) 'values)))
+	 (make-list n :initial-element type))
+	(T (if (not (= (length (cdadr type)) n))
+	       (ers 78 "~%SCAN-MULTIPLE: type and number of sequences conflict."))
+	 (mapcar #'(lambda (x) `(quote ,x)) (cdadr type)))))
+
+(defS scan-multiple (type sequence &rest sequences)
+    "Scans multiple sequences in parallel"
+  (cl:let ((types (mapcar #'cadr
+			    (decode-multiple-types-arg (list 'quote type)
+						       (1+ (length sequences))))))
+    (apply #'cotruncate
+	   (scan (car types) sequence)
+	   (mapcar #'scan* (cdr types) sequences)))
+ :optimizer
+  (cl:let ((types (decode-multiple-types-arg type (1+ (length sequences)))))
+    `(cotruncate (scan ,(car types) ,sequence)
+		 ,@(mapcar #'(lambda (type seq) `(scan* ,type ,seq))
+			   (cdr types) sequences))))
 
 (defS scan-sublists (lst)
     "Creates a series of the sublists in a list."
@@ -4891,26 +4937,10 @@ SCAN-FILE, except we read from an existing stream."
 				(T (setq masked-items
 					 (if post-p post items))))) () ())))))
 
-(cl:defun promote-series (series)
-  (cond ((not (alter-fn series)) series)
-	(T (setq series (if (image-series-p series)
-			    (copy-image-series series)
-			    (copy-basic-series series)))
-	   (setf (alter-fn series) nil)
-	   series)))
-
-(defS cotruncate (&rest items-list)
-    "Truncates the inputs so that they are all no longer than the shortest one."
-  (values-lists (length items-list)
-		(apply #'map-fn t #'list (mapcar #'promote-series items-list))
-		(mapcar #'alter-fn items-list))
- :optimizer
-  (cl:let* ((args (copy-list items-list))
-	      (vars (n-gensyms (length args) "COTRUNC-"))
-	      (ports (mapcar #'(lambda (v) (list v t)) vars)))
-    (funcall-frag
-      (literal-frag `(,ports ,(copy-list ports) nil nil nil nil nil nil))
-      args)))
+(defS until1 (bools items)
+    "Returns ITEMS up to, but not including, the first non-null element of BOOLS."
+  (fragL ((bools T) (items T)) ((items T)) () ()
+	 () ((if bools (go END))) () ()))
 
 (defS until (bools items-1 &rest items-i)
    "Returns ITEMS-I up to, but not including, the first non-null element of BOOLS."
@@ -4927,12 +4957,12 @@ SCAN-FILE, except we read from an existing stream."
 	       () ()
 	       () ((if bools (go END))) () ())
 	     bools items-1 items-i))))
-
-(defS until1 (bools items)
-    "Returns ITEMS up to, but not including, the first non-null element of BOOLS."
-  (fragL ((bools T) (items T)) ((items T)) () ()
-	 () ((if bools (go END))) () ()))
 
+(defS until-if1 (pred items other-items)
+  "Returns ITEMS up to, but not including, the first element which satisfies PRED."
+  (fragL ((pred) (items T) (other-items T)) ((other-items T)) () ()
+	 () ((if (cl:funcall pred items) (go END))) () ()))
+
 (defS until-if (pred items-1 &rest items-i)
 "Returns ITEMS-i up to, but not including, the first element which satisfies PRED."
   (if (null items-i) (until-if1 pred items-1 items-1)
@@ -4953,11 +4983,6 @@ SCAN-FILE, except we read from an existing stream."
 	  `((if ,(car (handle-fn-call frag nil pred (list (car item-vars)) t))
 		(go ,END))))
     (funcall-frag frag params)))
-
-(defS until-if1 (pred items other-items)
-  "Returns ITEMS up to, but not including, the first element which satisfies PRED."
-  (fragL ((pred) (items T) (other-items T)) ((other-items T)) () ()
-	 () ((if (cl:funcall pred items) (go END))) () ()))
 
 (defS positions (bools)
     "Returns a series of the positions of non-null elements in bools."
@@ -5042,6 +5067,15 @@ SCAN-FILE, except we read from an existing stream."
 		    (setq items items1) (setq need1 1))
 		   (T (setq items items2) (setq need2 1)))) () ()))
 
+(defS catenate2 (items1 items2) ""
+  (fragL ((items1 T -X- F) (items2 T -Y-)) ((items T))
+	 ((items T) (flag (member T nil))) ()
+	 ((setq flag nil))
+	 (  (if flag (go B))
+	  -X- (setq items items1) (go D)
+	  F (setq flag T)
+	  B -Y- (setq items items2) D) () ()))
+
 (defS catenate (items1 items2 &rest more-items)
     "Concatenates two or more series end to end."
   (if more-items
@@ -5051,62 +5085,6 @@ SCAN-FILE, except we read from an existing stream."
   (if more-items
       `(catenate2 ,items1 (catenate ,items2 ,@ more-items))
       `(catenate2 ,items1 ,items2)))
-
-(defS catenate2 (items1 items2) ""
-  (fragL ((items1 T -X- F) (items2 T -Y-)) ((items T))
-	 ((items T) (flag (member T nil))) ()
-	 ((setq flag nil))
-	 (  (if flag (go B))
-	  -X- (setq items items1) (go D)
-	  F (setq flag T)
-	  B -Y- (setq items items2) D) () ()))
-
-(defS split (items bools &rest more-bools)
-    "Divides a series into multiple outputs based on BOOLS."
-  (cl:let* ((pos-lists
-		(apply #'map-fn t
-		       #'(lambda (item &rest bools)
-			   (cons (apply #'pos bools) item))
-		       (promote-series items)
-		       (list* bools (copy-list more-bools)))))
-    (values-list
-      (mapcar #'(lambda (i)
-		  (make-image-series :alter-fn (alter-fn items)
-				     :image-fn #'image-of-with-datum
-				     :image-datum i
-				     :image-base pos-lists))
-	    (n-integers (+ 2 (length more-bools))))))
- :optimizer
-  (do-split items (cons bools (copy-list more-bools)) T))
-
-(cl:defun pos (&rest bools)
-  (do ((bs bools (cdr bs))
-       (i 0 (1+ i)))
-      ((null bs) i)
-    (if (car bs) (return i))))
-
-(defS split-if (items pred &rest more-pred)
-    "Divides a series into multiple outputs based on PRED."
-  (cl:let* ((preds (list* pred (copy-list more-pred)))
-	      (pos-lists
-		(map-fn t #'(lambda (item)
-			      (cons (apply #'pos-if item preds) item))
-			(promote-series items))))
-    (values-list
-      (mapcar #'(lambda (i)
-		  (make-image-series :alter-fn (alter-fn items)
-				     :image-fn #'image-of-with-datum
-				     :image-datum i
-				     :image-base pos-lists))
-	    (n-integers (+ 2 (length more-pred))))))
- :optimizer
-  (do-split items (cons pred (copy-list more-pred)) nil))
-
-(cl:defun pos-if (item &rest fns)
-  (do ((fs fns (cdr fs))
-       (i 0 (1+ i)))
-      ((null fs) i)
-    (if (cl:funcall (car fs) item) (return i))))
 
 (cl:defun image-of-with-datum (g datum)
   (cl:let (item)
@@ -5139,6 +5117,48 @@ SCAN-FILE, except we read from an existing stream."
 	       ,-X- ,D)))
     (funcall-frag frag (cons items stuff))))
 
+(defS split (items bools &rest more-bools)
+    "Divides a series into multiple outputs based on BOOLS."
+  (cl:let* ((pos-lists
+		(apply #'map-fn t
+		       #'(lambda (item &rest bools)
+			   (cons (apply #'pos bools) item))
+		       (promote-series items)
+		       (list* bools (copy-list more-bools)))))
+    (values-list
+      (mapcar #'(lambda (i)
+		  (make-image-series :alter-fn (alter-fn items)
+				     :image-fn #'image-of-with-datum
+				     :image-datum i
+				     :image-base pos-lists))
+	    (n-integers (+ 2 (length more-bools))))))
+ :optimizer
+  (do-split items (cons bools (copy-list more-bools)) T))
+
+(defS split-if (items pred &rest more-pred)
+    "Divides a series into multiple outputs based on PRED."
+  (cl:let* ((preds (list* pred (copy-list more-pred)))
+	      (pos-lists
+		(map-fn t #'(lambda (item)
+			      (cons (apply #'pos-if item preds) item))
+			(promote-series items))))
+    (values-list
+      (mapcar #'(lambda (i)
+		  (make-image-series :alter-fn (alter-fn items)
+				     :image-fn #'image-of-with-datum
+				     :image-datum i
+				     :image-base pos-lists))
+	    (n-integers (+ 2 (length more-pred))))))
+ :optimizer
+  (do-split items (cons pred (copy-list more-pred)) nil))
+
+(defS every-nth (m n items)
+    "Returns a series of every Nth element of ITEMS, after skipping M elements."
+  (fragL ((m) (n) (items T -X-)) ((items T)) ((count fixnum)) ()
+	 ((setq count (1- m)))
+	 (L -X- (cond ((plusp count) (decf count) (go L))
+		      (T (setq count (1- n))))) () ()))
+
 (defS chunk (m n &optional (items nil items-p))
     "Moves a window of width M over ITEMS by step N."
   (progn
@@ -5179,13 +5199,6 @@ SCAN-FILE, except we read from an existing stream."
                      (cond ((plusp count) (decf count) (go L))
                            (T (setq count ,(1- n))))) () ()))
                (list items)))))))
-
-(defS every-nth (m n items)
-    "Returns a series of every Nth element of ITEMS, after skipping M elements."
-  (fragL ((m) (n) (items T -X-)) ((items T)) ((count fixnum)) ()
-	 ((setq count (1- m)))
-	 (L -X- (cond ((plusp count) (decf count) (go L))
-		      (T (setq count (1- n))))) () ()))
 
 ;seq-type must be a subtype of SEQUENCE or BAG.
 
@@ -5331,6 +5344,7 @@ SCAN-FILE, except we read from an existing stream."
 	   c)))
      ,items ,printer))
  :trigger T)
+
 
 
 (defS collect-alist (keys values)
@@ -5491,4 +5505,3 @@ SCAN-FILE, except we read from an existing stream."
 ;;;    SOFTWARE.
 
 ;;; -------------------------------------------------------------------------
-
