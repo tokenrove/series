@@ -36,9 +36,12 @@
 ;comparison of results, all of the old tests are given numerical names
 ;that match the numbers printed out when running the old tester.
 
-;;;; $Id: s-test.lisp,v 1.8 1999/04/29 22:07:43 toy Exp $
+;;;; $Id: s-test.lisp,v 1.9 1999/07/01 17:18:05 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.9  1999/07/01 17:18:05  toy
+;;;; Use the package COMMON-LISP-USER instead of USER.
+;;;;
 ;;;; Revision 1.8  1999/04/29 22:07:43  toy
 ;;;; Don't break on signals for Allegro either.
 ;;;;
@@ -58,7 +61,7 @@
 ;;;;
 ;;;;
 
-(in-package "USER")
+(in-package "COMMON-LISP-USER")
 (eval-when (load compile)
   (series::install))
 
