@@ -8,11 +8,23 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.32 1999/07/02 20:37:39 toy Exp $
+;;;; $Id: s-code.lisp,v 1.33 1999/09/14 20:17:52 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.33  1999/09/14 20:17:52  toy
+;;;; o Added collect-stream.  Same as collect-file, except the results go
+;;;;   to a stream instead of a new file.
+;;;;
+;;;; o I received an updated version (09/02/92) from James Bushnell who got
+;;;;   it from Richard Waters.  I quick diff indicates that the only real
+;;;;   change was renaming collect, mask, and until were renamed collect-s,
+;;;;   mask-s, and until-s, respectively.  Apparently this was to prevent
+;;;;   conflicts with loop clauses (until and collect).  (Don't know about
+;;;;   mask-s).  However, I'm not going to make these changes (yet?)
+;;;;   because it will break any existing code.
+;;;;
 ;;;; Revision 1.32  1999/07/02 20:37:39  toy
 ;;;; Moved the package stuff out to a separate file.
 ;;;;
@@ -5265,6 +5277,25 @@
 	      (list 'with-open-file '(,file ,name :direction :output) c))))
 	,items ,printer)))
  :trigger T)
+
+(defS collect-stream (name items &optional (printer #'print))
+    "Prints the elements of ITEMS onto the stream NAME."
+  (fragL ((name) (items T) (printer)) ((out)) ((out (or null T)) (lst list)) ()
+	 ((setq lst nil) (setq out T))
+	 ((setq lst (cons items lst)))
+	 ((setq lst (nreverse lst))
+	  (dolist (item lst)
+	    (cl:funcall printer item name))) ())
+ :optimizer
+  (funcall-literal-frag
+    (cl:let ((file (new-var 'outfile)))
+      `((((items T) (printer)) ((out)) ((out (or null T))) ()
+	 ((setq out T)) ((cl:funcall printer items ,name)) ()
+	 (#'(lambda (c)
+	      c)))
+	,items ,printer)))
+ :trigger T)
+
 
 (defS collect-alist (keys values)
     "Combines a series of keys and a series of values together into an alist."
