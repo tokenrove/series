@@ -40,9 +40,12 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.16 2000/06/26 18:17:14 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.17 2000/09/05 15:54:57 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.17  2000/09/05 15:54:57  rtoy
+;;;; Add test to catch bug 113625:  scan doesn't scan constants very well.
+;;;;
 ;;;; Revision 1.16  2000/06/26 18:17:14  rtoy
 ;;;; Add a test to catch the bug that (collect 'vector (scan '(1 2 3)))
 ;;;; was returning the result in reverse order.
@@ -2370,6 +2373,14 @@
 
 (defok 1000 (ton (coerce (collect 'vector (scan '(1 2 3))) 'list))
   (1 2 3))
+
+(eval-when (compile load eval)
+(defconstant +constant+
+  #(1 2 3 4))
+)
+
+(defok 1001 (ton (collect 'list (scan 'vector +constant+)))
+  (1 2 3 4))
 
 ;;; New GATHERING tests
 
