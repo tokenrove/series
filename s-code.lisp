@@ -8,11 +8,21 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.33 1999/09/14 20:17:52 toy Exp $
+;;;; $Id: s-code.lisp,v 1.34 1999/09/14 21:25:01 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.34  1999/09/14 21:25:01  toy
+;;;; o  Some changes to init-elem:  Test for array before sequence.  Then,
+;;;;    if it's an array, use `(make-array ...) for the initializer.  I
+;;;;    think this is needed because specialized arrays can't be printed
+;;;;    readably, and we need correct initializer for specialized arrays.
+;;;;
+;;;;    This probably needs some additional work.
+;;;;
+;;;; o  Removed some unused variables from collect-stream.
+;;;;
 ;;;; Revision 1.33  1999/09/14 20:17:52  toy
 ;;;; o Added collect-stream.  Same as collect-file, except the results go
 ;;;;   to a stream instead of a new file.
@@ -3025,20 +3035,22 @@
 	   ;; Use NIL as the initializer if the resulting type would
 	   ;; be T for the given implementation.
 	   nil)
+          ((subtypep var-type 'array)
+           ;; Heuristic: assume they mean vector.
+           (cl:multiple-value-bind (arr len elem-type)
+               (decode-seq-type `',var-type)
+             (declare (ignorable arr))
+	     ;;(format t "is array ~A~%" var-type)
+	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
+	     `(make-array ,(or len 0) :element-type ',(or elem-type))))
           ((subtypep var-type 'sequence)
            (cl:multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
-             (declare (ignore arr elem-type))
+             (declare (ignorable arr elem-type))
+	     ;;(format t "is sequence: var-type = ~A~%" var-type)
+	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
              ;; BUG: Only as good as DECODE-SEQ-TYPE.
              (make-sequence var-type (or len 0))))
-          ((subtypep var-type 'array)
-           ;; Heuristic: assume they mean vector.
-           ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
-           (cl:multiple-value-bind (arr len elem-type)
-               (decode-seq-type `',var-type)
-             (declare (ignore arr))
-             ;; Probably no length, as that case is caught by previous branch
-             (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
 	  ((eq t (upgraded-array-element-type var-type))
 	   ;; Use NIL as the initializer if the resulting type would
 	   ;; be T for the given implementation.
@@ -5280,20 +5292,19 @@
 
 (defS collect-stream (name items &optional (printer #'print))
     "Prints the elements of ITEMS onto the stream NAME."
-  (fragL ((name) (items T) (printer)) ((out)) ((out (or null T)) (lst list)) ()
-	 ((setq lst nil) (setq out T))
+  (fragL ((name) (items T) (printer)) (()) ((lst list)) ()
+	 ((setq lst nil))
 	 ((setq lst (cons items lst)))
 	 ((setq lst (nreverse lst))
 	  (dolist (item lst)
 	    (cl:funcall printer item name))) ())
  :optimizer
   (funcall-literal-frag
-    (cl:let ((file (new-var 'outfile)))
-      `((((items T) (printer)) ((out)) ((out (or null T))) ()
-	 ((setq out T)) ((cl:funcall printer items ,name)) ()
-	 (#'(lambda (c)
-	      c)))
-	,items ,printer)))
+   `((((items T) (printer)) (()) () ()
+      () ((cl:funcall printer items ,name)) ()
+      (#'(lambda (c)
+	   c)))
+     ,items ,printer))
  :trigger T)
 
 
