@@ -8,11 +8,21 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.27 1999/04/29 22:06:49 toy Exp $
+;;;; $Id: s-code.lisp,v 1.28 1999/06/30 19:34:49 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.28  1999/06/30 19:34:49  toy
+;;;; "Pekka P. Pirinen" <pekka@harlequin.co.uk> says:
+;;;;
+;;;; 	"Tests 289, 290, 417, and 426 [on Liquid CL] fail because of
+;;;; 	incorrect type decls generated in ADD-PHYSICAL-OUT-INTERFACE.
+;;;; 	The variable NEW-OUT is used for two conflicting purposes; The
+;;;; 	fix is to split it into two."
+;;;;
+;;;; Thanks!
+;;;;
 ;;;; Revision 1.27  1999/04/29 22:06:49  toy
 ;;;; Fix some problems in aux-init not handling some strings and
 ;;;; bit-vectors correctly.
@@ -1286,24 +1296,27 @@
 
 (cl:defun add-physical-out-interface (ret alter-prop)
   (cl:let* ((frag (fr ret))
-	      (off-line-spot (off-line-spot ret))
-	      (new-out (new-var 'list)))
+	    (off-line-spot (off-line-spot ret))
+	    (new-list (new-var 'list))
+	    (new-out (new-var 'out)))
     (cl:multiple-value-bind (out-value alterer) (out-value ret alter-prop nil)
-      (cl:let* ((new-body-code `((push ,out-value ,new-out)))
-		  (new-epilog-code
-		    `(setq ,new-out (make-phys :data-list (nreverse ,new-out)
-					       :alter-fn ,alterer))))
+      (cl:let* ((new-body-code `((push ,out-value ,new-list)))
+		(new-epilog-code
+		  `(setq ,new-out (make-phys :data-list (nreverse ,new-list)
+                                             :alter-fn ,alterer))))
 	(setf (var ret) new-out)
 	(setf (series-var-p ret) nil)
 	(setf (off-line-spot ret) nil)
-	(push (list new-out 'list) (aux frag))
-	(push `(setq ,new-out nil) (prolog frag))
+	(push (list new-list 'list) (aux frag))
+	(push (list new-out 'series) (aux frag))
+	(push `(setq ,new-list '()) (prolog frag))
 	(if (not off-line-spot)
 	    (setf (body frag) (nconc (body frag) new-body-code))
 	    (setf (body frag)
 		  (nsubst-inline new-body-code off-line-spot (body frag))))
 	(push new-epilog-code (epilog frag))
 	frag))))
+
 
 ;alter-info has priority
 
