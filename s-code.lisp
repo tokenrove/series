@@ -9,12 +9,20 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.78 2000/10/07 20:02:10 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.79 2000/10/10 15:02:27 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.79  2000/10/10 15:02:27  rtoy
+;;;; Fix up the lifting code to handle all variables except #:SEQ.
+;;;; (There's some code in collect that initializes a SEQ var with (if SEQ
+;;;; SEQ <do something else>), which I can't lift up because then SEQ would
+;;;; be undefined.)
+;;;;
+;;;; Change the default for *lift-out-vars-p* to be T.
+;;;;
 ;;;; Revision 1.78  2000/10/07 20:02:10  rtoy
 ;;;; Comment and clean up code added in previous update.
 ;;;;
@@ -5044,25 +5052,29 @@
     (when alist
       (nsublis alist loop))))
 
-(cl:defun out-var-p (var)
-  ;; Is VAR the name of an output variable? This assumes that these
-  ;; are named OUT-nnnn and that the user doesn't actually do that!
-  (when (atom var)
-    (cl:let ((var-name (symbol-name var)))
-      (when (>= (length var-name) 4)
-	(string-equal "OUT-" (subseq var-name 0 4))))))
+(cl:defun liftable-var-p (var)
+  ;; Is VAR the name of a variable we can lift?  This says yes to
+  ;; everything except #:SEQ-nnn variables.
+  (if (symbol-package var)
+      var
+      (cl:let ((var-name (symbol-name var)))
+	(when (>= (length var-name) 4)
+	  (not (string-equal "SEQ-" (subseq var-name 0 4)))))))
 
 (cl:defun find-out-vars (code)
   ;; If code looks something like (let (bindings) ...) we peek at the
-  ;; bindings to see any of the let bindings are initializing series
-  ;; #:OUT variables to NIL.
+  ;; bindings.  Return a list of the variables being defined in the
+  ;; bindings.  (Ignore any intializations being done in the binding.)
   (when (member (first code) '(let cl:let))
     (destructuring-bind (let (&rest bindings) &rest body)
 	code
       (declare (ignore let body))
-      ;; Extract only the #:OUT- vars
-      (remove-if-not #'out-var-p
-		     bindings))))
+      (remove-if-not #'liftable-var-p
+		     (mapcar #'(lambda (x)
+				 (if (listp x)
+				     (first x)
+				     x))
+			     bindings)))))
 
 (cl:defun find-initializers (vars-to-init code)
   ;; We try to find initializers to the variables in VARS-TO-INIT.  We
@@ -5074,36 +5086,38 @@
   ;;   <other stuff>
   ;; )
   ;;
+  ;; We return an alist of the variable and the initializer from the
+  ;; setq expression.
   (do ((inits nil)
        (list (cddr code) (rest list)))
       ((not (and (listp (first list))
-		 (member (first (first list)) '(setq cl:setq))
-		 (out-var-p (second (first list)))))
-       ;; Exit the loop if we've gone past the last setq
+		 (member (first (first list)) '(setq cl:setq declare cl:declare))))
+       ;; Exit the loop if we've gone past the last setq, ignoring any
+       ;; declare expressions
        inits)
     ;;(format t "setq = ~A~%" (first list))
-    (cl:let ((name (member (second (first list)) vars-to-init)))
+    (cl:let ((name (find (second (first list)) vars-to-init)))
       ;;(format t "name = ~A~%" name)
       (when name
 	;;(format t "init = ~%" (third (first list)))
-	(push (list (first name) (third (first list))) inits)))))
+	(push (list name (third (first list)))
+	      inits)))))
 
-(cl:defun delete-initializers (code)
-  ;; Destructively modify CODE to delete the initializers that we
-  ;; found.
-  (do ((list (cddr code) (rest list)))
+(cl:defun remove-initializers (inits code)
+  (do ((new-code '())
+       (list (cddr code) (rest list)))
       ((not (and (listp (first list))
-		 (member (first (first list)) '(setq cl:setq))
-		 (out-var-p (second (first list)))))
-       (setf (cddr code) list)
-       code)
-    nil))
+		 (member (first (first list)) '(setq cl:setq declare cl:declare))))
+       (append new-code list))
+    ;;(format t "looking at ~A~%" (first list))
+    ;;(format t "new-code = ~A~%" new-code)
+    (unless (member (second (first list)) inits :key #'first)
+      ;;(format t "saving ~A~%" (first list))
+      (setf new-code (append new-code (list (first list)))))))
 
 ;; Try to lift the initialization of out vars to the let.  This is a
 ;; heuristic that I (toy@rtp.ericsson.se) hope works.
 (cl:defun lift-out-vars (code)
-  ;; This MUST destructively modify CODE.
-  ;;
   ;; We look for something like
   ;; (let (out-1 out-2)
   ;;   (setq out-1 <init-1>)
@@ -5122,22 +5136,23 @@
       ;; There are output vars.  Find the initializers associated with
       ;; those output vars.
       (cl:let* ((inits (find-initializers out-vars code))
-		(new-bindings (mapcar #'(lambda (v)
-					  ;; Create a new bindings
-					  ;; list that initializes the
-					  ;; variables appropriately.
-					  (or (assoc v inits) v))
-				      bindings)))
-	;;(format t "new-bindings = ~A~%" new-bindings)
-	;; Set the new bindings by destructively modifying the list.
-	(setf (second code) new-bindings)
-	;; Remove the initializers (destructively).
-	(delete-initializers code)
-	code))))
+		(new-bindings
+		 (mapcar #'(lambda (v)
+			     ;; Create a new bindings
+			     ;; list that initializes the
+			     ;; variables appropriately.
+			     (let ((var (if (listp v) (first v) v)))
+			       (or (assoc var inits :key #'(lambda (x)
+							     (if (listp x)
+								 (first x)
+								 x)))
+				   v)))
+			 bindings)))
+	`(cl:let* ,new-bindings ,@(remove-initializers inits code))))))
 
 ;; Set this to non-NIL to activate LIFT-OUT-VARS when generating the
 ;; series expansion.
-(defvar *lift-out-vars-p* nil)
+(defvar *lift-out-vars-p* t)
 
 (cl:defun codify (frag)
   (dolist (r (rets frag))
@@ -5180,7 +5195,7 @@
       (setq code (car (wrap-code wrps (list code)))))
     (use-user-names aux code)
     (when *lift-out-vars-p*
-      (lift-out-vars code))
+      (setf code (lift-out-vars code)))
     (setq *last-series-loop* code)))
 
 ); end of eval-when
