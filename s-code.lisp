@@ -8,11 +8,17 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.25 1999/04/15 17:09:41 toy Exp $
+;;;; $Id: s-code.lisp,v 1.26 1999/04/23 17:51:24 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.26  1999/04/23 17:51:24  toy
+;;;; For CMUCL, decode-seq-type didn't handle base-string types.  Make it
+;;;; work.
+;;;;
+;;;; In aux-init, change the test for simple-string to be string instead.
+;;;;
 ;;;; Revision 1.25  1999/04/15 17:09:41  toy
 ;;;; Rework aux-init once again.  The bit-vector entry goes away, and the
 ;;;; entry for vector and simple-array are changed to create the proper
@@ -3051,8 +3057,8 @@
 		  (list var-name (complex (coerce 0 (cadadr aux)))))))
 	  ((subtypep var-type 'number)
 	   (list var-name (coerce 0 var-type)))
-	  ((subtypep var-type 'simple-string)
-	   ;; (simple-string) or (simple-string len)
+	  ((subtypep var-type 'string)
+	   ;; (string) or (string len)
 	   (cond ((and (consp var-type)
 		       (= 2 (length var-type)))
 		  (cl:let ((len (second var-type)))
@@ -4595,13 +4601,18 @@
 	       ((eq-car type 'list) (values 'list nil (cadr type)))
 	       ((eq type 'sequence) (values 'sequence nil T))
 	       ;; Strings are translated to the underlying vector/array types.
-	       ((eq type 'string) (values 'vector nil 'character))
-	       ((eq-car type 'string)
+	       ((or (eq type 'string)
+		    (eq type 'base-string))
+		(values 'vector nil 'character))
+	       ((or (eq-car type 'string)
+		    (eq-car type 'base-string))
 		(values 'vector (if (numberp (cadr type)) (cadr type))
 			'character))
-	       ((eq type 'simple-string)
+	       ((or (eq type 'simple-string)
+		    (eq type 'simple-base-string))
 		(values 'simple-array nil 'character))
-	       ((eq-car type 'simple-string)
+	       ((or (eq-car type 'simple-string)
+		    (eq-car type 'simple-base-string))
 		(values 'simple-array (if (numberp (cadr type)) (cadr type))
 			'character))
 	       ;; Bit vectors are really vectors holding bits.
