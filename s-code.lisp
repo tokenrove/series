@@ -9,12 +9,21 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.83 2001/04/09 19:52:34 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.84 2001/04/09 22:18:47 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.84  2001/04/09 22:18:47  rtoy
+;;;; o Random re-indents so I can read the code better
+;;;; o The latest versions of CMUCL's PCL have a better code walker that
+;;;;   allows us to do a macroexpand, ala lispworks.
+;;;; o For CMUCL, use its list pretty-printer for printing out series.
+;;;;   It looks much better.  But may be a problem if the series is
+;;;;   infinite.  We won't get any output at all.  (I think the original
+;;;;   would produce output and just never stop.)
+;;;;
 ;;;; Revision 1.83  2001/04/09 19:52:34  rtoy
 ;;;; Stupid typo commenting (too much) stuff out.
 ;;;;
@@ -616,9 +625,12 @@
 (defvar *series-implicit-map* nil 
   "T enables implicit mapping in optimized expressions")
 
-(defconstant /ext-conflicts/ #-:cmu () #+:cmu '(collect iterate))
+(defconstant /ext-conflicts/
+  #-:cmu ()
+  #+:cmu '(collect iterate))
 
-(defconstant /series-forms/ '(let let* multiple-value-bind funcall defun)
+(defconstant /series-forms/
+  '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
 #+:gcl
@@ -643,21 +655,36 @@
     x))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (deftype nonnegative-fixnum () `(mod ,most-positive-fixnum))
-  (deftype nonnegative-integer () `(integer 0))
-  (deftype positive-integer () `(integer 1))
-  (deftype -integer  (m &optional (n nil) (under 1)) `(integer ,(- m under) ,@(when n `(,n))))
-  (deftype integer+  (m &optional (n nil) (over 1))  `(integer ,m ,@(when n `(,(+ n over)))))
-  (deftype integer-  (m &optional (n nil) (over 1))  `(integer ,m ,@(when n `(,(- n over)))))
-  (deftype -integer- (m &optional (n nil) (over 1) (under 1)) `(integer ,(- m under) ,@(when n `(,(- n over)))))
-  (deftype mod+ (n &optional (over 1)) `(mod ,(+ n over)))
-  (deftype null-or (&rest types) `(or null ,@types))
-  (deftype uninitialized (typ) `(null-or ,typ))
-  (deftype defaulted (typ) `(null-or ,typ))
-  (deftype -vector-index  ()  `(-integer- 0 ,array-total-size-limit))
-  (deftype vector-index   ()  `(integer-  0 ,array-total-size-limit))
-  (deftype vector-index+  ()  `(integer   0 ,array-total-size-limit)) 
-  (deftype -vector-index+ ()  `(-integer  0 ,array-total-size-limit))
+  (deftype nonnegative-fixnum ()
+    `(mod ,most-positive-fixnum))
+  (deftype nonnegative-integer ()
+    `(integer 0))
+  (deftype positive-integer ()
+    `(integer 1))
+  (deftype -integer  (m &optional (n nil) (under 1))
+    `(integer ,(- m under) ,@(when n `(,n))))
+  (deftype integer+  (m &optional (n nil) (over 1))
+    `(integer ,m ,@(when n `(,(+ n over)))))
+  (deftype integer-  (m &optional (n nil) (over 1))
+    `(integer ,m ,@(when n `(,(- n over)))))
+  (deftype -integer- (m &optional (n nil) (over 1) (under 1))
+    `(integer ,(- m under) ,@(when n `(,(- n over)))))
+  (deftype mod+ (n &optional (over 1))
+    `(mod ,(+ n over)))
+  (deftype null-or (&rest types)
+    `(or null ,@types))
+  (deftype uninitialized (typ)
+    `(null-or ,typ))
+  (deftype defaulted (typ)
+    `(null-or ,typ))
+  (deftype -vector-index  ()
+    `(-integer- 0 ,array-total-size-limit))
+  (deftype vector-index   ()
+    `(integer-  0 ,array-total-size-limit))
+  (deftype vector-index+  ()
+    `(integer   0 ,array-total-size-limit)) 
+  (deftype -vector-index+ ()
+    `(-integer  0 ,array-total-size-limit))
     
 #-:extensions
 (progn
@@ -2599,8 +2626,17 @@
                ((cl:macrolet cl:symbol-macrolet) t)
                (t nil)))
       (return code))
-    (setq code (cons 'progn (cddr (walker::walk-form code))))) 
-  #-:lispworks
+    (setq code (cons 'progn (cddr (walker::walk-form code)))))
+  #+cmu
+  (cl:let ((pcl::walk-form-macroexpand-p t))
+    (loop 
+	(unless (and (listp code)
+		     (case (car code)
+		       ((cl:macrolet cl:symbol-macrolet) t)
+		       (t nil)))
+	  (return code))
+	(setq code (cons 'progn (cddr (walker::walk-form code))))))
+  #-(or :lispworks :cmu)
   code)
 
 ;; on lispm '(lambda ...) macroexpands to (function (lambda ...)) ugh!
@@ -3329,7 +3365,11 @@
 			     :image-base series-of-lists))
       (n-integer-values n)))
 
-
+;; If you have a Common Lisp pretty-printer, we should use that to
+;; print out series because that probably does a better job than this
+;; routine would.  We basically print out series as if it were a list
+;; of items.
+#-cmu
 (cl:defun print-series (series stream depth)
   (cl:let ((generator (generator series)))
     (write-string "#Z(" stream)
@@ -3346,7 +3386,19 @@
 			(- *print-level* depth)))))
     (write-char #\) stream)))
 
-);end of eval-when
+#+cmu
+(cl:defun print-series (series stream depth)
+  (cl:let ((generator (generator series))
+	   (s '()))
+    ;; Get all elements of the series
+    (do ()
+	(nil)
+      (push (next-in generator (return nil)) s))
+    (setf s (nreverse s))
+    (pprint-logical-block (stream s :prefix "#Z")
+      (write s :stream stream))))
+
+ );end of eval-when
 
 ;;;;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
 
