@@ -8,11 +8,17 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.16 1998/06/08 17:34:59 toy Exp $
+;;;; $Id: s-code.lisp,v 1.17 1998/06/10 18:59:51 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.17  1998/06/10 18:59:51  toy
+;;;; Fixed long-standing bug in scan-range where the initial values of the
+;;;; loop variables didn't match the specified :type.  I'm not sure this is
+;;;; the correct solution, but it seems to produce the desired macro
+;;;; expansions.  I would be interested in a better solution, if possible.
+;;;;
 ;;;; Revision 1.16  1998/06/08 17:34:59  toy
 ;;;; Couple of small changes for CLISP.
 ;;;;
@@ -4308,6 +4314,75 @@
   :optimizer
     (macroexpand `(scan (list ,item ,@ (copy-list item-list)))))
 
+
+#-old-scan-range
+(progn
+;; This deftype is used to appease the compiler (CMUCL) about an
+;; unknown type when compiling scan-range.  If someone has a better
+;; way of getting scan-range to generate the correct initial values
+;; with this hack, I'd love to have it.
+(deftype *type* () t)
+
+;; This version of scan-range fixes a long-standing bug that occurs
+;; when :type is not 'number.  Say :type is 'single-float.  Then the
+;; looping variables are declared to be single-float's, but the
+;; variables end up being initialized with fixnums.  This loses.
+;; However, you need a reasonably smart compiler to do constant
+;; folding so that you don't do the coercion every time through the
+;; loop.
+(defS scan-range (&key (from 0) (by 1)
+		       (upto nil) (below nil)
+		       (downto nil) (above nil)
+		       (length nil) (type 'number))
+    "Creates a series of numbers by counting from :FROM by :BY."
+  (cl:let ((*type* (opt-non-opt (if (eq-car type 'quote) (cadr type) 'number)
+				  type)))
+    (if (> (length (delete nil (list upto below downto above length))) 1)
+	(ers 77 "~%Too many keywords specified in a call on SCAN-RANGE."))
+    (cond (upto
+	   (fragL ((from) (upto) (by)) ((numbers T)) ((numbers *type*)) ()
+		  ((setq numbers (coerce (- from by) '*type*)))
+		  ((setq numbers (+ numbers (coerce by '*type*)))
+		   (if (> numbers upto) (go END))) () ()))
+	  (below
+	   (fragL ((from) (below) (by)) ((numbers T)) ((numbers *type*)) ()
+		  ((setq numbers (coerce (- from by) '*type*)))
+		  ((setq numbers (+ numbers (coerce by '*type*)))
+		   (if (not (< numbers below)) (go END))) () ()))
+	  (downto
+	   (fragL ((from) (downto) (by)) ((numbers T)) ((numbers *type*)) ()
+		  ((setq numbers (coerce (- from by) '*type*)))
+		  ((setq numbers (+ numbers (coerce by '*type*)))
+		   (if (< numbers downto) (go END))) () ()))
+	  (above
+	   (fragL ((from) (above) (by)) ((numbers T)) ((numbers *type*)) ()
+		  ((setq numbers (coerce (- from by) '*type*)))
+		  ((setq numbers (+ numbers (coerce by '*type*)))
+		   (if (not (> numbers above)) (go END))) () ()))
+	  #+cmu
+	  (length
+	   (fragL ((from) (length) (by)) ((numbers T))
+		  ((numbers *type*) (counter fixnum)) ()
+		  ((setq numbers (- from by)) (setq counter length))
+		  ((setq numbers (+ numbers by))
+		   (if (not (plusp counter)) (go END))
+		   (decf counter)) () ()))
+	  #-cmu
+	  (length
+	   (fragL ((from) (length) (by)) ((numbers T))
+		  ((numbers *type*) (counter fixnum)) ()
+		  ((setq numbers (coerce (- from by) '*type*))
+		   (setq counter length))
+		  ((setq numbers (+ numbers (coerce by '*type*)))
+		   (if (not (plusp counter)) (go END))
+		   (decf counter)) () ()))
+	  (T (fragL ((from) (by)) ((numbers T)) ((numbers *type*)) ()
+		    ((setq numbers (coerce (- from by) '*type*)))
+		    ((setq numbers (+ numbers (coerce by '*type*))))
+		    () ())))))
+)
+
+#+old-scan-range
 (defS scan-range (&key (from 0) (by 1)
 		       (upto nil) (below nil)
 		       (downto nil) (above nil)
