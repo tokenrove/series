@@ -9,12 +9,18 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.94 2003/01/21 20:12:40 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.95 2003/06/08 12:52:40 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.95  2003/06/08 12:52:40  rtoy
+;;;; From Alexey Dejneka:
+;;;;
+;;;; o Add support for SBCL
+;;;; o Fix a missing initialization of temp.
+;;;;
 ;;;; Revision 1.94  2003/01/21 20:12:40  rtoy
 ;;;; Add support for CMUCL 18e which no longer has
 ;;;; pcl::walk-form-macroexpand.  It's walker::macroexpand-all.
@@ -3641,7 +3647,7 @@
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
 
-#+(or :lispworks :cmu :excl)
+#+(or :lispworks :cmu :excl :sbcl)
 (deftype generator () 'cons)
 
 (cl:defun generator (s)
@@ -8097,7 +8103,8 @@ of sequence. If type is omitted, it defaults to list."
 				      (setf (row-major-aref temp (the vector-index index)) *alt*))
 				    parent temp index lstp))
 			 ((if (setq lstp (listp seq))
-			      (setq listptr seq)
+			      (setq listptr seq
+				    temp #())
 			    (locally
 			     (declare (type array seq))
 			     (setq temp seq)
