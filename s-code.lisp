@@ -9,12 +9,28 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.88 2002/03/29 23:53:38 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.89 2002/06/03 17:53:14 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.89  2002/06/03 17:53:14  rtoy
+;;;; From Joe Marshall:
+;;;;
+;;;;     I found a bug in `scan-fn-opt' that caused an unbound variable
+;;;;     when the initialization thunk in scan-fn refers to a lexical
+;;;;     variable, and there is a test function.
+;;;;
+;;;;     The existing code calls `handle-fn-call' to invoke the thunks
+;;;;     for scanning.  handle-fn-call keeps track of free variable references.
+;;;;     When calling it the last time, you pass in T as the last argument.
+;;;;
+;;;;     In the case where there was a test expression, however, the
+;;;;     order of calling handle-fn-call changes making the *second* to last
+;;;;     call have the T argument, rather than the last.  By re-ordering the
+;;;;     way scan-fn-opt expands the thunks, this is fixed.
+;;;;
 ;;;; Revision 1.88  2002/03/29 23:53:38  rtoy
 ;;;; Should not macroexpand declarations?  I think this is right.  I think
 ;;;; I did it right, but needs more testing.
@@ -6834,40 +6850,45 @@ function. The remaining arguments (if any) are all series. "
 (cl:defun scan-fn-opt (wrap-fn inclusive-p type init step
                                  &optional (test nil test-p))
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
-	    (params nil)
-	    (frag (make-frag :impure :fun))
-	    (state-vars (n-gensyms (length types) "STATE-"))
-	    (out-vars (n-gensyms (length types) "ITEMS-"))
-	    (*state* nil))
+            (params nil)
+            (frag (make-frag :impure :fun))
+            (state-vars (n-gensyms (length types) "STATE-"))
+            (out-vars (n-gensyms (length types) "ITEMS-"))
+            (*state* nil))
     (when wrap-fn
       (add-wrapper frag wrap-fn))
     (dolist (var out-vars)
-      (+ret (make-sym :var var :series-var-p t) frag))
+      (+ret (make-sym :var var :series-var-p T) frag))
     (setf (aux frag)
-	  (makeaux (append (mapcar #'list state-vars types)
-			   (mapcar #'list out-vars types))))
+          (makeaux (append (mapcar #'list state-vars types)
+                           (mapcar #'list out-vars types))))
     (multiple-value-setq (init params) (handle-fn-arg frag init params))
     (multiple-value-setq (step params) (handle-fn-arg frag step params))
     (when test-p
       (multiple-value-setq (test params)
-	(handle-fn-arg frag test params)))
+        (handle-fn-arg frag test params)))
     (setq params (mapcar #'retify params))
-    (setf (prolog frag) (makeprolog (handle-fn-call frag state-vars init nil)))
-    (cl:let ((output-expr `(setq ,@(mapcan #'list out-vars state-vars)))
-               (step-code (car (handle-fn-call frag state-vars step state-vars))))
+    (setf (prolog frag) (makeprolog (handle-fn-call frag state-vars init
+nil)))
+    (cl:let ((output-expr `(setq ,@(mapcan #'list out-vars state-vars))))
       (if (not inclusive-p)
-	  (setf (body frag)
-		`(,@(if test-p
-			`((if ,(car (handle-fn-call frag nil test state-vars t))
-			      (go ,end))))
-		    ,output-expr ,step-code))
-	(cl:let ((done (new-var 'd)))
-	  (add-literal-aux frag done 'boolean nil)
-	  (setf (body frag)
-		`((if ,done (go ,end))
-		  ,(car (handle-fn-call frag (list done) test state-vars t))
-		  ,output-expr
-		  (if (not ,done) ,step-code))))))
+          (setf (body frag)
+                `(,@(if test-p
+                        `((if ,(car (handle-fn-call frag nil test
+state-vars))
+                              (go ,END))))
+                    ,output-expr
+                    ,(car (handle-fn-call frag state-vars step state-vars
+t))))
+        (cl:let ((done (new-var 'd)))
+          (add-literal-aux frag done 'boolean nil)
+          (setf (body frag)
+                `((if ,done (go ,END))
+                  ,(car (handle-fn-call frag (list done) test state-vars))
+                  ,output-expr
+                  (if (not ,done)
+                      ,(car (handle-fn-call frag state-vars step state-vars
+t))))))))
     (apply-frag frag params)))
 
 ;; OPTIMIZER
