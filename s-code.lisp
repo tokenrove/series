@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.85 2001/04/10 17:22:33 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.86 2001/08/31 15:51:54 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.86  2001/08/31 15:51:54  rtoy
+;;;; Some changes from Joe Marshall for Allegro which apparently doesn't
+;;;; fold constants in coerce.  These changes only apply to Allegro.
+;;;;
 ;;;; Revision 1.85  2001/04/10 17:22:33  rtoy
 ;;;; o Change series printer to output items one at a time instead of
 ;;;;   gathering up everything before printing.
@@ -1329,6 +1333,256 @@
 
 ) ; end of eval-when
 
+#-allegro
+(defmacro coerce-maybe-fold (thing type)
+  `(coerce ,thing ,type))
+
+
+#+allegro
+(eval-when (:compile-toplevel :load-toplevel :execute)
+;;; Here are some changes from Joe Marshall who says that "Franz
+;;; Allegro doesn't fold constants in coerce, so you end up calling it
+;;; a *lot*.  This alleviates a fair amount of the pain."
+
+;;;
+;;; Constant folding
+;;;
+
+;;; The basic problem is that Allegro returns NIL
+;;; for (constantp '(+ 2 3))
+;;; The function (foldable-constant-expression-p '(+ 2 3) nil)
+;;; returns T.
+
+(defconstant *foldable-operator-table*
+  (if (boundp '*foldable-operator-table*)
+      *foldable-operator-table*
+      (make-hash-table)))
+
+(defconstant *unfoldable-operator-table*
+  (if (boundp '*unfoldable-operator-table*)
+      *unfoldable-operator-table*
+      (make-hash-table)))
+
+(defmacro declare-foldable-constant-operators (&rest names)
+  `(eval-when (:compile-toplevel :load-toplevel :execute)
+     (dolist (name (QUOTE (,@names)))
+       (setf (gethash name *foldable-operator-table*) t))))
+
+(defmacro declare-unfoldable-constant-operators (&rest names)
+  `(eval-when (:compile-toplevel :load-toplevel :execute)
+     (dolist (name (QUOTE (,@names)))
+       (setf (gethash name *unfoldable-operator-table*) t))))
+
+(declare-foldable-constant-operators
+ * + - / /= 1+ 1- < <= = > >=
+ ABS ACOS ACOSH ALPHA-CHAR-P ALPHANUMERICP ARRAYP ASH ASIN ASINH ATAN ATANH ATOM
+ ASSERT
+
+ BLOCK BOTH-CASE-P BYTE
+
+ CAAAAR CAAADR CAAAR CAADAR CAADDR CAADR CAAR CADAAR CADADR CADAR CADDAR CADDDR CADDR
+ CADR CAR CDAAAR CDAADR CDAAR CDADAR CDADDR CDADR CDAR CDDAAR CDDADR
+ CDDAR CDDDAR CDDDDR CDDDR CDDR CDR CEILING CHAR-CODE CHAR-DOWNCASE CHAR-EQUAL
+ CHAR-GREATERP CHAR-INT CHAR-LESSP CHAR-NAME CHAR-NOT-EQUAL CHAR-NOT-GREATERP
+ CHAR-NOT-LESSP CHAR-UPCASE CHAR/= CHAR< CHAR<= CHAR= CHAR> CHAR>= CHARACTER
+ CHARACTERP CIS CODE-CHAR COERCE COMPLEX COMPLEXP CONCATENATE CONJUGATE
+ CONSP CONSTANTP COS COSH
+
+ DENOMINATOR DIGIT-CHAR DIGIT-CHAR-P DOUBLE-FLOAT
+
+ EIGHTH ENDP EQ EQL EQUAL EQUALP EVENP EXP EXPT
+
+ FCEILING FFLOOR FIFTH FIRST FLOAT FLOAT-DIGITS FLOAT-PRECISION FLOAT-RADIX FLOAT-SIGN
+ FLOATP FLOOR FOURTH FROUND FTRUNCATE
+
+ GCD GRAPHIC-CHAR-P
+
+ IDENTITY IMAGPART INTEGER-DECODE-FLOAT INTEGER-LENGTH INTEGERP ISQRT
+
+ KEYWORDP
+
+ LCM LDB LDB-TEST LENGTH LISTP LIST-LENGTH LOCALLY LOG LOGAND LOGANDC1 LOGANDC2
+ LOGBITP LOGCOUNT LOGEQV LOGIOR LOGNAND LOGNOR LOGNOT LOGORC1 LOGORC2 LOGTEST
+ LOGXOR LOWER-CASE-P
+
+ MAX MIN MINUSP MOD
+
+ NAME-CHAR NINTH NOT NULL NUMBERP NUMERATOR
+
+ ODDP
+
+ PHASE PLUSP PROGN
+
+ RATIONALP REALP REALPART REM REST ROUND
+
+ SEVENTH SIN SINGLE-FLOAT SINH SIXTH SQRT STANDARD-CHAR-P STRING-EQUAL STRING-GREATERP
+ STRING-LESSP STRING-NOT-EQUAL STRING-NOT-GREATERP STRING-NOT-LESSP STRING/= STRING<
+ STRING<= STRING= STRING> STRING>= STRINGP SYMBOLP
+
+ TAILP TAN TANH TENTH THIRD TRUNCATE TYPEP
+
+ ZEROP
+ )
+
+;; a few macros that aren't worth the bother
+;; to walk, stuff that we know won't fold, etc.
+
+(declare-unfoldable-constant-operators
+ case
+ cons
+ check-type
+ do
+ dolist
+ dotimes
+ ecase
+ lambda
+ loop
+ random)
+
+(cl:defun foldable-constant-expression-p (expression env)
+  (or (constantp expression env)
+      (and
+       (consp expression)
+       (cl:let ((operator (car expression))
+		 (operands (cdr expression)))
+	     (cond ((symbolp operator)
+		    (case operator
+
+		  ;; AND can be folded if first arg is foldable
+		      (and (or (null operands)
+			       (and (foldable-constant-expression-p (first operands) env)
+				    (cl:let ((value (eval (first operands))))
+				      (or (null value)
+					  (null (cdr operands))
+					  (foldable-constant-expression-p `(AND ,@(rest operands)) env))))))
+
+		  ;; COND can be folded if first clause is foldable
+		      (cond (or (null operands)
+				(and (foldable-constant-expression-p (car (first operands)) env)
+				     (cl:let ((value (eval (car (first operands)))))
+				       (if value
+					   (foldable-constant-expression-p* (cdr (first operands)) env)
+					   (foldable-constant-expression-p `(COND ,@(rest operands)) env))))))
+		      (declare t)
+
+		  ;; IF can be folded if condition is foldable
+		      (if  (and (foldable-constant-expression-p (first operands) env)
+				(cl:let ((condition (eval (first operands))))
+				  (if condition
+				      (foldable-constant-expression-p (second operands) env)
+				      (foldable-constant-expression-p (third operands) env)))))
+
+		  ;; CL:LET can be folded if all the bindings are foldable,
+		  ;; and the body is foldable.
+		  ((cl:let cl:let*) (and (every (lambda (binding)
+					    (or (not (consp binding))
+						(foldable-constant-expression-p (second binding) env)))
+					  (car operands))
+				   (foldable-constant-expression-p* (rest operands) env)))
+
+		  ;; OR can be folded if the first arg is foldable
+		      (or  (or (null operands)
+			       (and (foldable-constant-expression-p (first operands) env)
+				    (cl:let ((value (eval (first operands))))
+				      (or value
+					  (null (cdr operands))
+					  (foldable-constant-expression-p `(OR ,@(rest operands)) env))))))
+
+		  ;; THE can be folded if the value clause is foldable
+		      (the (foldable-constant-expression-p (second operands) env))
+
+		  ;; UNLESS can be folded if the condition is foldable
+		      (unless (and (foldable-constant-expression-p (first operands) env)
+				   (cl:let ((condition (eval (first operands))))
+				     (or condition
+					 (foldable-constant-expression-p* (cdr operands) env)))))
+
+		  ;; WHEN can be folded if the condition is foldable
+		      (when (and (foldable-constant-expression-p (first operands) env)
+				 (cl:let ((condition (eval (first operands))))
+				   (or (null condition)
+				       (foldable-constant-expression-p* (cdr operands) env)))))
+
+		  ;; Otherwise, look it up in the table.
+		      (t
+
+		   (unless (gethash operator *unfoldable-operator-table*)
+		       #||
+		       (cond ((gethash operator *foldable-operator-table*)
+			      (foldable-constant-expression-p* operands env))
+			     ((foldable-constant-expression-p* operands env)
+			      (warn "Couldn't fold ~s ~s" operator operands)
+			      nil)
+			     (t nil))
+		       ||#
+			 (and (gethash operator *foldable-operator-table*)
+			      (foldable-constant-expression-p* operands env))))))
+
+	       ;; A literal lambda can be folded if it is in operator
+	       ;; position, all its arguments are foldable, and its body
+	       ;; is foldable
+		   ((and (consp operator)
+			 (eq (car operator) 'lambda)
+			 (foldable-constant-expression-p* operands env))
+		    (foldable-constant-expression-p* (cddr operator) env))
+	       ;; nothing else is foldable
+		   (t nil))))))
+
+(cl:defun foldable-constant-expression-p* (forms env)
+  (every (lambda (form)
+	     (foldable-constant-expression-p form env))
+	 forms))
+
+(cl:defun fold-constant-expression (expression &optional expected-type)
+  (cl:let ((value (eval expression)))
+    (when (and expected-type
+	       (not (typep value expected-type)))
+      (warn "While folding expression ~s, ~
+             the value ~s was not of the expected type ~s."
+	    expression value expected-type))
+    #||
+      ;; 99% of folding involves a symbol constant.
+      (unless (or (symbolp expression)
+		  (and (consp expression)
+		       (eq (car expression) 'quote))
+		  (and (consp expression)
+		       (eq (car expression) 'the)
+		       (or (numberp (third expression))
+			   (symbolp (third expression))))
+		  (eq expression value))
+	(format t "~&Folding ~s => ~s" expression value))
+      ||#
+    value))
+
+(cl:defun fold-if-possible (form env &optional expected-type)
+  "Return either FORM or it's folded value if one can be computed.
+   If expected type is given and form is folded, but does not equal
+   the expected type, a warning is issued and form is returned unfolded."
+  (cl:let ((is-constant (foldable-constant-expression-p form env)))
+    (if is-constant
+	(cl:let ((value (fold-constant-expression form)))
+	  (if (and expected-type
+		   (not (typep value expected-type)))
+	      (progn
+		(warn "While folding expression ~s, ~
+                       the value ~s was not of the expected type ~s."
+		      form value expected-type)
+		form)
+	      value))
+	form)))
+
+(cl:defun expression-is-constant-equal-to (form env value)
+  (eq (fold-if-possible form env) value))
+
+(defmacro coerce-maybe-fold (&environment env thing type)
+  (if (and (foldable-constant-expression-p thing env)
+	   (foldable-constant-expression-p type env))
+      (coerce (fold-constant-expression thing)
+	      (fold-constant-expression type))
+    `(COERCE ,thing ,type)))
+
+) ; end eval-when
+
 (cl:defun extract-declarations (forms)
   "Grab all the DECLARE expressions at the beginning of the list forms"
   (cl:let ((decls nil))
@@ -1375,12 +1629,25 @@
 	body))))
 
 (cl:defun variable-p (thing)
-  "Retunr T if thing is a non-keyword symbol different from T and NIL"
+  "Return T if thing is a non-keyword symbol different from T and NIL"
   (and thing (symbolp thing) (not (eq thing T)) (not (keywordp thing))))
 
 (cl:defun simple-quoted-lambda (form)
-  (and (eq-car form 'function) (eq-car (cadr form) 'lambda)
-       (every #'variable-p (cadr (cadr form)))))
+  (or (and (eq-car form 'cl:function)
+	   (eq-car (cadr form) 'cl:lambda)
+	   (every #'variable-p (cadr (cadr form))))
+      (and (eq-car form 'cl:lambda)
+	   (every #'variable-p (cadr form)))))
+
+(cl:defun simple-quoted-lambda-arguments (form)
+  (ecase (car form)
+    (cl:function (cadr (cadr form)))
+    (cl:lambda (cadr form))))
+
+(cl:defun simple-quoted-lambda-body (form)
+  (ecase (car form)
+    (cl:function (cddr (cadr form)))
+    (cl:lambda (cddr form))))
 
 (cl:defun nullable-p (typ)
   (or (member typ '(t null list boolean))
@@ -1542,8 +1809,7 @@
 ;; HELPER
 (cl:defun report-error (info)
   (setq *last-series-error* info)
-  (loop (when (null info)
-	  (return nil))
+  (loop (unless info (return nil))
         (if (stringp (car info))
             (format *error-output* (pop info))
 	  (write (pop info) :stream *error-output* :escape T :pretty T
@@ -2863,8 +3129,10 @@
 		       (T `(,(car exp)
 			    ,@(mapcar #'(lambda (x)
 					  (cond ((contains-any vars x) (map-exp0 x))
-						((or (symbolp x) (constantp x)
-						     (eq-car x 'function)) x)
+						((or (symbolp x)
+						     (constantp x)
+						     (eq-car x 'cl:function)
+						     (eq-car x 'cl:lambda)) x)
 						(T (cl:let ((v (new-var 'M)))
                                                      (push v new-aux)
                                                      (push `(setq ,v ,x) prolog-exps)
@@ -3370,10 +3638,6 @@
 			     :image-base series-of-lists))
       (n-integer-values n)))
 
-;; If you have a Common Lisp pretty-printer, we should use that to
-;; print out series because that probably does a better job than this
-;; routine would.  We basically print out series as if it were a list
-;; of items.
 #-cmu
 (cl:defun print-series (series stream depth)
   (cl:let ((generator (generator series)))
@@ -3391,32 +3655,35 @@
 			(- *print-level* depth)))))
     (write-char #\) stream)))
 
-;; Hmm.  This works, but now output happens until we get all the
-;; elements of the series, and if the series is infinite....
-#+nil
-(cl:defun print-series (series stream depth)
-  (cl:let ((generator (generator series))
-	   (s '()))
-    ;; Get all elements of the series
-    (do ()
-	(nil)
-      (push (next-in generator (return nil)) s))
-    (setf s (nreverse s))
-    (pprint-logical-block (stream s :prefix "#Z")
-      (write s :stream stream))))
-
-;; This works by doing an output for each element.
+;; If we have a Common Lisp pretty-printer, we should use that to
+;; print out series because that probably does a better job than this
+;; routine would.  We basically print out series as if it were a list
+;; of items.
 #+cmu
 (cl:defun print-series (series stream depth)
-  (cl:let ((generator (generator series)))
+  (cl:let ((generator (generator series))
+	   (first-p t)
+	   (items 0))
     (pprint-logical-block (stream nil :prefix "#Z(" :suffix ")")
       (loop
 	  (cl:let ((element (next-in generator (return nil))))
-	    (write element :stream stream)
-	    (write-char #\Space stream)
-	    (pprint-newline :fill stream))))))
+	    (if first-p
+		(setf first-p nil)
+		(write-char #\Space stream))
+	    (if (and *print-length*
+		     (>= items *print-length*))
+		(progn
+		  (princ "..." stream)
+		  (pprint-newline :fill stream)
+		  (return))
+		(progn
+		  (write element :stream stream
+			 :level (when *print-level*
+				  (- *print-level* depth)))
+		  (incf items)
+		  (pprint-newline :fill stream))))))))
 
- );end of eval-when
+)					; end of eval-when
 
 ;;;;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
 
@@ -3820,6 +4087,9 @@
         (cond ((and (not (off-line-spot arg))
                     (not (contains-p (var arg) (rets (fr arg))))
                     (cond ((or (and (eq-car code 'function) (symbolp (cadr code)))
+			       (and (symbolp code) (null (symbol-package code))) ;gensyms
+			       (keywordp code) ;keywords
+			       (characterp code)
                                (numberp code) (null code) (eq code T)) T)
                           ((constantp code)
                            (and (null (cdr (nxts (car (rets f)))))
@@ -3903,7 +4173,7 @@
 					      type))))
 #+CLISP
 (cl:defun canonical-type (type)
-  (lisp:type-expand type))
+  (ext:type-expand type))
 
 #-(or cmu CLISP)
 (cl:defun canonical-type (type)
@@ -3927,14 +4197,14 @@
                  ((and (eq-car var-type 'complex)
                        (cdr var-type))
                   ;; Can find elem-type.
-                  (complex (coerce 0 (cadr var-type))))
+                  (complex (coerce-maybe-fold 0 (cadr var-type))))
                  (t
 		  nil
                   ;; BUG: Can't find elem-type, hope COERCE knows better.
 		  #+:ignore
-                  (coerce 0 var-type))))
+                  (coerce-maybe-fold 0 var-type))))
           ((subtypep var-type 'number)
-           (coerce 0 var-type))
+           (coerce-maybe-fold 0 var-type))
           ((subtypep var-type 'cons)
 	   nil
 	   #+:ignore
@@ -5494,7 +5764,7 @@
            (*suppress-series-warnings* nil))
     (dolist (v lambda-list)
       (when (and (symbolp v) (not (eq v '&optional))
-                 (> (length (string v)) 0) (eql (aref (string v) 0) #\&))
+		 (member v lambda-list-keywords))
         (ers 71 "~%Unsupported &-keyword " v " in OPTIMIZABLE-SERIES-FN arglist.")))
     (top-starting-series-expr call
       (cl:let ((vars nil) (rev-arglist nil))
@@ -5853,7 +6123,7 @@ Creates a sequence containing the elements of SERIES.  The TYPE
 argument specifies the type of sequence to be created.  This type must
 be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
   (cl:let (*type* limit el-type)
-    (when (not items-p) ;it is actually seq-type that is optional
+    (unless items-p ;it is actually seq-type that is optional
       (setq items seq-type)
       (setq seq-type (optq 'list)))
     (multiple-value-setq (*type* limit el-type)
@@ -6115,12 +6385,15 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
     `(,gatherer nil t))
 
   (defmacro gatherer (collector &environment *env*)
-  (when (not (eq-car collector 'function))
+    (unless (or (eq-car collector 'function)
+		   (eq-car collector 'lambda))
     (cl:let ((x (new-var 'gather)))
       (setq collector
             `#'(lambda (,x)
                  (cl:funcall ,collector (cl:funcall #'scan (collect ,x)))))))
-  (cl:let ((frag (frag-for-collector (cadr collector) *env*)))
+    (cl:let ((frag (frag-for-collector (if (eq-car collector 'function)
+					   (cadr collector)
+					 collector) *env*)))
     (when (wrappers frag)
       (cl:let ((x (new-var 'gather)))
         (setq frag (frag-for-collector
@@ -6257,10 +6530,11 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
          (cons (cadr function) expr-list))
         ((not (simple-quoted-lambda function))
          (list* 'cl:funcall function expr-list))
-        ((not (= (length expr-list) (length (cadr (cadr function)))))
+        ((not (= (length expr-list)
+		 (length (simple-quoted-lambda-arguments function))))
          (ers 67 "~%Wrong number of args to funcall:~%" (cons function expr-list)))
-        (T `(let ,(mapcar #'list (cadr (cadr function)) expr-list)
-              ,@(cddr (cadr function)))))
+        (T `(let ,(mapcar #'list (simple-quoted-lambda-arguments function) expr-list)
+	      ,@(simple-quoted-lambda-body function))))
  :trigger
   (cl:let* ((function (my-macroexpand (cadr call)))
               (expr-list (cddr call)))
@@ -6273,7 +6547,8 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
     (or (and (eq-car function 'function) (symbolp (cadr function))
              (get (cadr function) 'series-optimizer))
         (and (simple-quoted-lambda function)
-             (produces-optimizable-series (car (last (cddr (cadr function)))))))))
+             (produces-optimizable-series
+	      (car (last (simple-quoted-lambda-body function))))))))
 
 ; Binding forms processing
 
@@ -6411,15 +6686,18 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
 ;; input is added to frag, and a parameter is added to params so that
 ;; the function will get processed right.
 (cl:defun handle-fn-arg (frag function params)
-  (when (not (and (eq-car function 'function)
-                  (or (symbolp (cadr function))
-                      (and (eq-car (cadr function) 'lambda)
-                           (every #'(lambda (a)
-                                      (and (symbolp a)
-                                           (or (zerop (length (string a)))
-                                               (not (char= (char (string a) 0)
-                                                           #\&)))))
-                                  (cadr (cadr function)))))))
+  (unless (or (and (eq-car function 'function)
+		   (or (symbolp (cadr function))
+		       (and (eq-car (cadr function) 'lambda)
+			    (every #'(lambda (a)
+				       (and (symbolp a)
+					    (not (member a lambda-list-keywords))))
+				   (cadr (cadr function))))))
+	      (and (eq-car function 'lambda)
+		   (every #'(lambda (a)
+			      (and (symbolp a)
+				   (not (member a lambda-list-keywords))))
+			  (cadr function))))
     (cl:let ((fn-var (new-var 'function)))
       (+arg (make-sym :var fn-var) frag)
       (setq params (nconc params (list function)))
@@ -6441,6 +6719,8 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
            (type list in-vars))
   (cl:let ((*in-series-expr* nil) (*not-straight-line-code* nil)
 	   (*user-names* nil) (*renames* *renames*) (fn-quoted? nil))
+    (when (eq-car fn 'lambda)
+      (setq fn-quoted? t))
     (when (eq-car fn 'function)
       (setq fn-quoted? t)
       (setq fn (cadr fn)))
@@ -6617,7 +6897,8 @@ function. The remaining arguments (if any) are all series. "
         (cl:funcall fn T #'new-init #'new-step #'new-test)))))
 
 (defmacro encapsulated-macro (encapsulating-fn scanner-or-collector)
-  (when (not (eq-car encapsulating-fn 'function))
+  (unless (or (eq-car encapsulating-fn 'function)
+	      (eq-car encapsulating-fn 'lambda))
     (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
          " is not quoted function."))
   (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
@@ -6640,7 +6921,8 @@ function. The remaining arguments (if any) are all series. "
   encapsulated-macro
  :optimizer
   (progn
-    (when (not (eq-car encapsulating-fn 'function))
+    (unless (or (eq-car encapsulating-fn 'function)
+		(eq-car encapsulating-fn 'lambda))
       (ers 68 "~%First ENCAPSULATING arg " encapsulating-fn
            " is not quoted function."))
     (cond ((and (or (eq-car scanner-or-collector 'scan-fn)
@@ -7417,61 +7699,61 @@ it is an error.  "
       (ers 77 "~%Too many keywords specified in a call on SCAN-RANGE."))
     (cond (upto
            (*fragL ((from) (upto) (by)) ((numbers T))
-		   ((numbers *type* (coerce (- from by) '*type*)))
+		   ((numbers *type* (coerce-maybe-fold (- from by) '*type*)))
 		   ()
 		   ()
-		   ((setq numbers (+ numbers (coerce by '*type*)))
+		   ((setq numbers (+ numbers (coerce-maybe-fold by '*type*)))
 		    (if (> numbers upto) (go END)))
 		   ()
 		   ()
 		   :args))
           (below
            (*fragL ((from) (below) (by)) ((numbers T))
-		   ((numbers *type* (coerce (- from by) '*type*)))
+		   ((numbers *type* (coerce-maybe-fold (- from by) '*type*)))
 		   ()
 		   ()
-		   ((setq numbers (+ numbers (coerce by '*type*)))
+		   ((setq numbers (+ numbers (coerce-maybe-fold by '*type*)))
 		    (if (not (< numbers below)) (go END)))
 		   ()
 		   ()
 		   :args))
           (downto
            (*fragL ((from) (downto) (by)) ((numbers T))
-		   ((numbers *type* (coerce (- from by) '*type*)))
+		   ((numbers *type* (coerce-maybe-fold (- from by) '*type*)))
 		   ()
 		   ()
-		   ((setq numbers (+ numbers (coerce by '*type*)))
+		   ((setq numbers (+ numbers (coerce-maybe-fold by '*type*)))
 		    (if (< numbers downto) (go END)))
 		   ()
 		   ()
 		   :args))
           (above
            (*fragL ((from) (above) (by)) ((numbers T))
-		   ((numbers *type* (coerce (- from by) '*type*)))
+		   ((numbers *type* (coerce-maybe-fold (- from by) '*type*)))
 		   ()
 		   ()
-		   ((setq numbers (+ numbers (coerce by '*type*)))
+		   ((setq numbers (+ numbers (coerce-maybe-fold by '*type*)))
 		    (if (not (> numbers above)) (go END)))
 		   ()
 		   ()
 		   :args))
           (length
            (*fragL ((from) (length) (by)) ((numbers T))
-		   ((numbers *type* (coerce (- from by) '*type*))
+		   ((numbers *type* (coerce-maybe-fold (- from by) '*type*))
 		    (counter fixnum length))
 		   ()
 		   ()
-		   ((setq numbers (+ numbers (coerce by '*type*)))
+		   ((setq numbers (+ numbers (coerce-maybe-fold by '*type*)))
 		    (if (not (plusp counter)) (go END))
 		    (decf counter))
 		   ()
 		   ()
 		   :args))
           (T (*fragL ((from) (by)) ((numbers T))
-		     ((numbers *type* (coerce (- from by) '*type*)))
+		     ((numbers *type* (coerce-maybe-fold (- from by) '*type*)))
 		     ()
 		     ()
-		     ((setq numbers (+ numbers (coerce by '*type*))))
+		     ((setq numbers (+ numbers (coerce-maybe-fold by '*type*))))
 		     ()
 		     ()
 		     :args)))))
@@ -8804,15 +9086,15 @@ order of scanning the hash table is not specified."
     "Computes the sum of the elements in NUMBERS.  TYPE specifies the
 type of sum to be created."
   (fragL ((numbers T) (type)) ((sum))
-	 ((sum T (coerce 0 type)))
+	 ((sum T (coerce-maybe-fold 0 type)))
 	 ()
 	 ()
          ((setq sum (+ sum numbers)))
 	 () () nil)
  :optimizer
   (apply-literal-frag
-    `((((numbers T)) ((sum)) 
-       ((sum ,(must-be-quoted type) ,(coerce 0 (must-be-quoted type)))) ()
+    `((((numbers T)) ((sum))
+       ((sum ,(must-be-quoted type) ,(coerce-maybe-fold 0 (must-be-quoted type)))) ()
        ()
        ((setq sum (+ sum numbers))) () () nil)
       ,numbers))
@@ -8823,7 +9105,7 @@ type of sum to be created."
   "Computes the product of the elements in NUMBERS."
   (fragL ((numbers T)
           (type)) ((mul))
-	  ((mul T (coerce 1 type)))
+	  ((mul T (coerce-maybe-fold 1 type)))
 	  ()
           ()
           ((setq mul (* mul numbers)))
@@ -8831,7 +9113,7 @@ type of sum to be created."
   :optimizer
   (apply-literal-frag
    `((((numbers T)) ((mul))
-      ((mul ,(must-be-quoted type) ,(coerce 1 (must-be-quoted type)))) ()
+      ((mul ,(must-be-quoted type) ,(coerce-maybe-fold 1 (must-be-quoted type)))) ()
       ()
       ((setq mul (* mul numbers))) () () nil)
      ,numbers))
