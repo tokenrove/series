@@ -8,9 +8,15 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.10 2001/12/23 17:11:17 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.11 2003/06/08 12:53:21 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.11  2003/06/08 12:53:21  rtoy
+;;;; From Alexey Dejneka:
+;;;;
+;;;; o Add support for SBCL
+;;;; o Import COMPILER-LET from SBCL.
+;;;;
 ;;;; Revision 1.10  2001/12/23 17:11:17  rtoy
 ;;;; COMPILER-LET is in the EXT package in Clisp now.
 ;;;;
@@ -76,6 +82,9 @@
   (when (find-package "cl")
     (cl:pushnew ':allegro-modern cl:*features*)))
 
+#+sbcl
+(require :sb-cltl2)
+
 (defpackage #:series
     (:use #:cl)
   (:export 
@@ -129,6 +138,8 @@
   (:import-from "EXT" "COMPILER-LET")
   #+mcl
   (:import-from "CCL" "COMPILER-LET")
+  #+sbcl
+  (:import-from "SB-CLTL2" "COMPILER-LET")
 )
 
 #-(or series-ansi)
