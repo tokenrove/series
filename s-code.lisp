@@ -9,12 +9,19 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.73 2000/06/26 18:11:26 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.74 2000/09/05 15:54:09 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.74  2000/09/05 15:54:09  rtoy
+;;;; Fix bug 113625:  scan doesn't scan constants very well.
+;;;;
+;;;; Solution: If it's a symbol, take the value of the symbol.  (Not sure
+;;;; this is quite correct, but it works and the other tests pass without
+;;;; problems.)
+;;;;
 ;;;; Revision 1.73  2000/06/26 18:11:26  rtoy
 ;;;; Fix for bug #108331: collect 'vector sometimes returns results in
 ;;;; reverse order.  Example is (collect 'vector (scan '(1 2 3))).
@@ -7339,8 +7346,13 @@ TYPE."
 			   :args)))
 	     (limited-scan *type* nil *limit* limit)))
           ((not (eq type 'sequence))	;some kind of array
+	   ;; Check to see if SEQ is constant.
 	   (if (constantp seq)
-	       (cl:let ((thing seq))   
+	       (cl:let ((thing (if (symbolp seq)
+				   (symbol-value seq)
+				   seq)))
+		 ;; THING should be either the SEQ or if SEQ is a
+		 ;; symbol, the value of the symbol.
 		 (when (and (consp seq) (eq (car seq) 'quote))
 		   (setq thing (cadr seq)))
 		 (setq limit (array-total-size thing))
