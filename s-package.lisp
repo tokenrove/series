@@ -8,9 +8,12 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.3 1999/09/14 20:19:43 toy Exp $
+;;;; $Id: s-package.lisp,v 1.4 1999/12/01 16:09:05 toy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.4  1999/12/01 16:09:05  toy
+;;;; Need to import compiler-let from the extensions package in CMUCL.
+;;;;
 ;;;; Revision 1.3  1999/09/14 20:19:43  toy
 ;;;; Export the new function collect-stream.
 ;;;;
@@ -82,6 +85,8 @@
   (:import-from "CLTL1" "COMPILER-LET")
   #+CLISP
   (:import-from "LISP" "COMPILER-LET")
+  #+cmu
+  (:import-from "EXT" "COMPILER-LET")
 )
 
 #-(or Series-ANSI)
