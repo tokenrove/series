@@ -4,7 +4,7 @@
 ;;; may need to change :source-pathname appropriately for your system.
 
 (mk:defsystem series
-    :source-pathname #.(logical-pathname "lisp:series;")
+    :source-pathname #.(logical-pathname "series:;")
     :source-extension "lisp"
     :components ((:file "s-package")
 		 (:file "s-code")
