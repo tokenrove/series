@@ -8,11 +8,14 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.29 1999/07/01 14:15:39 toy Exp $
+;;;; $Id: s-code.lisp,v 1.30 1999/07/01 16:44:23 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.30  1999/07/01 16:44:23  toy
+;;;; A comment was in the wrong place.
+;;;;
 ;;;; Revision 1.29  1999/07/01 14:15:39  toy
 ;;;; o  "Pekka P. Pirinen" <pekka@harlequin.co.uk> supplied a new version
 ;;;;    of aux-init (and init-elem).  This is probably better.  I added one
@@ -3095,8 +3098,8 @@
           ((subtypep var-type 'sequence)
            (multiple-value-bind (arr len elem-type)
                (decode-seq-type `',var-type)
-             ;; BUG: Only as good as DECODE-SEQ-TYPE.
              (declare (ignore arr elem-type))
+             ;; BUG: Only as good as DECODE-SEQ-TYPE.
              (make-sequence var-type (or len 0))))
           ((subtypep var-type 'array)
            ;; Heuristic: assume they mean vector.
@@ -3108,6 +3111,8 @@
              (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
 	  ((or (typep nil var-type)
 	       (eq t (upgraded-array-element-type var-type)))
+	   ;; Use NIL as the initializer if the resulting type would
+	   ;; be T for the given implementation.
 	   nil)
           (t
            ;; BUG: Try to hack it through MAKE-SEQUENCE.  This could fail.
