@@ -119,8 +119,12 @@
     (setq *test* (name entry))
     (setf (pend entry) t)
     (let* ((*in-test* t)
+	   ;; Are these right?  I (RLT) think 'warning is ok for
+	   ;; Harlequin, but for CMUCL, it causes some tests to fail
+	   ;; that otherwise would pass because the compiler correctly
+	   ;; gnerates a compiler note or warning.
 	   #-(or cmu allegro) (*break-on-warnings* t)
-	   #+(or cmu allegro) (*break-on-signals* t)
+	   #+(or cmu allegro harlequin) (*break-on-signals* #+cmu nil #-cmu 'warning))
 	   (r (multiple-value-list
 		(eval (form entry)))))
       (setf (pend entry)
