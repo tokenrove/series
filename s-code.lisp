@@ -8,11 +8,15 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.12 1997/10/02 13:36:45 toy Exp $
+;;;; $Id: s-code.lisp,v 1.13 1998/05/21 15:18:27 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.13  1998/05/21 15:18:27  toy
+;;;; Added a few fixes from "Reginald S. Perry" <reggie@aa.net> to make
+;;;; this work with LWW.
+;;;;
 ;;;; Revision 1.12  1997/10/02 13:36:45  toy
 ;;;; Forgot to export scan-stream.
 ;;;;
@@ -143,7 +147,7 @@
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
 
@@ -266,7 +270,7 @@
 	(when (and sym (eq code :internal)
 		   (not (boundp sym)) (not (fboundp sym)) (null (symbol-plist sym)))
 	  (unintern sym pkg)))
-      #+cmu
+      #+(or cmu Harlequin-Common-Lisp)
       (cl:let ((ext (find-package "EXTENSIONS")))
 	;; CMU Lisp has COLLECT and ITERATE in the EXTENSIONS package.
 	;; Make them go away.
