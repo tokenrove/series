@@ -8,11 +8,22 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.18 1998/06/12 20:45:23 toy Exp $
+;;;; $Id: s-code.lisp,v 1.19 1999/04/06 18:36:13 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.19  1999/04/06 18:36:13  toy
+;;;; Some fixes from Arthur Lemmens <lemmens@simplex.nl>:
+;;;; MAKE-SEQUENCE was being called with things like (BIT-VECTOR BIT) and
+;;;; (STRING STRING-CHAR).  Change DECODE-SEQ-TYPE to convert BIT-VECTOR's
+;;;; and STRING's to the the underlying array types.  Also change
+;;;; STRING-CHAR to CHARACTER.
+;;;;
+;;;; This change necessitates adding a BIT-VECTOR case in AUX-INIT. (This
+;;;; is probably only need by CMUCL where CANONICAL-TYPE actually does
+;;;; something.)
+;;;;
 ;;;; Revision 1.18  1998/06/12 20:45:23  toy
 ;;;; An addition to scan-hash for CLISP.  This reduces consing and should
 ;;;; be at least as fast.  From Bruno Haible.
@@ -3013,6 +3024,14 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name '#()))))
+	  ((subtypep var-type 'bit-vector)
+	   (cond ((consp var-type)
+		  (cl:let ((len (second var-type)))
+		    (list var-name (list 'make-sequence
+					 `',var-type
+					 (if (eq len '*) 0 len)))))
+		 (t
+		  (list var-name #*))))
 	  ((subtypep var-type 'vector)
 	   (cond ((and (consp var-type))
 		  (cond ((= 3 (length var-type))
@@ -4533,19 +4552,27 @@
 	 (cond ((eq type 'list) (values 'list nil T))
 	       ((eq-car type 'list) (values 'list nil (cadr type)))
 	       ((eq type 'sequence) (values 'sequence nil T))
-	       ((eq type 'string) (values 'string nil 'string-char))
+	       ;; Strings are translated to the underlying vector/array types.
+	       ((eq type 'string) (values 'vector nil 'character))
 	       ((eq-car type 'string)
-		(values 'string (if (numberp (cadr type)) (cadr type)) 'string-char))
-	       ((eq type 'simple-string) (values 'simple-string nil 'string-char))
+		(values 'vector (if (numberp (cadr type)) (cadr type))
+			'character))
+	       ((eq type 'simple-string)
+		(values 'simple-array nil 'character))
 	       ((eq-car type 'simple-string)
-		(values 'simple-string (if (numberp (cadr type)) (cadr type))
-			'string-char))
-	       ((eq type 'bit-vector) (values 'bit-vector nil 'bit))
+		(values 'simple-array (if (numberp (cadr type)) (cadr type))
+			'character))
+	       ;; Bit vectors are really vectors holding bits.
+	       ((eq type 'bit-vector)
+		(values 'vector nil 'bit))
 	       ((eq-car type 'bit-vector)
-		(values 'bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
-	       ((eq type 'simple-bit-vector) (values 'simple-bit-vector nil 'bit))
+		(values 'vector (if (numberp (cadr type)) (cadr type)) 'bit))
+	       ((eq type 'simple-bit-vector)
+		(values 'simple-array nil 'bit))
 	       ((eq-car type 'simple-bit-vector)
-		(values 'simple-bit-vector (if (numberp (cadr type)) (cadr type)) 'bit))
+		(values 'simple-array (if (numberp (cadr type)) (cadr type))
+			'bit))
+	       ;; Vectors of some type
 	       ((eq type 'vector) (values 'vector nil T))
 	       ((eq-car type 'vector)
 		(values 'vector (if (numberp (caddr type)) (caddr type))
@@ -4553,10 +4580,12 @@
 	       ((eq type 'simple-vector) (values 'simple-vector nil T))
 	       ((eq-car type 'simple-vector)
 		(values 'simple-vector (if (numberp (cadr type)) (cadr type)) T))
+	       ;; Simple arrays
 	       ((eq-car type 'simple-array)
 		(values 'simple-array
 			(if (not (eq (caaddr type) '*)) (caaddr type))
 			(if (not (eq (cadr type) '*)) (cadr type) T)))
+	       ;; Everything else is a sequence
 	       (T (values 'sequence nil T))))))
 
 (defS scan-sublists (lst)
