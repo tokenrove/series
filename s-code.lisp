@@ -9,12 +9,22 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.97 2005/01/26 18:37:34 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.98 2005/01/27 04:19:33 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.98  2005/01/27 04:19:33  rtoy
+;;;; Fix for bug 434120.
+;;;;
+;;;; s-code.lisp:
+;;;; o scan* should initialize the index to -1 instead of 0, to keep in
+;;;;   step with scan.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add test from the bug report.
+;;;;
 ;;;; Revision 1.97  2005/01/26 18:37:34  rtoy
 ;;;; Fix bug reported by Dirk Gerrits, series-users, 2005-01-16.
 ;;;;
@@ -8309,11 +8319,12 @@ of sequence. If type is omitted, it defaults to list."
 		   `(((elements t))
 		     ((elements ,(eoptif-q *type* t))
 		      (temp array seq)
-		      (index vector-index+ 0))
+		      (index -vector-index -1))
 		     ((elements (setf (row-major-aref temp (the vector-index index)) *alt*) temp index))
 		     ()
-		     ((setq elements (row-major-aref seq (the vector-index index)))
-		      (incf index))
+		     ((incf index)
+		      (setq elements
+			    (row-major-aref seq (the vector-index index))))
 		     ()
 		     ()
 		     :mutable)))

@@ -40,9 +40,19 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.24 2005/01/26 18:37:39 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.25 2005/01/27 04:19:33 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.25  2005/01/27 04:19:33  rtoy
+;;;; Fix for bug 434120.
+;;;;
+;;;; s-code.lisp:
+;;;; o scan* should initialize the index to -1 instead of 0, to keep in
+;;;;   step with scan.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add test from the bug report.
+;;;;
 ;;;; Revision 1.24  2005/01/26 18:37:39  rtoy
 ;;;; Fix bug reported by Dirk Gerrits, series-users, 2005-01-16.
 ;;;;
@@ -2472,6 +2482,21 @@
 		 (alter (scan-vec vec) (series 0))
 		 (list (vec-x vec) (vec-y vec) (vec-z vec))))
   (0 0 0))
+
+;; Bug 434120
+(defok 561 (ton (let* ((m1 (make-array 8 :element-type 'fixnum))
+		       (m2 (make-array 8 :element-type 'fixnum))
+		       (m3 (make-array 9 :element-type 'fixnum)))
+		  (loop :for j :of-type fixnum :from 0 :below 8
+		     :do (setf (aref m1 j) (+ 1 j))
+		     :do (setf (aref m2 j) (+ 1 j))
+		     :do (setf (aref m3 j) 0))
+		  (setf (aref m3 8) 0)
+		  (multiple-value-bind (s1 s2 s3)
+		      (scan-multiple '(simple-array fixnum) m1 m2 m3)
+		    (alter s3 (map-fn 'fixnum #'* s1 s2)))
+		  (coerce m3 'list)))
+  (1 4 9 16 25 36 49 64 0))
 
 ;;; Some simple consistency tests.  (Some of these were broken by
 ;;; changes in series, so we include them here to prevent these from
