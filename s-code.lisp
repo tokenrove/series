@@ -8,6 +8,18 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
+;;;; $Header: /net/lorien2/home/apps/src/sourceforge/backups/series-2010-12-15/series/s-code.lisp,v 1.2 1997/01/07 18:58:51 toy Exp $
+;;;;
+;;;; This is modified version of Richard Water's Series package.
+;;;;
+;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.2  1997/01/07 18:58:51  toy
+;;;; Changes from Paul Werkowski to make series work/run under CMUCL.
+;;;; Raymond Toy added the defpackage stuff.  There are probably other
+;;;; changes here, but I wasn't careful to keep everything straight,
+;;;; unfortunately.
+;;;;
+;;;;
 ;------------------------------------------------------------------------
 
 ;Copyright Massachusetts Institute of Technology, Cambridge, Massachusetts.
@@ -56,15 +68,56 @@
 
 ;The companion file "SDOC.TXT" contains brief documentation.
 
-(in-package "SERIES" :use '("LISP"))
-
 (provide "SERIES")
 
+(defpackage "SERIES"
+    (:use "LISP")
+  (:export 
+   ;;(2) readmacros (#M and #Z)
+
+   ;;(5) declarations and types (note dual meaning of series)
+   "OPTIMIZABLE-SERIES-FUNCTION"  "OFF-LINE-PORT"  ;series
+   "SERIES-ELEMENT-TYPE"  "PROPAGATE-ALTERABILITY"
+
+   ;;(10) special functions
+   "ALTER" "TO-ALTER" "ENCAPSULATED" "TERMINATE-PRODUCING"
+   "NEXT-IN" "NEXT-OUT" "GENERATOR" "GATHERER" "RESULT-OF" "GATHERING"
+
+   ;;(55) main line functions
+   "MAKE-SERIES" "SERIES" "SCAN" "SCAN-MULTIPLE" "SCAN-RANGE"
+   "SCAN-SUBLISTS" "SCAN-FN" "SCAN-FN-INCLUSIVE" "SCAN-LISTS-OF-LISTS"
+   "SCAN-LISTS-OF-LISTS-FRINGE" "SCAN-FILE" "SCAN-HASH" "SCAN-ALIST"
+   "SCAN-PLIST" "SCAN-SYMBOLS" "COLLECT-FN" "COLLECT" "COLLECT-APPEND"
+   "COLLECT-NCONC" "COLLECT-FILE" "COLLECT-ALIST" "COLLECT-PLIST"
+   "COLLECT-HASH" "COLLECT-LENGTH" "COLLECT-SUM" "COLLECT-MAX"
+   "COLLECT-MIN" "COLLECT-LAST" "COLLECT-FIRST" "COLLECT-NTH"
+   "COLLECT-AND" "COLLECT-OR" "PREVIOUS" "MAP-FN" "ITERATE" "MAPPING"
+   "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
+   "CHOOSE" "CHOOSE-IF" "SPREAD" "EXPAND" "MASK" "SUBSERIES" "MINGLE"
+   "CATENATE" "SPLIT" "SPLIT-IF" "PRODUCING" "CHUNK"
+
+   ;;(5) variables
+    "*SERIES-EXPRESSION-CACHE*"
+    "*LAST-SERIES-LOOP*"
+    "*LAST-SERIES-ERROR*"
+    "*SUPPRESS-SERIES-WARNINGS*"
+    )
+  (:shadow
+   "LET" "LET*" "MULTIPLE-VALUE-BIND" "FUNCALL" "DEFUN" #+cmu "COLLECT" #+cmu "ITERATE")
+)
+
+#+cmu
+(in-package "SERIES")
+
+#-cmu
+(in-package "SERIES" :use '("LISP"))
+#-cmu
 (shadow '(let let* multiple-value-bind funcall defun))
 
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
+#-cmu
 (export ;74 total concepts in the interface
   '(;(2) readmacros (#M and #Z)
 
@@ -127,6 +180,14 @@
 	(when (and sym (eq code :internal)
 		   (not (boundp sym)) (not (fboundp sym)) (null (symbol-plist sym)))
 	  (unintern sym pkg)))
+      #+cmu
+      (lisp:let ((ext (find-package "EXTENSIONS")))
+	;; CMU Lisp has COLLECT and ITERATE in the EXTENSIONS package.
+	;; Make them go away.
+	(unintern 'collect ext)
+	(unintern 'iterate ext)
+	(unintern 'series "COMMON-LISP-USER"))
+      
       (use-package "SERIES" pkg)
       (when shadow (shadowing-import *series-forms* pkg))))
   (when (and remove (member (find-package "SERIES") (package-use-list pkg)))
@@ -777,7 +838,8 @@
    e.g., they have the same template as expr-template.")
 
 (lisp:defun not-expr-like-special-form-p (sym)
-  (and (special-form-p sym)
+  (and #-ansi-cl(special-form-p sym)
+       #+ansi-cl(special-operator-p sym)
        (not (member sym *expr-like-special-forms*))))
 #+symbolics
 (eval-when (eval load)
@@ -1726,7 +1788,7 @@
 ;depending on the exact syntactic form of the input.  For instance
 ;note that INCF expands into a let in some lisps and this would force
 ;the let to be in a separate expression even though it does not look
-;like it at first glance.
+;like it at first glance.)
 
 ;As an example of all the above consider the following.
 #|
@@ -2478,7 +2540,7 @@
 ;  Further there is no trouble with the first frag as long as either (1) the
 ;second frag has no termination points other than the one in question (i.e.,
 ;has no series inputs without off-line-exits other than possibly the
-;one in question and cannot by itself terminate or (2) the first frag does
+;one in question and cannot by itself terminate) or (2) the first frag does
 ;not have any output points other than the one in question (i.e., has no
 ;other outputs, and does not have the must-run flag set) and this output is
 ;not used anywhere other than by the input in question.  In case (1) running
@@ -3438,7 +3500,7 @@
 (lisp:defun basic-collect-fn (inits function &rest args)
   (compiler-let ((*optimize-series-expressions* nil))
     (fragL ((inits) (function) (args)) ((result))
-           ((result list) (list-of-generators list)) ()
+           ((result t) (list-of-generators list)) ()
            ((setq result (lisp:funcall inits))
             (setq list-of-generators (mapcar #'(lambda (s) (generator s)) args)))
            ((lisp:let ((vals (list-of-next #'(lambda () (go end))
@@ -3966,7 +4028,7 @@
 (defS alter (destinations items)
     "Alters the values in DESTINATIONS to be ITEMS."
   (fragL ((destinations) (items T)) ((result))
-	 ((gen function) (result null)) ()
+	 ((gen list) (result null)) ()
 	 ((setq gen (generator destinations)) (setq result nil))
 	 ((do-next-in gen #'(lambda () (go END)) items)) () ())
  :optimizer
@@ -4035,7 +4097,7 @@
         (T (lisp:let ((full-expr-list
 			(opt-non-opt `(list ,expr ,@ expr-list)
 				     (cons expr (copy-list expr-list)))))
-             (fragL ((full-expr-list)) ((items T)) ((items list) (lst list)) ()
+             (fragL ((full-expr-list)) ((items T)) ((items (or null t)) (lst list)) ()
                     ((setq lst (copy-list full-expr-list))
                      (setq lst (nconc lst lst)))
                     ((setq items (car lst)) (setq lst (cdr lst))) () ())))))
@@ -4742,12 +4804,13 @@
 		  ((setq lst (cons items lst))) () ()))
 	  (limit
 	   (fragL ((seq-type) (items T) (limit)) ((seq))
-		  ((seq *type*) (index fixnum)) ()
+		  ((seq (or null sequence)) (index fixnum)) ()
 		  ((setq seq (make-sequence seq-type limit))
 		   (setq index 0))
 		  ((setf (aref seq index) items) (incf index)) () ()))
 	  ((not (eq *type* 'sequence)) ;some kind of vector with no length
-	   (fragL ((seq-type) (items T)) ((seq)) ((seq *type*) (lst list)) ()
+	   (fragL ((seq-type) (items T)) ((seq))
+		  ((seq (or null simple-array)) (lst list)) ()
 		  ((setq lst nil))
 		  ((setq lst (cons items lst)))
 		  ((lisp:let ((num (length lst)))
@@ -4755,12 +4818,12 @@
 		     (do ((i (1- num) (1- i))) ((minusp i))
 		       (setf (aref seq i) (pop lst))))) ()))
 	  (T (fragL ((seq-type) (items T)) ((seq))
-		    ((seq T) (limit fixnum) (lst list)) ()
+		    ((seq (or null T)) (limit (or null fixnum)) (lst list)) ()
 		    ((setq lst nil)
 		     (multiple-value-bind (x y)
 		         (decode-seq-type (list 'quote seq-type))
 			 (declare (ignore x))
-		       (setq limit y)))
+		       (setq limit y)))	; y is not restricted to fixnum!
 		    ((setq lst (cons items lst)))
 		    ((lisp:let ((num (length lst)))
 		       (setq seq (make-sequence seq-type (or limit num)))
@@ -4813,7 +4876,7 @@
 
 (defS collect-file (name items &optional (printer #'print))
     "Prints the elements of ITEMS into a file."
-  (fragL ((name) (items T) (printer)) ((out)) ((out (member T)) (lst list)) ()
+  (fragL ((name) (items T) (printer)) ((out)) ((out (or null T)) (lst list)) ()
 	 ((setq lst nil) (setq out T))
 	 ((setq lst (cons items lst)))
 	 ((setq lst (nreverse lst))
@@ -4823,7 +4886,7 @@
  :optimizer
   (funcall-literal-frag
     (lisp:let ((file (new-var 'outfile)))
-      `((((items T) (printer)) ((out)) ((out (member T))) ()
+      `((((items T) (printer)) ((out)) ((out (or null T))) ()
 	 ((setq out T)) ((lisp:funcall printer items ,file)) ()
 	 (#'(lambda (c)
 	      (list 'with-open-file '(,file ,name :direction :output) c))))
@@ -4848,13 +4911,13 @@
 
 (defS collect-last (items &optional (default nil))
     "Returns the last element of ITEMS."
-  (fragL ((items T) (default)) ((item)) ((item (series-element-type items))) ()
+  (fragL ((items T) (default)) ((item)) ((item t)) ()
 	 ((setq item default)) ((setq item items)) () ())
  :trigger T)
 
 (defS collect-first (items &optional (default nil))
     "Returns the first element of ITEMS."
-  (fragL ((items T) (default)) ((item)) ((item (series-element-type items))) ()
+  (fragL ((items T) (default)) ((item)) ((item t)) ()
 	 ((setq item default))
 	 ((setq item items) (go END)) () ())
  :trigger T)
@@ -4862,7 +4925,7 @@
 (defS collect-nth (n items &optional (default nil))
     "Returns the nth element of ITEMS."
   (fragL ((n) (items T) (default)) ((item))
-	 ((counter fixnum) (item (series-element-type items))) ()
+	 ((counter fixnum) (item t)) ()
 	 ((setq item default) (setq counter n))
 	 ((when (zerop counter) (setq item items) (go END))
 	  (decf counter)) () ())
