@@ -1,4 +1,4 @@
-                      Series Version 2.0.2 RELEASE NOTES
+                      Series Version 2.0.3 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -123,7 +123,7 @@ BUG FIXES:
 ---------
 - Does not unintern EXT:COLLECT and EXT:ITERATE anymore under CMUCL!!!
 - GATHERING et al. are not bitten by CMUCL DEFSTRUCT bugs.
-
+- Allegro 5.x needs the GENERATOR deftype, too.
 
 COMPILING
 --------

@@ -8,15 +8,19 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.63 2000/03/08 18:27:35 matomira Exp $
+;;;; $Id: s-code.lisp,v 1.64 2000/03/09 13:33:07 matomira Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
-;;;; Revision 1.63  2000/03/08 18:27:35  matomira
-;;;; Fixed Missing CL: before FUNCALL bug in DESTARRIFY.
-;;;; Fixed fragL instead of *fragL bug in COLLECT.
+;;;; Revision 1.64  2000/03/09 13:33:07  matomira
+;;;; Added GENERATOR deftype bugfix for ACL.
+;;;; Letification is almost there.
+;;;;
+;;;; Revision 1.65  2000/03/09 13:28:03  matomira
+;;;; Almost there with letification.
+;;;; Activated GENERATOR deftype also for :excl.
 ;;;;
 ;;;; Revision 1.64  2000/03/08 18:20:35  matomira
 ;;;; Fixed fragL instead of *fragL bug in COLLECT.
@@ -453,13 +457,6 @@
 ;;; Generic stuff that should be moved to/imported from EXTENSIONS
 
 ;; mkant EXTENSIONS should push :EXTENSIONS in *FEATURES*!!!
-#-:extensions
-(defmacro when-bind ((symbol predicate) &body body)
-  "Binds the symbol to predicate and executes body only if predicate
-   is non-nil."
-  `(cl:let ((,symbol ,predicate))
-     (when ,symbol
-       ,@body)))
 
 (cl:defun atom-or-car (x)
   (if (listp x)
@@ -473,7 +470,15 @@
   (deftype uninitialized (typ) `(null-or ,typ))
   (deftype defaulted (typ) `(null-or ,typ))
   
-  ;; DEBUG
+#-:extensions
+(defmacro when-bind ((symbol predicate) &body body)
+  "Binds the symbol to predicate and executes body only if predicate
+   is non-nil."
+  `(cl:let ((,symbol ,predicate))
+     (when ,symbol
+       ,@body)))
+
+;; DEBUG
   (defmacro definline (&rest args) `(cl:defun ,@args))
 
   ;; Define an inline function
@@ -593,6 +598,32 @@
 
 ;;; Code generation utilities
 
+(eval-when #-(or :cltl2 :x3j13 :ansi-cl) (compile load)
+           #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
+                                          :load-toplevel)
+
+(cl:defun destarrify (base binds forms &optional (wrapper #'list))
+  "Covert a BASE* form into a nested set of BASE forms"
+  (cl:labels ((destarrify-1 (binds)
+	        (cl:let ((b (car binds))
+		       (d (cdr binds)))
+		  (if b
+		      (if d
+			  (list base (cl:funcall wrapper b) (destarrify-1 d))
+			(list* base (cl:funcall wrapper b) forms))
+		    (if d
+			(destarrify-1 d)
+		      (if (cdr forms)
+			  `(progn ,@forms)
+			(car forms)))))))		    
+    (declare (dynamic-extent #'destarrify-1))
+    (if binds
+	(destarrify-1 binds)
+      (if (cdr forms)
+	  `(progn ,@forms)
+	(car forms)))))
+) ; end of eval-when
+
 (cl:defun extract-declarations (forms)
   "Grab all the DECLARE expressions at the beginning of the list forms"
   (cl:let ((decls nil))
@@ -637,21 +668,6 @@
 	  ,@(when notindecls
 	     `((declare ,@notindecls))))
 	body))))
-
-(cl:defun destarrify (base binds forms &optional (wrapper #'list))
-  "Covert a BASE* form into a nested set of BASE forms"
-  (cl:labels ((destarrify-1 (binds)	  
-	      (when-bind (b (car binds))
-	        (cl:let ((d (cdr binds)))
-		  (if d
-		      (list base (cl:funcall wrapper b) (destarrify-1 d))
-		    (list* base (cl:funcall wrapper b) forms))))))
-    (declare (dynamic-extent #'destarrify-1))
-    (if binds
-	(destarrify-1 binds)
-      (if (cdr forms)
-	  `(progn ,@forms)
-	(car forms)))))
 
 (cl:defun n-gensyms (n root)
   "Generate n uninterned symbols with basename root"
@@ -893,7 +909,7 @@
 
 ;;; Local variable handling
 
-;;(eval-when (compile load) (pushnew :series-letify *features*))
+;(eval-when (compile load) (pushnew :series-letify *features*))
 
 #-:series-letify
 (progn
@@ -946,7 +962,9 @@
 
   (declaim (inline makeaux))
   (cl:defun makeaux (auxlist)
-    (list auxlist))	  
+    (when auxlist
+      (list auxlist))
+    )	  
 
   (declaim (inline flatten-aux))
   (cl:defun flatten-aux (auxs)
@@ -961,10 +979,16 @@
     (car auxs))
 
   (cl:defun add-aux (frag var typ &optional (val nil val-p))
-    (push (if val-p
-	      `(,var ,typ ,val)
-	    `(,var ,typ))
-	  (car (aux frag))))
+    (cl:let ((auxs (aux frag))
+	     (entry (if val-p
+			`(,var ,typ ,val)
+		      `(,var ,typ))))
+      (if auxs
+	  (progn
+	    (push entry
+		  (car auxs))
+	    auxs)
+	(setf (aux frag) (makeaux (list entry))))))	
 
   (declaim (inline find-aux))
   (cl:defun find-aux (var auxs)
@@ -974,7 +998,7 @@
 
   (declaim (inline delete-aux))
   (cl:defun delete-aux (var auxs)
-    (mapcan #'(lambda (b) (delete var b :key #'car)) auxs))
+    (mapcar #'(lambda (b) (delete var b :key #'car)) auxs))
 
   (declaim (inline remove-aux-if))
   (cl:defun remove-aux-if (p auxs)
@@ -1874,7 +1898,7 @@
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
 
-#+(or :lispworks :cmu)
+#+(or :lispworks :cmu :excl)
 (deftype generator () 'list)
 
 (cl:defun generator (s)
@@ -1975,7 +1999,6 @@
     (write-char #\) stream)))
 
 );end of eval-when
-
 
 ;;;;                  ---- TURNING AN EXPRESSION INTO A GRAPH ----
 
@@ -3739,21 +3762,23 @@
 (cl:defun clean-dcls (aux)
   (doaux (v aux)
     (propagate-types (cdr v) aux))
-  (mapcar #'(lambda (v)
+  (mapaux #'(lambda (v)
               ;; Sometimes the desired type is quoted.  Remove the
               ;; quote.  (Is this right?)
-              (if (and (listp (cadr v))
-                       (eq 'quote (caadr v)))
-                  `(type ,(cadadr v) ,(car v))
-		`(type ,(cadr v) ,(car v))))
-          (remove-aux-if #'(lambda (v) (eq (cadr v) T)) aux)))
+	      (cl:let ((info (cdr v)))
+		(cl:let ((typ (car info)))
+		  (if (and (listp typ)
+			   (eq 'quote (car typ)))
+		      `(type ,(cadr typ) ,(car v))
+		    `(type ,typ ,(car v))))))
+          (remove-aux-if #'(lambda (v) (or (atom v) (null (cdr v)) (eq (cadr v) T))) aux)))
 
 (cl:defun codify-1 (aux code)
     (multiple-value-setq (aux code) (clean-code aux code))
     (when aux
       (cl:let ((dcls (clean-dcls aux)))
         (when dcls
-	  (push `(declare ,@ dcls) code))))
+	  (push `(declare ,@dcls) code))))
     #-:series-letify (list* 'cl:let (mapaux #'aux-init aux) code)
     #+:series-letify (destarrify 'cl:let (mapcar #'(lambda (b) (mapcar #'aux-init b)) aux) code #'identity)
     )
