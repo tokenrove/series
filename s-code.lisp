@@ -8,11 +8,20 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.36 1999/09/15 14:30:55 toy Exp $
+;;;; $Id: s-code.lisp,v 1.37 1999/10/04 17:46:55 toy Exp $
 ;;;;
-;;;; This is modified version of Richard Water's Series package.
+;;;; This is a modified version of Richard Water's Series package,
+;;;; based on his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.37  1999/10/04 17:46:55  toy
+;;;; o The backquoting of make-sequence added in 1.35 is wrong, I think.
+;;;;   To make it worse, I lost my test cases that caused me to do this.
+;;;;   Stupid!
+;;;;
+;;;; o Updated a few doc strings.  Should really add some more so that
+;;;;   series is a little bit more self-documenting.
+;;;;
 ;;;; Revision 1.36  1999/09/15 14:30:55  toy
 ;;;; The change in 1.17 for scan-range was backwards: The CMUCL version
 ;;;; should get the coercion stuff and the non-CMUCL version shouldn't.
@@ -3052,7 +3061,7 @@
 	     ;;(format t "is sequence: var-type = ~A~%" var-type)
 	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
              ;; BUG: Only as good as DECODE-SEQ-TYPE.
-             `(make-sequence ',var-type ,(or len 0))))
+             (make-sequence var-type (or len 0))))
           ((subtypep var-type 'array)
            ;; Heuristic: assume they mean vector.
 	   ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
@@ -3062,7 +3071,7 @@
 	     ;;(format t "is array ~A~%" var-type)
 	     ;;(format t "arr, len, type = ~A ~A ~A~%" arr len elem-type)
              ;; Probably no length, as that case is caught by previous branch
-	     `(make-sequence '(vector ,elem-type ,(or len 0)) ,(or len 0))))
+	     (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
 	  ((eq t (upgraded-array-element-type var-type))
 	   ;; Use NIL as the initializer if the resulting type would
 	   ;; be T for the given implementation.
@@ -3604,7 +3613,8 @@
 (eval-when (eval load compile) (proclaim '(special *state*)))
 
 (defS map-fn (type function &rest args)
-    "Maps FUNCTION over the input series."
+    "Maps FUNCTION over the input series.  The result type of function is
+TYPE."
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
     (cond ((= n 1)
@@ -4764,7 +4774,8 @@
 	      (go END))) () ()))
 
 (defS scan-file (name &optional (reader #'read))
-    "Creates a series of the forms in the file named NAME."
+    "Creates a series of the forms in the file named NAME.  Uses READER to
+read from the file."
   (fragL ((name) (reader)) ((items T)) ((items T) (lst list)) ()
 	 ((setq lst nil)
 	  (with-open-file (f name :direction :input)
@@ -4791,7 +4802,8 @@
 		    code)))) ,reader))))
 
 (defS scan-stream (name &optional (reader #'read))
-    "Creates a series of the forms in the stream NAME."
+    "Creates a series of the forms in the stream NAME.  Similar to
+SCAN-FILE, except we read from an existing stream."
   (fragL ((name) (reader)) ((items T)) ((items T) (lst list)) ()
 	 ((setq lst nil)
 	  (cl:let ((done (list nil)))
