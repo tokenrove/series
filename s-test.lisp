@@ -40,9 +40,17 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.11 2000/02/09 22:52:00 toy Exp $
+;;;; $Id: s-test.lisp,v 1.12 2000/02/22 23:25:39 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.12  2000/02/22 23:25:39  toy
+;;;; o Let's try to set the correct package for CLISP depending if we're in
+;;;;   ANSI mode or not.  (Not sure this really works.)
+;;;;
+;;;; o In test 280, we probably really want to use the COMMON-LISP-USER
+;;;;   package instead of just USER.  Mostly for CLISP where the USER
+;;;;   package is not a nickname for COMMON-LISP-USER.
+;;;;
 ;;;; Revision 1.11  2000/02/09 22:52:00  toy
 ;;;; Fernando made these changes:  Replace deftest with defok,
 ;;;; defcmumismatch, and defcmukernel if some older versions of CMUCL
@@ -78,9 +86,9 @@
 	   #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
 					  :load-toplevel
 					  :execute)
-  #-clisp
+  #+(and clisp ansi-cl)
   (in-package "COMMON-LISP-USER")
-  #+clisp
+  #-(and clisp ansi-cl)
   (in-package "USER")
 
   (series::install)
@@ -1103,7 +1111,7 @@
   ((a b) (b a)))
 
 (defok 280 (ton (multiple-value-bind (a b)
-		      (#2M(lambda (x) (let ((*package* (find-package "USER")))
+		      (#2M(lambda (x) (let ((*package* (find-package "COMMON-LISP-USER")))
 					(intern (string x))))
 			  #Z(x y))
 		    (collect (#Mlist a b)))) ((x :internal) (y :internal)))
