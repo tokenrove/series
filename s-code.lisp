@@ -8,11 +8,15 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.8 1997/01/16 14:23:59 toy Exp $
+;;;; $Id: s-code.lisp,v 1.9 1997/01/16 14:26:44 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.9  1997/01/16 14:26:44  toy
+;;;; Some more patches from Tim (tfb@aiai.ed.ac.uk):  Conditionalize on
+;;;; :defpackage too for package stuff.
+;;;;
 ;;;; Revision 1.8  1997/01/16 14:23:59  toy
 ;;;; Put in changes from Tim (tfb@aiai.ed.ac.uk) to conditionalize on
 ;;;; Series-ANSI.
@@ -115,13 +119,13 @@
 ;;; as a nickname somehow, in any case.
 ;;;
 ;;; Note this is really too early, but we need it here
-#+(or allegro CMU Genera)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
 
 (provide "SERIES")
 
-#-gcl
+#+(or Series-ANSI defpackage)
 (defpackage "SERIES"
     (:use "CL")
   (:export 
@@ -170,10 +174,10 @@
   (rename-package "LISP" "COMMON-LISP" '("LISP" "CL")))
 
 
-#+Series-ANSI
+#+(or Series-ANSI defpackage)
 (in-package "SERIES")
 
-#-Series-ANSI
+#-(or Series-ANSI defpackage)
 (progn
   (in-package "SERIES" :use '("LISP"))
   (shadow '(let let* multiple-value-bind funcall defun)))
@@ -181,7 +185,7 @@
 (defvar *series-forms* '(let let* multiple-value-bind funcall defun)
   "Forms redefined by Series.")
 
-#-Series-ANSI
+#-(or Series-ANSI defpackage)
 (export ;74 total concepts in the interface
   '(;(2) readmacros (#M and #Z)
 
