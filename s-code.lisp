@@ -6,12 +6,16 @@
 ;;;; a long time ago, you might consider copying them from the above
 ;;;; web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.44 2000/02/08 17:08:36 toy Exp $
+;;;; $Id: s-code.lisp,v 1.45 2000/02/09 22:46:00 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.45  2000/02/09 22:46:00  toy
+;;;; Changed all occurrences of defunique to be just defun and added a
+;;;; comment on where the function is called.
+;;;;
 ;;;; Revision 1.44  2000/02/08 17:08:36  toy
 ;;;; o As discussed with Fernando, the "optional" type is renamed to
 ;;;;   null-or.
@@ -409,14 +413,6 @@
     `(progn
        (declaim (inline ,name))
        (cl:defun ,name ,@args)))
-
-  ;; Define an inline function which is called called from a single site
-  (defmacro defembedded (name &rest args)
-    `(definline ,(if (atom name) name (car name)) ,@args))
-
-  ;; Define a function which is called called from a single site
-  (defmacro defunique (name &rest args)
-    `(cl:defun ,(if (atom name) name (car name)) ,@args))
 
   (cl:defun nsubst-inline (new-list old list &optional (save-spot nil))
     (cl:let ((tail (member old list)))
@@ -1735,7 +1731,8 @@
       (if (and aux (not (subtypep (cadr aux) type)))
           (setf (cadr aux) type)))))
 
-(defunique (coerce-to-types fragify) (types frag)
+;; This is only used by fragify
+(cl:defun coerce-to-types (types frag)
   (when (not (eq types '*))
     (cl:let ((n (length types))
                (current-n (length (rets frag))))
@@ -1785,7 +1782,8 @@
 ;; appear where they are really used.  HERE with the way if works,
 ;; because it will not catch nested lets!
 
-(defunique (map-exp isolate-non-series) (exp vars)
+;; This is only called from isolate-non-series
+(cl:defun map-exp (exp vars)
   (cl:let ((prolog-exps nil)
              (new-aux nil))
     (labels ((map-exp0 (exp) ;can assume exp contains vars
@@ -1817,7 +1815,8 @@
 ;; kinds of problems with binding scopes and scopes for gos and the
 ;; like.
 
-(defunique (isolate-non-series fragify) (n code)
+;; This is called only from fragify
+(cl:defun isolate-non-series (n code)
   (cl:multiple-value-bind (exp free-ins free-outs)
       (handle-non-series-stuff code)
     (cl:let* ((vars (n-gensyms n "OUT-"))
@@ -1882,7 +1881,9 @@
 
 ;; FRAGMENTATION
 ;; Main fragmentation function
-(defunique (graphify process-top) (code &optional (return-type '*))
+
+;; This is only called from process-top
+(cl:defun graphify (code &optional (return-type '*))
   (cl:let ((*graph* nil))
     (fragify code return-type)
     *graph*))
@@ -2065,12 +2066,14 @@
 
 ;;;;               (1) CHECK-FOR SERIES/NON-SERIES CONFLICTS.
 
-(defunique (series-coerce do-coercion) (a)
+;; This is only called from do-coercion
+(cl:defun series-coerce (a)
   (when (off-line-spot a)
     (nsubst nil (off-line-spot a) (fr a)))
   (setf (series-var-p a) nil))
 
-(defunique (add-dummy-source-frag do-coercion) (frag)
+;; This is only called from do-coercion
+(cl:defun add-dummy-source-frag (frag)
   (cl:let* ((ret (car (rets frag)))
               (args (nxts ret))
               (new-ret (car (rets (pass-through-frag (rets frag))))))
@@ -2081,7 +2084,8 @@
     (setq *graph*  ;frag was stuck on wrong end
           (cons (fr new-ret) (delete (fr new-ret) *graph*)))))
 
-(defunique (do-coercion mergify) ()
+;; This is only called from mergify
+(cl:defun do-coercion ()
   (reset-marks 1)
   (cl:let ((lambda-arg-frags nil))
     (dofrags (f)
@@ -2142,7 +2146,9 @@
 ;; guaranteed to have the right semantics all of the time.  Any decent
 ;; compiler will then minimize the number of variables actually used
 ;; at run time.
-(defunique (do-substitution mergify) (&aux code ret killable)
+
+;; This is only called from mergify
+(cl:defun do-substitution (&aux code ret killable)
   (dofrags (f)
     (when (and (= (length (rets f)) 1)
                (not (off-line-spot (car (rets f))))
@@ -2172,14 +2178,16 @@
 
 ;;;;                     (2.5) KILL DEAD CODE
 
-(defunique (reap-frag kill-dead-code) (frag)
+;; This is only called from kill-dead-code
+(cl:defun reap-frag (frag)
   (dolist (a (args frag))
     (cl:let ((r (prv a)))
       (-dflow r a)
       (when (null (nxts r)) (kill-ret r))))
   (setq *graph* (delete frag *graph*)))
 
-(defunique (kill-dead-code mergify) ()
+;; This is only called from mergify
+(cl:defun kill-dead-code ()
   (setq *graph* (nreverse *graph*))
   (dofrags (f)
     (dolist (r (rets f))
@@ -2254,7 +2262,8 @@
 ;;; would fail to detect some problems, and the overall theory would
 ;;; be overly strict.
 
-(defunique (do-non-series-dflow-split non-series-dflow-split) (ret arg)
+;; This is only called from non-series-dflow-split
+(cl:defun do-non-series-dflow-split (ret arg)
   (cl:let ((frag1 (fr ret))
              (frag2 (fr arg)))
     (cl:multiple-value-bind (part1 part2)
@@ -2408,7 +2417,8 @@
 ;; off-line input which is now still in part1.  This forces complex
 ;; merging cases to be handled.
 
-(defunique (insert-off-line-dummy-frag off-line-split) (ret args)
+;; This is only called from off-line-split
+(cl:defun insert-off-line-dummy-frag (ret args)
   (cl:let* ((var (new-var 'oo))
 	    (dummy-ret (make-sym :var var :series-var-p T))
 	    (dummy-arg (make-sym :var var :series-var-p T))
@@ -2424,7 +2434,8 @@
     (mark 1 dummy-frag) ;so is in currently being considered part.
     dummy-arg))
 
-(defunique (do-off-line-split off-line-split) (ret arg)
+;; This is only called from off-line-split
+(cl:defun do-off-line-split (ret arg)
   (cl:let ((frag1 (fr ret))
 	   (frag2 (fr arg)))
     (cl:multiple-value-bind (part1 part2)
@@ -2460,14 +2471,17 @@
              (return-from top (do-off-line-split ret (car args)))))))
      `(on-line-merge ',*graph*))))
 
-(defunique (non-series-split do-splitting) (*graph*)
+;; This is only called from do-splitting
+(cl:defun non-series-split (*graph*)
   (cl:let ((subexprs (disconnected-split *graph*)))
     (setq subexprs (reorder-frags subexprs))
     (cons 'non-series-merge-list
           (mapcar #'off-line-split subexprs))))
 
 ;; Main splitting entry point
-(defunique (do-splitting mergify) (*graph*)
+
+;; This is only called from mergify
+(cl:defun do-splitting (*graph*)
   (reset-marks 0)
   (non-series-split *graph*))
 
@@ -2601,12 +2615,14 @@
                  (-arg arg))))
       (if ret-killable (-ret ret)))))
 
-(defunique (implicit-epilog non-series-merge) (frag)
+;; This is only called from non-series-merge
+(cl:defun implicit-epilog (frag)
   (setf (epilog frag) (prolog frag))
   (setf (prolog frag) nil)
   frag)
 
-(defunique (eval-on-first-cycle non-series-merge) (frag arg-frag)
+;; This is only called from non-series-merge
+(cl:defun eval-on-first-cycle (frag arg-frag)
   (cl:let ((b (new-var 'b))
 	   (c (new-var 'c))
 	   (lab (new-var 's))
@@ -2626,7 +2642,8 @@
     (setf (prolog arg-frag) nil)
     (setf (epilog frag) nil)))
 
-(defunique (non-series-merge non-series-merge-list) (ret-frag arg-frag)
+;; This is only called from non-series-merge-list
+(cl:defun non-series-merge (ret-frag arg-frag)
   (handle-dflow ret-frag
     #'(lambda (r a) (declare (ignore r)) (eq (fr a) arg-frag)))
   (when (not (non-series-p ret-frag))
@@ -2717,7 +2734,8 @@
 ;;; 4- marks places to start termination point sweep.
 ;;; 4- mark individual output points and termination points.
 
-(defunique (make-set-flag-rather-than-terminate check-termination) (frag)
+;; This is only called from check-termination
+(cl:defun make-set-flag-rather-than-terminate (frag)
   (cl:let* ((B (new-var 'bb))
 	    (C (new-var 'cc))
 	    (flag (new-var 'terminated)))
@@ -2758,7 +2776,9 @@
 
 ;; this function assumes that on-line-merge will merge frags in the
 ;; order they are on *graph*.
-(defunique (check-termination on-line-merge) (*graph*)
+
+;; This is only called from on-line-merge
+(cl:defun check-termination (*graph*)
   (block nil
     (cl:let ((counter 8.) (all-term-counters 0)
 	     (outputs nil) (terminations nil)
@@ -3153,7 +3173,8 @@
            #+(or :cltl2 :x3j13 :ansi-cl) (:compile-toplevel
                                           :load-toplevel
                                           :execute)
-(defunique (clean-code1 clean-code) (suspicious code)
+;; This is only called from clean-code
+(cl:defun clean-code1 (suspicious code)
   (cl:let ((dead nil))
     (labels ((clean-code2 (prev-parent parent code &aux var)
                (tagbody
@@ -3506,7 +3527,8 @@
   ;; It assumes that actual-args must be a list of variables.
 
   
-  (defunique (precompute-frag->physical frag->physical) (frag alter-prop-alist)
+  ;; This is only called from frag->physical
+  (cl:defun precompute-frag->physical (frag alter-prop-alist)
     (dolist (r (rets frag))
       (when (series-var-p r)
         (add-physical-out-interface r (cdr (assoc (var r) alter-prop-alist)))))
@@ -3515,8 +3537,8 @@
       (codify frag)))
 
   
-  (defunique (f->p-off-line series-frag->physical)
-             (i frag new-out out-values done flag)
+  ;; This is only called from series-frag->physical
+  (cl:defun f->p-off-line (i frag new-out out-values done flag)
     (cl:let* ((ret (nth i (rets frag)))
               (off-line-spot (off-line-spot ret))
               (restart (new-var 'restart))
@@ -3532,8 +3554,8 @@
       (setf (body frag) (nsubst-inline new-body-code off-line-spot (body frag)))))
 
   
-  (defunique (f->p-on-line series-frag->physical)
-             (frag new-out out-values done flag)
+  ;; This is only called from series-frag->physical
+  (cl:defun f->p-on-line (frag new-out out-values done flag)
     (cl:let* ((out-value (if (null (cdr out-values)) (car out-values)
                            `(list ,@(mapcar #'(lambda (r o)
                                                 (when (not (off-line-spot r)) o))
@@ -3551,7 +3573,8 @@
   (cl:defun car-image-of-non-null-datum-th (g datum)
     (car (image-of-non-null-datum-th g datum)))
 
-(defunique (series-frag->physical frag->physical) (frag alter-prop-alist)
+;; This is only called from frag->physical
+(cl:defun series-frag->physical (frag alter-prop-alist)
     (cl:let* ((out-values nil)
               (alterers nil)
               (done-on-line nil)
@@ -4649,7 +4672,9 @@ TYPE."
 ;This allows you to specify more or less arbitrary transducers.
 
 ;; HELPER
-(defunique (protect-from-setq optimize-producing) (in type)
+
+;; This is only called from optimize-producing
+(cl:defun protect-from-setq (in type)
   (cl:let ((frag (fr in))
              (var (var in))
              (new (new-var 'in)))
