@@ -1,0 +1,182 @@
+_____________________________________________________________________________
+
+2.1.5:
+	
+  DEVELOPMENT:
+  -----------
+   - Reinstated plain generation support.
+   - Fixed letified merge-frags bug.
+   - Adapted handle-dflow and non-series-merge for letification.
+   - Spawned list->frag1 from list->frag.
+   - define-optimizable-series-function uses list->frag1 to 
+     support letification.
+   - Still can't handle all initial fragL bindings because off-line handling 
+     seems to move prologs into TAGBODYs.	
+_____________________________________________________________________________
+
+2.1.4:
+
+  IMPROVEMENTS:
+  ------------
+    - Better code generation
+	. compute-series-macform-2 no longer generates a redundant AND 
+	  when trigger is t.
+_____________________________________________________________________________
+	
+2.1.3:
+
+  DEVELOPMENT:
+  -----------
+    . Letification can handle prologs now
+_____________________________________________________________________________
+
+2.1.2:
+  IMPROVEMENTS:
+  ------------
+  - Source cleanup
+    . MERGE-FRAGS no longer depends on frag component order.
+    . Abstracted use of prolog component of frags.
+    . purity component of frag is now just a symbol.
+_____________________________________________________________________________
+
+2.1.1:
+	
+  BUG FIXES:
+  ---------  	
+    - Some initial (unread) bindings of variables could be NIL, contradicting
+      declarations. Uses LOCALLY now for those (and also for all others for 
+      which NIL is OK, but which can be left unbound, if an implementation 
+      provides another version of LET that does not do NIL defaulting 
+      (and ideally would raise a compilation error if a variable is read 
+      before it's written to)).
+____________________________________________________________________________
+	
+2.1:
+
+  IMPROVEMENTS:
+  ------------
+  - Source cleanup
+    . Added eval-when compatibility magic.
+    . GENERATOR deftyped to CONS, not LIST, when necessary.
+    . Abstracted use of wrapper component of frags.	
+	
+  DEVELOPMENTS:
+  ------------	
+  - Basic Letification works.
+  - Started work on purity analysis.
+
+  BUG FIXES:
+  ---------  
+    . Workaround for ACL 5.0.1 TAGBODY bug added.
+    . ALL-TIME SERIES BUG FIX: wrappers now inserted more precisely.  
+_____________________________________________________________________________
+
+2.0.3:
+
+  BUG FIXES:
+  ---------  
+  - Added missing EVAL-WHEN around the definition of WHEN-BIND.
+  - Allegro 5.x needs the GENERATOR deftype, too.	
+_____________________________________________________________________________
+	
+2.0.2:
+	
+  BUG FIXES:
+  --------- 
+  - Fixed fragL instead of *fragL bug in COLLECT.
+_____________________________________________________________________________
+	
+2.0.1:
+		
+  IMPROVEMENTS:
+  ------------
+  - Better code generation
+    . Removed NULL-ORs and added THEs.
+  - Source cleanup
+    . Renamed old fragL as *fragL.
+    . New fragL does not do *type* substitution.
+    . Simplified inserted aux var initialization.
+    . Abstracted all uses of a frag's aux component.	
+    . Replaced IF by WHEN in non-output code when possible.	
+    . Removed gratuitous sorting in CODIFY.
+	
+  BUG FIXES:
+  --------- 
+	
+  - GATHERING does not elide declarations.
+_____________________________________________________________________________
+	
+2.0:
+	
+  ***NEW SPECIFICATION RESTRICTIONS***
+  ------------------------------------
+	
+  - The consequences of using the gatherers introduced by GATHERING outside 
+    the dynamic scope of the form are now explicitly stated to be undefined, 
+    except for those declared INDEFINITE-EXTENT.
+   
+    If you need them to be indefinite extent by default,
+    evaluate (pushnew :cltl2-series) before compilation (or interpreted load)
+
+    After loading series :cltl2-series will indicate if backward-compatibility
+    mode is enabled.
+
+    Rationale for this change: 
+     "Weird code must be the one escaping gatherers so created"
+     "WHO EVER DID THAT???"
+	
+
+  NEW FEATURES:
+  ------------
+
+  - GATHER-NEXT
+    A macro with the same effect as the NEXT-OUT function, 
+    but with result undefined.
+  - GATHER-RESULT
+    A macro with the same semantics as the RESULT-OF function,
+  - FGATHER-NEXT
+    Like GATHER-NEXT, but the gatherer argument must be a symbol 
+    denoting a gatherer bound by FLET.
+  - FGATHER-RESULT
+    Like GATHER-RESULT, but the gatherer argument must be a symbol 
+    denoting a gatherer bound by FLET.
+  - FGATHERING
+    Like GATHERING, but where the gatherers are bound by FLET instead of LET.
+    Same extent rules as for GATHERING apply. Remember that where you would use
+    (declare (indefinite-extent g)) inside GATHERING, you need to do 
+    (declare (indefinite-extent #'g)) with FGATHERING.
+  - GATHERLET
+    The basic construct upon which GATHERING rests. No automatic return
+    of gatherer results. And no extent restrictions, of course. If you want
+    something dynamic-extent, you'll have to declare it.
+  - FGATHERLET
+    The `F' version of GATHERLET. Duh.
+  - COLLECT-PRODUCT
+    Like COLLECT-SUM, but for #'*. How more obvious does it get?
+  - INDEFINITE-EXTENT
+    Declaration exported.
+
+
+  IMPROVEMENTS:
+  ------------
+	
+  - MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
+  - Better code generation
+    . Stricter typing.
+    . Replaced some SETQs by initializations at LET binding time.
+    . Removed global function namespace pollution.
+    . Encapsulated series subfunctions.
+
+  - Source clean up.
+    . Local series functions are almost there (FLET extension)
+    . Bottom-up definition for improved compilation.
+    . Make source `FLET and LABELS ready'.
+    . `readability/documentation' release.
+    . Abstracted use of aux component of frags.
+    . Some work done towards multiple assignment support in PRODUCING.
+
+  BUG FIXES:
+  ---------
+	
+  Does not unintern EXT:COLLECT and EXT:ITERATE anymore under CMUCL!!!
+  GATHERING et al. are not bitten by CMUCL DEFSTRUCT bugs.

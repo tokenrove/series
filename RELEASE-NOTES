@@ -1,4 +1,4 @@
-                      Series Version 2.1.3 RELEASE NOTES
+                      Series Version 2.1.5 RELEASE NOTES
 
                            Fernando D. Mato Mira
            CSEM (Centre Suisse d'Electronique et de Microtechnique)
@@ -114,6 +114,7 @@ IMPROVEMENTS:
   - Whole expression (t) and :loop wrapper placement
     (:prolog and :epilog support easy to add, if necessary).
   - Improved letification merging.
+  - Optimized collections of the form (collect [type] (scan [type] ({list | ..}
 - Source clean up.
   Local series functions are almost there (FLET extension)
   Bottom-up definition for improved compilation.
@@ -138,7 +139,10 @@ BUG FIXES:
 - Some initial (unread) bindings of variables could be NIL, contradicting
   declarations. Uses LOCALLY now for those (and also for all others for which
 NIL is OK, but which can be left unbound, if an implementation provides another version of LET that does not do NIL defaulting (and ideally would raise a compilation error if a variable is read before its written to)).
-- Full letification works (but disabled because still useless).
+- Full letification works (modulo off-lining, and disabled because still useless).
+- Fixed letified merge-frags bug.
+- Adapted handle-dflow and non-series-merge for letification.
+
 
 COMPILING
 --------
