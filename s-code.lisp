@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.92 2002/12/11 04:03:26 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.93 2002/12/12 04:27:41 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.93  2002/12/12 04:27:41  rtoy
+;;;; Add support for a macrolet code-walker for Clisp.
+;;;;
 ;;;; Revision 1.92  2002/12/11 04:03:26  rtoy
 ;;;; o Update /allowed-generic-opts/ to include SYSTEM::READ-ONLY for CLISP
 ;;;;   2.29.
@@ -2935,6 +2938,11 @@
   ;; MACROLET still sticking around - Seems correct (see
   ;; above). Optimization hint: Walking once and just removing
   ;; MACROLETs later?
+  ;;
+  ;; CMUCL's PCL walker behaves like LispWorks.
+  ;;
+  ;; Clisp's walker doesn't leave the macrolet forms around so it's a
+  ;; little easier.
   #+:lispworks
   (loop 
     (unless (and (listp code)
@@ -2952,7 +2960,16 @@
 		       (t nil)))
 	  (return code))
 	(setq code (cons 'progn (cddr (walker::walk-form code))))))
-  #-(or :lispworks :cmu)
+  #+clisp
+  (loop 
+      (unless (and (listp code)
+		   (case (car code)
+		     ((cl:macrolet cl:symbol-macrolet) t)
+		     (t nil)))
+	(return code))
+      (cl:let ((SYSTEM::*FENV* nil) (SYSTEM::*vENV* nil))
+	(setq code (list 'progn (sys::%expand-form code)))))
+  #-(or :lispworks :cmu :clisp)
   code)
 
 ;; on lispm '(lambda ...) macroexpands to (function (lambda ...)) ugh!
