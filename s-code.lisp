@@ -8,11 +8,17 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.19 1999/04/06 18:36:13 toy Exp $
+;;;; $Id: s-code.lisp,v 1.20 1999/04/08 21:41:16 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.20  1999/04/08 21:41:16  toy
+;;;; Add CLISP to the Series-ANSI.  Then need to import COMPILER-LET.
+;;;;
+;;;; In aux-init, the bit-vector entry is only for CMUCL which
+;;;; canonicalizes (vector bit) into bit-vector.
+;;;;
 ;;;; Revision 1.19  1999/04/06 18:36:13  toy
 ;;;; Some fixes from Arthur Lemmens <lemmens@simplex.nl>:
 ;;;; MAKE-SEQUENCE was being called with things like (BIT-VECTOR BIT) and
@@ -183,7 +189,7 @@
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro CMU Genera Harlequin-Common-Lisp CLISP)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':SERIES-ANSI cl:*features*))
 
@@ -230,6 +236,8 @@
   (:import-from "LISP" "COMPILER-LET")
   #+Allegro
   (:import-from "CLTL1" "COMPILER-LET")
+  #+CLISP
+  (:import-from "LISP" "COMPILER-LET")
 )
 
 #+(or Series-ANSI)
@@ -281,11 +289,14 @@
 (defvar *suppress-series-warnings* nil
   "Suppress warnings when the restrictions are violated.")
 
-(defvar *series-expression-cache* T "Avoids multiple expansions")
+(defvar *series-expression-cache* T
+  "Avoids multiple expansions")
 
-(defvar *last-series-loop* nil "Loop most recently created by SERIES.")
+(defvar *last-series-loop* nil
+  "Loop most recently created by SERIES.")
 
-(defvar *last-series-error* nil "Info about error found most recently by SERIES.")
+(defvar *last-series-error* nil
+  "Info about error found most recently by SERIES.")
 
 (defvar *series-implicit-map* nil 
   "T enables implicit mapping in optimized expressions")
@@ -1670,8 +1681,8 @@
 (cl:defun define-optimizable-series-fn (name lambda-list expr-list)
   "Defines a series function, see lambda-series."
   (cl:let ((call (list* 'defun name lambda-list expr-list))
-	     (*optimize-series-expressions* T)
-	     (*suppress-series-warnings* nil))
+	   (*optimize-series-expressions* T)
+	   (*suppress-series-warnings* nil))
     (dolist (v lambda-list)
       (when (and (symbolp v) (not (eq v '&optional))
                  (> (length (string v)) 0) (eql (aref (string v) 0) #\&))
@@ -3024,6 +3035,7 @@
 					 (if (eq len '*) 0 len)))))
 		 (t
 		  (list var-name '#()))))
+	  #+cmu	; CMUCL converts (vector bit) to bit-vector
 	  ((subtypep var-type 'bit-vector)
 	   (cond ((consp var-type)
 		  (cl:let ((len (second var-type)))
