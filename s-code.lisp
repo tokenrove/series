@@ -8,11 +8,19 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.28 1999/06/30 19:34:49 toy Exp $
+;;;; $Id: s-code.lisp,v 1.29 1999/07/01 14:15:39 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.29  1999/07/01 14:15:39  toy
+;;;; o  "Pekka P. Pirinen" <pekka@harlequin.co.uk> supplied a new version
+;;;;    of aux-init (and init-elem).  This is probably better.  I added one
+;;;;    additional case.
+;;;;
+;;;; o  Added simple-base-string to the tests in decode-seq-type.  (Needed
+;;;;    by the new aux-init.
+;;;;
 ;;;; Revision 1.28  1999/06/30 19:34:49  toy
 ;;;; "Pekka P. Pirinen" <pekka@harlequin.co.uk> says:
 ;;;;
@@ -3059,80 +3067,52 @@
 
 
 (cl:defun aux-init (aux)
-  (cl:flet ((eq-or-eq-car (thing item)
-	      (or (eq thing item)
-		  (eq-car thing item))))
-    (cl:let ((var-name (car aux))
-	     (var-type (canonical-type (cadr aux))))
-      ;; (format t "var-name, var-type = ~a ~a~%" var-name var-type)
-      (cond ((subtypep var-type 'complex)
-	     ;; (complex) or (complex float-type)
-	     (cond ((atom var-type)
-		    ;; Plain old complex.  (Don't want #C(0 0) because
-		    ;; complex canonicalization converts that to plain
-		    ;; 0.)
-		    (list var-name #C(0.0f0 0.0f0)))
-		   (t
-		    ;; Create a complex zero with the correct component type.
-		    (list var-name (complex (coerce 0 (cadadr aux)))))))
-	    ((subtypep var-type 'number)
-	     ;; Initialize NUMBER's to 0 of the appropriate type.
-	     (list var-name (coerce 0 var-type)))
-	    ;; Although a STRING can be (VECTOR CHARACTER) and a
-	    ;; SIMPLE-STRING can be a (SIMPLE-ARRAY CHARACTER (*)), we
-	    ;; handle them here because the syntax of the declarations
-	    ;; is different.
-	    ((or (eq-or-eq-car var-type 'string)
-		 (eq-or-eq-car var-type 'simple-string)
-		 (eq-or-eq-car var-type 'base-string)
-		 (eq-or-eq-car var-type 'simple-base-string))
-	     ;; Handle (string) or (string len)
-	     ;; (format t "string = ~A~%" var-type)
-	     (cl:let ((len (if (and (consp var-type)
-				    (= 2 (length var-type)))
-			       (second var-type)
-			       0)))
-	       (list var-name (list 'make-sequence
-				    `',var-type
-				    (if (eq len '*) 0 len)))))
-	    ;; Although a BIT-VECTOR could be handled via the VECTOR
-	    ;; entry below, we do it here because the syntax of a
-	    ;; BIT-VECTOR declaration is different from VECTOR.  The
-	    ;; same holds for SIMPLE-BIT-VECTOR.
-	    ((or (eq-or-eq-car var-type 'bit-vector)
-		 (eq-or-eq-car var-type 'simple-bit-vector))
-	     ;; (bit-vector) or (bit-vector len) or (simple-bit-vector)
-	     ;; or (simple-bit-vector len)
-	     ;; (format t "got a bit-vector:  ~A~%" var-type)
-	     (cl:let ((len (if (and (consp var-type)
-				    (= 2 (length var-type)))
-			       (second var-type)
-			       0)))
-	       (list var-name (list 'make-sequence
-				    `',var-type
-				    (if (eq len '*) 0 len)))))
-	    ((subtypep var-type 'simple-array)
-	     ;; (simple-array) or (simple-array el-type) or
-	     ;; (simple-array el-type dim)
-	     (cl:let ((len (if (and (consp var-type)
-				    (= 3 (length var-type)))
-			       (first (third var-type))
-			       0)))
-	       (list var-name (list 'make-sequence
-				    `',var-type
-				    (if (eq len '*) 0 len)))))
-	    ((subtypep var-type 'vector)
-	     ;; (vector) or (vector el-type) or (vector el-type len)
-	     (cl:let ((len (if (and (consp var-type)
-				    (= 3 (length var-type)))
-			       (third var-type)
-			       0)))
-	       (list var-name (list 'make-sequence
-				    `',var-type
-				    (if (eq len '*) 0 len)))))
-	    ((subtypep var-type 'cons)
-	     (list var-name '(cons nil nil)))
-	    (T var-name)))))
+  (list (car aux) (init-elem (cadr aux))))
+
+(cl:defun init-elem (type)
+  (cl:let ((var-type (canonical-type type)))
+    (cond ((subtypep var-type 'complex)
+	   (cond ((atom var-type) ;; Plain old complex
+		  #C(0.0 0.0))
+		 ((and (eq-car var-type 'complex)
+		       (cdr var-type))
+                  ;; Can find elem-type.
+		  (complex (coerce 0 (cadr var-type))))
+                 (t
+		  ;; BUG: Can't find elem-type, hope COERCE knows better.
+		  (coerce 0 var-type))))
+	  ((subtypep var-type 'number)
+	   (coerce 0 var-type))
+          ((subtypep var-type 'cons)
+           (cond ((atom var-type)
+		  '(nil))
+                 ((and (eq-car var-type 'cons) (cdr var-type))
+                  (cons (init-elem (cadr var-type))
+                        (init-elem (caddr var-type))))
+                 (t
+		  ;; BUG: Can't find elem-type, try random value.
+		  '(nil))))
+          ((subtypep var-type 'sequence)
+           (multiple-value-bind (arr len elem-type)
+               (decode-seq-type `',var-type)
+             ;; BUG: Only as good as DECODE-SEQ-TYPE.
+             (declare (ignore arr elem-type))
+             (make-sequence var-type (or len 0))))
+          ((subtypep var-type 'array)
+           ;; Heuristic: assume they mean vector.
+           ;; BUG: fails if DECODE-SEQ-TYPE fails to find the right elem type!
+           (multiple-value-bind (arr len elem-type)
+               (decode-seq-type `',var-type)
+             (declare (ignore arr))
+             ;; Probably no length, as that case is caught by previous branch
+             (make-sequence `(vector ,elem-type ,(or len 0)) (or len 0))))
+	  ((or (typep nil var-type)
+	       (eq t (upgraded-array-element-type var-type)))
+	   nil)
+          (t
+           ;; BUG: Try to hack it through MAKE-SEQUENCE.  This could fail.
+           (aref (make-sequence `(vector ,var-type) 1) 0)))))
+
 
 (cl:defun clean-dcls (aux)
   (dolist (v aux) (propagate-types (cdr v) aux))
@@ -4656,9 +4636,11 @@
 	       ((eq-car type 'string)
 		(values 'vector (if (numberp (cadr type)) (cadr type)) 'character))
 	       ;; But SIMPLE-STRING's are really (SIMPLE-ARRAY CHARACTER (*))
-	       ((eq type 'simple-string)
+	       ((or (eq type 'simple-string)
+		    (eq type 'simple-base-string))
 		(values 'simple-array nil 'character))
-	       ((eq-car type 'simple-string)
+	       ((or (eq-car type 'simple-string)
+		    (eq-car type 'simple-base-string))
 		(values 'simple-array
 			(if (numberp (cadr type)) (cadr type))
 			'character))
