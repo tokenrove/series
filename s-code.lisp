@@ -8,12 +8,19 @@
 ;;;; files a long time ago, you might consider copying them from the
 ;;;; above web site now to obtain the latest version.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.51 2000/02/23 15:27:02 toy Exp $
+;;;; $Id: s-code.lisp,v 1.52 2000/02/28 17:37:31 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.  This
 ;;;; started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.52  2000/02/28 17:37:31  toy
+;;;; o Make when-bind always available
+;;;; o Add deftype generator for Allegro.  I'm not sure this is
+;;;;   correct, but it let's ACL compile series, albeit with
+;;;;   warnings about generator type being defined twice.  (Need
+;;;;   to find a better solution.)
+;;;;
 ;;;; Revision 1.51  2000/02/23 15:27:02  toy
 ;;;; o Fernando added an indefinite-extent declaration and uses
 ;;;;   it in the one place where it's needed.
@@ -418,13 +425,13 @@
 ;;; Generic stuff that should be moved to/imported from EXTENSIONS
 
 ;; mkant EXTENSIONS should push :EXTENSIONS in *FEATURES*!!!
-#-:extensions
+(eval-when (eval load compile)
 (defmacro when-bind ((symbol predicate) &body body)
   "Binds the symbol to predicate and executes body only if predicate
    is non-nil."
   `(cl:let ((,symbol ,predicate))
      (when ,symbol
-       ,@body)))
+       ,@body))))
 
 (cl:defun atom-or-car (x)
   (if (listp x)
@@ -1593,7 +1600,7 @@
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
 
-#+(or :lispworks :cmu)
+#+(or :lispworks :cmu :allegro)
 (deftype generator () 'list)
 
 (cl:defun generator (s)
