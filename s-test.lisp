@@ -36,9 +36,12 @@
 ;comparison of results, all of the old tests are given numerical names
 ;that match the numbers printed out when running the old tester.
 
-;;;; $Id: s-test.lisp,v 1.6 1999/04/06 21:40:52 toy Exp $
+;;;; $Id: s-test.lisp,v 1.7 1999/04/13 15:56:39 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.7  1999/04/13 15:56:39  toy
+;;;; Remove an unused NIL tag from test 418.
+;;;;
 ;;;; Revision 1.6  1999/04/06 21:40:52  toy
 ;;;; Some extra tests from Arthur Lemmens <lemmens@simplex.nl>.  They make
 ;;;; sure series does the right things with strings and bit vectors.
@@ -1710,7 +1713,7 @@
 					   (tagbody
 					      (setq num (next-in numbers (terminate-producing)))
 					      (setq num (1+ num))
-					    nil
+					    ;; nil
 					      (setq xx (cons num '(1)))
 					      (setq number (+ number num))
 					      (next-out y num))))
