@@ -105,6 +105,7 @@ IMPROVEMENTS:
 ------------
 - MACROLETs or CLOS::VARIABLE-REBINDING declarations do not block optimization under LispWorks.
 - Better code generation
+  - Stricter typing.
   - Replaced some SETQs by initializations at LET binding time.
   - Removed global function namespace pollution.
   - Encapsulated series subfunctions.
@@ -112,6 +113,7 @@ IMPROVEMENTS:
   Local series functions are almost there (FLET extension)
   Bottom-up definition for improved compilation.
   Make source `FLET and LABELS ready'.
+  Renamed old fragL *fragL. Used new `*type*-free' fragL whenever possible.
   `readability/documentation' release.
   Some work done towards multiple assignment support in PRODUCING.
 
