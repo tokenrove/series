@@ -36,9 +36,13 @@
 ;comparison of results, all of the old tests are given numerical names
 ;that match the numbers printed out when running the old tester.
 
-;;;; $Id: s-test.lisp,v 1.5 1998/06/10 18:55:08 toy Exp $
+;;;; $Id: s-test.lisp,v 1.6 1999/04/06 21:40:52 toy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.6  1999/04/06 21:40:52  toy
+;;;; Some extra tests from Arthur Lemmens <lemmens@simplex.nl>.  They make
+;;;; sure series does the right things with strings and bit vectors.
+;;;;
 ;;;; Revision 1.5  1998/06/10 18:55:08  toy
 ;;;; Merged in the T -> TO -> TON macro renaming from Rev 1.1.1.2.
 ;;;;
@@ -2262,6 +2266,13 @@
 ;		    (declare (optimizable-series-function))
 ;		    (scan '(1 2 3))))
 ;  ugh5 50)
+
+(deftest 553 (ton (collect 'string #Z(#\B #\A #\R))) "BAR")
+(deftest 554 (ton (collect 'simple-string #Z(#\B #\A #\R))) "BAR")
+(deftest 555 (ton (collect 'base-string #Z(#\B #\A #\R))) "BAR")
+(deftest 556 (ton (collect 'simple-base-string #Z(#\B #\A #\R))) "BAR")
+(deftest 557 (ton (collect 'bit-vector #Z(1 0 1 1))) #*1011)
+(deftest 558 (ton (collect 'simple-bit-vector #Z(1 0 1 1))) #*1011)
 
 ;------------------------------------------------------------------------
 
