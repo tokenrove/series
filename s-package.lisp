@@ -8,9 +8,12 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.4 1999/12/01 16:09:05 toy Exp $
+;;;; $Id: s-package.lisp,v 1.5 2000/02/28 17:40:15 toy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.5  2000/02/28 17:40:15  toy
+;;;; Forgot to export COLLECT-PRODUCT (caught by Fernando).
+;;;;
 ;;;; Revision 1.4  1999/12/01 16:09:05  toy
 ;;;; Need to import compiler-let from the extensions package in CMUCL.
 ;;;;
@@ -68,6 +71,7 @@
    "COLLECTING-FN" "COTRUNCATE" "LATCH" "UNTIL" "UNTIL-IF" "POSITIONS"
    "CHOOSE" "CHOOSE-IF" "SPREAD" "EXPAND" "MASK" "SUBSERIES" "MINGLE"
    "CATENATE" "SPLIT" "SPLIT-IF" "PRODUCING" "CHUNK"
+   "COLLECT-PRODUCT"
 
    ;;(5) variables
     "*SERIES-EXPRESSION-CACHE*"
