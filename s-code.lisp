@@ -8,11 +8,16 @@
 ;from somewhere else, or copied the files a long time ago, you might
 ;consider copying them from MERL.COM now to obtain the latest version.
 
-;;;; $Id: s-code.lisp,v 1.35 1999/09/15 14:11:29 toy Exp $
+;;;; $Id: s-code.lisp,v 1.36 1999/09/15 14:30:55 toy Exp $
 ;;;;
 ;;;; This is modified version of Richard Water's Series package.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.36  1999/09/15 14:30:55  toy
+;;;; The change in 1.17 for scan-range was backwards: The CMUCL version
+;;;; should get the coercion stuff and the non-CMUCL version shouldn't.
+;;;; (Hmm, should I remove this dependency on platform?  Probably.)
+;;;;
 ;;;; Revision 1.35  1999/09/15 14:11:29  toy
 ;;;; Backed out the changes in INIT-ELEM:  they were mostly correct I
 ;;;; think.  Just needed to stick a backquote before the make-sequence
@@ -4366,13 +4371,14 @@
 ;; This deftype is used to appease the compiler (CMUCL) about an
 ;; unknown type when compiling scan-range.  If someone has a better
 ;; way of getting scan-range to generate the correct initial values
-;; with this hack, I'd love to have it.
+;; without this hack, I'd love to have it.
 (deftype *type* () t)
 
 ;; This version of scan-range fixes a long-standing bug that occurs
 ;; when :type is not 'number.  Say :type is 'single-float.  Then the
 ;; looping variables are declared to be single-float's, but the
-;; variables end up being initialized with fixnums.  This loses.
+;; variables end up being initialized with fixnums.  This loses.  To
+;; fix this, the initializers are coerced to the correct type.
 ;; However, you need a reasonably smart compiler to do constant
 ;; folding so that you don't do the coercion every time through the
 ;; loop.
@@ -4405,7 +4411,7 @@
 		  ((setq numbers (coerce (- from by) '*type*)))
 		  ((setq numbers (+ numbers (coerce by '*type*)))
 		   (if (not (> numbers above)) (go END))) () ()))
-	  #+cmu
+	  #-cmu
 	  (length
 	   (fragL ((from) (length) (by)) ((numbers T))
 		  ((numbers *type*) (counter fixnum)) ()
@@ -4413,7 +4419,7 @@
 		  ((setq numbers (+ numbers by))
 		   (if (not (plusp counter)) (go END))
 		   (decf counter)) () ()))
-	  #-cmu
+	  #+cmu
 	  (length
 	   (fragL ((from) (length) (by)) ((numbers T))
 		  ((numbers *type*) (counter fixnum)) ()
