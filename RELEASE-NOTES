@@ -95,6 +95,11 @@ installed.
 Release notes
 -------------
 
+* Series 2.2.9 Release Notes
+
+o Fix issue with SERIES being a declaration and a type, which is not
+  allowed by ANSI CL.
+
 * Series 2.2.8 Release Notes
 
 o Support for SBCL and asdf.
