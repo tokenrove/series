@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.98 2005/01/27 04:19:33 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.99 2005/11/15 15:07:57 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.99  2005/11/15 15:07:57  rtoy
+;;;; ANSI CL says a declaration cannot also be the name of a type, so
+;;;; remove the declaration for SERIES.
+;;;;
 ;;;; Revision 1.98  2005/01/27 04:19:33  rtoy
 ;;;; Fix for bug 434120.
 ;;;;
@@ -764,8 +768,6 @@ value, the old value is not clobbered."
 (declaim (declaration indefinite-extent))
 
 (declaim (declaration optimizable-series-function off-line-port
-                      ;; Genera barfs at this (correctly I think)
-                      #-(or Genera lispworks4) series
                       propagate-alterability))
 ) ; end of eval-when
 
