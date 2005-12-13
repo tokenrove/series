@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.99 2005/11/15 15:07:57 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.100 2005/12/13 14:40:30 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.100  2005/12/13 14:40:30  rtoy
+;;;; Lispworks wants an eval-when around coerce-maybe-fold.  From Chris
+;;;; Dean, 2005/12/09.
+;;;;
 ;;;; Revision 1.99  2005/11/15 15:07:57  rtoy
 ;;;; ANSI CL says a declaration cannot also be the name of a type, so
 ;;;; remove the declaration for SERIES.
@@ -1452,8 +1456,10 @@ value, the old value is not clobbered."
 ) ; end of eval-when
 
 #-allegro
+(eval-when (:compile-toplevel :load-toplevel :execute)
 (defmacro coerce-maybe-fold (thing type)
   `(coerce ,thing ,type))
+)
 
 
 #+allegro
