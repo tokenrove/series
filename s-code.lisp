@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.100 2005/12/13 14:40:30 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.101 2007/02/06 21:10:38 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.101  2007/02/06 21:10:38  rtoy
+;;;; Get rid of a warning message.  Don't know why the warning is done at
+;;;; all.
+;;;;
 ;;;; Revision 1.100  2005/12/13 14:40:30  rtoy
 ;;;; Lispworks wants an eval-when around coerce-maybe-fold.  From Chris
 ;;;; Dean, 2005/12/09.
@@ -1951,6 +1955,9 @@ value, the old value is not clobbered."
                              (and (boundp '*not-straight-line-code*)
                                   *not-straight-line-code*))
                          (copy-list args)))
+    ;; What is this for?  Why do we want to print out this warning
+    ;; when *testing-errors* is NIL?  Remove this.  Tests still pass.
+    #+nil
     (when (not *testing-errors*)
       (warn ""))))
 
