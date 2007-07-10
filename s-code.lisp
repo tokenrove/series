@@ -9,12 +9,23 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.101 2007/02/06 21:10:38 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.102 2007/07/10 17:45:46 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.102  2007/07/10 17:45:46  rtoy
+;;;; s-code.lisp:
+;;;; o Add an optimizer for SERIES and update appropriately for the normal
+;;;;   path and the optimized path.  This is needed so that (series t nil)
+;;;;   returns #z(t nil t nil ...) instead of #z(list t nil list t nil ...)
+;;;;
+;;;; s-test.lisp:
+;;;; o Add two tests for SERIES.  The tests need some work, but are based
+;;;;   on the errors reported by Szymon 'tichy' on comp.lang.lisp on Jul 7,
+;;;;   2007.
+;;;;
 ;;;; Revision 1.101  2007/02/06 21:10:38  rtoy
 ;;;; Get rid of a warning message.  Don't know why the warning is done at
 ;;;; all.
@@ -7839,6 +7850,35 @@ result of mapping."
 ;; API
 (defS series (expr &rest expr-list)
   "Creates an infinite series that endlessly repeats the given items.."
+  (cond ((null expr-list)
+         (fragl ((expr)) ((expr t)) () () () () () () :args))
+        (t (cl:let ((full-expr-list
+                        (optif `(,expr ,@ expr-list)
+				(cons expr (copy-list expr-list)))))
+             (fragl ((full-expr-list)) ((items t))
+		    ((items t)
+		     (lst list (copy-list full-expr-list)))
+		    ()
+                    ((setq lst (nconc lst lst)))
+                    ((setq items (car lst)) (setq lst (cdr lst)))
+		    ()
+		    ()
+		    :args
+		    ))))
+  :optimizer
+  ;; This is essentially identical to the above code except that
+  ;; FULL-EXPR-LIST is (LIST <items>).  Not 100% sure about this, but
+  ;; unexpected things happen if we don't.
+  ;;
+  ;; Some examples (noted on comp.lang.lisp by Szymon 'tichy' on Sat,
+  ;; Jul 7, 2007):
+  ;; (positions (series t nil)) -> #z(0 1 2 3 4 6 7 10 12 13 ...)
+  ;; (series t nil) -> #z(list t nil list t nil ...)
+  ;;
+  ;; I believe these are wrong.  (How can I add such tests to the test
+  ;; scripts?)  The first test should return #z(0 2 4 6 8 10 ...) and
+  ;; the second should return #z(t nil t nil ...)
+  ;;
   (cond ((null expr-list)
          (fragl ((expr)) ((expr t)) () () () () () () :args))
         (t (cl:let ((full-expr-list

@@ -40,9 +40,20 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.25 2005/01/27 04:19:33 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.26 2007/07/10 17:45:46 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.26  2007/07/10 17:45:46  rtoy
+;;;; s-code.lisp:
+;;;; o Add an optimizer for SERIES and update appropriately for the normal
+;;;;   path and the optimized path.  This is needed so that (series t nil)
+;;;;   returns #z(t nil t nil ...) instead of #z(list t nil list t nil ...)
+;;;;
+;;;; s-test.lisp:
+;;;; o Add two tests for SERIES.  The tests need some work, but are based
+;;;;   on the errors reported by Szymon 'tichy' on comp.lang.lisp on Jul 7,
+;;;;   2007.
+;;;;
 ;;;; Revision 1.25  2005/01/27 04:19:33  rtoy
 ;;;; Fix for bug 434120.
 ;;;;
@@ -2497,6 +2508,20 @@
 		    (alter s3 (map-fn 'fixnum #'* s1 s2)))
 		  (coerce m3 'list)))
   (1 4 9 16 25 36 49 64 0))
+
+;; Is there a better way to do this?  Print to a string seems rather
+;; fragile.
+(defok 562 (ton
+	    (let ((*print-length* 20))
+	      (subseq (with-output-to-string (s)
+			(print (series t nil) s)) 1)))
+  "#Z(T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL ...) ")
+
+(defok 563 (ton
+	     (let ((*print-length* 20))
+	      (subseq (with-output-to-string (s)
+			(print (positions (series t nil)) s)) 1)))
+  "#Z(0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 ...) ")
 
 ;;; Some simple consistency tests.  (Some of these were broken by
 ;;; changes in series, so we include them here to prevent these from
