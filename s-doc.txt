@@ -609,6 +609,16 @@ no corresponding element in ITEMS.
 (EXPAND #Z(NIL T NIL T T) #Z(A B C)) => #Z(NIL A NIL B C) 
 (EXPAND #Z(NIL T NIL T T) #Z(A)) => #Z(NIL A NIL)
 
+SPREAD GAPS ITEMS &optional (DEFAULT NIL)                       [Function]
+
+SPREAD is quite similar to EXPAND, except instead of giving booleans
+on where to put the items, GAPS are specified which indicate how far
+apart the items should be.  A gap of 0 means the items will be
+adjacent.
+
+(SPREAD #Z(1 1 1) #Z(A B C)) -> #Z(NIL A NIL B NIL C)
+(SPREAD #z(0 2 3) #z(A B C)) -> #Z(A NIL NIL B NIL NIL NIL C)
+
 
 SPLIT ITEMS &rest TEST-SERIES-INPUTS                             [Function]
 SPLIT-IF ITEMS &rest TEST-PREDICATES                             [Function]
