@@ -9,12 +9,16 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.102 2007/07/10 17:45:46 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.103 2007/07/31 21:14:11 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.103  2007/07/31 21:14:11  rtoy
+;;;; Make the #Z reader signal an error if we are trying to create an
+;;;; infinite literal series.  Series doesn't support that.
+;;;;
 ;;;; Revision 1.102  2007/07/10 17:45:46  rtoy
 ;;;; s-code.lisp:
 ;;;; o Add an optimizer for SERIES and update appropriately for the normal
@@ -7912,9 +7916,18 @@ result of mapping."
      frag)))
 
 ;; put on #Z
+#+nil
 (cl:defun series-reader (stream subchar arg)
-    (declare (ignore subchar arg))
+  (declare (ignore subchar arg))
   `(literal-series ',(read stream t nil t)))
+
+(cl:defun series-reader (stream subchar arg)
+  (declare (ignore subchar arg))
+  (cl:let ((items (read stream t nil t)))
+    (cl:unless (list-length items)
+      ;; We have some kind of infinite list.
+      (ers 100 "~&Infinite literal series not supported"))
+    `(literal-series ',items)))
 
 ;; API
 (defS make-series (item &rest item-list)
