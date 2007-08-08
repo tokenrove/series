@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.105 2007/08/08 13:36:56 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.106 2007/08/08 15:07:45 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.106  2007/08/08 15:07:45  rtoy
+;;;; Change default test for SCAN-ALIST to EQL instead of EQ.
+;;;;
 ;;;; Revision 1.105  2007/08/08 13:36:56  rtoy
 ;;;; s-code.lisp:
 ;;;; o Update docstrings
@@ -8558,8 +8561,8 @@ Creates a series of the sublists in a list.
 	 :mutable))
 
 ;; API
-(defS scan-alist (alist &optional (test #'eq))
-  "(scan-alist alist &optional (test #'eq))
+(defS scan-alist (alist &optional (test #'eql))
+  "(scan-alist alist &optional (test #'eql))
 
 Creates two series containing the keys and values in an alist."
   (fragl ((alist) (test)) ((keys t) (values t))
