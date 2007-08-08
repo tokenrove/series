@@ -297,6 +297,7 @@ to the current package).
 
 
 SCAN-FILE FILE-NAME &optional (READER #'READ)                    [Function]
+SCAN-STREAM STREAM &optional (READER #'READ)                     [Function]
 
 SCAN-FILE opens the file named by the string FILE-NAME and applies the
 function READER to it repeatedly until the end of the file is reached.
@@ -307,6 +308,9 @@ READER defaults to READ.  SCAN-FILE returns a series of the values returned
 by READER, up to but not including the value returned when the end of the
 file is reached.  The file is correctly closed, even if an abort occurs.
 
+SCAN-STREAM is like SCAN-FILE, except an open stream is given instead
+of a file name.  This works around a defect in SCAN-FILE where
+additional options to OPEN cannot be specified.
 
 SCAN-FN TYPE INIT STEP &optional TEST                            [Function]
 

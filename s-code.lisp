@@ -9,12 +9,19 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.103 2007/07/31 21:14:11 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.104 2007/08/08 03:42:43 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.104  2007/08/08 03:42:43  rtoy
+;;;; s-code.lisp:
+;;;; o Update docstrings with more descriptive strings.
+;;;;
+;;;; s-doc.txt:
+;;;; o Document SCAN-STREAM.
+;;;;
 ;;;; Revision 1.103  2007/07/31 21:14:11  rtoy
 ;;;; Make the #Z reader signal an error if we are trying to create an
 ;;;; infinite literal series.  Series doesn't support that.
@@ -7180,7 +7187,9 @@ t))))))))
 (defS collect-fn (type inits function &rest args)
    "(collect-fn type init-function function &rest args)
 
-Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
+Computes a cumulative value by applying FUNCTION to the elements of ITEMS.
+INIT-FUNCTION specifies the initial value(s).  Like COLLECTING-FN, but
+only the last element of each series is returned."
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
     (cond ((= n 1) (apply #'basic-collect-fn inits function args))
@@ -7201,7 +7210,21 @@ Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
 
 ;; API
 (defS collecting-fn (type inits function &rest args)
-  "Computes cumulative values by applying FUNCTION to the elements of ITEMS."
+  "(collecting-fn type init function &rest series-inputs)
+
+Computes cumulative values by applying FUNCTION to the elements of
+ITEMS.  TYPE specifies the type of values returned by FUNCTION.  INIT
+is a function that returns the initial values for the series.  The
+output, t1,..., tm, are computed as follows:
+
+ (values t1[0] ... tm[0] =
+	(multiple-value-call function (funcall init) s1[0] ... sn[0])
+	
+ (values t1[j] ... tm[j] =
+	(funcall function t1[j-1] ... tm[j-1] s1[j] ... sn[j])
+
+where s1[j],...,sn[j] are the j'th elements of the n input series.	
+"
   (cl:let ((n (length (decode-type-arg type))))
     (setq args (copy-list args))
     (cond ((= n 1)
@@ -7250,7 +7273,20 @@ Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
 
 ;; API
 (defS scan-fn (type init step &optional (test nil test-p))
-  "Enumerates a series"
+  "(scan-fn type init step &optional test)
+
+Enumerates a series.  TYPE specifies the type of the value(s) returned
+by INIT and STEP.  The elements are computed as follows:
+
+ (values t1[0] ... tm[0]) = (funcall init)
+ (values t1[j] ... tm[j]) = (funcall step t1[j-1] ... tm[j-1])
+
+where t1, ..., tm are the output series.
+
+If TEST is not specified, the output is unbounded.  If TEST is
+specified, the output is terminated when (funcall tests t1[j]
+... tm[j]) is non-NIL.  The elements that cause termination are 
+not part of the output."
   (cl:let ((n (length (decode-type-arg type))))
     (when (not test-p)
       (setq test #'never))
@@ -7277,7 +7313,20 @@ Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
 
 ;; API
 (defS scan-fn-inclusive (type init step test)
-  "Enumerates a series"
+  "(scan-fn-inclusive type init step &optional test)
+
+Enumerates a series.  TYPE specifies the type of the value(s) returned
+by INIT and STEP.  The elements are computed as follows:
+
+ (values t1[0] ... tm[0]) = (funcall init)
+ (values t1[j] ... tm[j]) = (funcall step t1[j-1] ... tm[j-1])
+
+where t1, ..., tm are the output series.
+
+If TEST is not specified, the output is unbounded.  If TEST is
+specified, the output is terminated when (funcall tests t1[j]
+... tm[j]) is non-NIL.  The elements that cause termination are 
+part of the output."
   (cl:let ((n (length (decode-type-arg type))))
     (cond ((= n 1)
            (fragl ((init) (step) (test)) ((prior-state t))
@@ -7344,7 +7393,10 @@ Computes a cumulative value by applying FUNCTION to the elements of ITEMS."
 
 ;; API
 (defS iterate (var-value-list &rest body)
-    "Applies BODY to each element of the series"
+  "(iterate ({({var | ({var}*)} value)}*) {declaration}* {form}*)
+
+Applies BODY to each element of the series, like MAPPING, but results
+are discarded."
   iterate-mac
  :optimizer
   `(iterate-mac ,var-value-list ,@ body)
@@ -7376,8 +7428,9 @@ result of mapping."
                ,@(mapcar #'car bindings)))
        bindings)))
 
-#+symbolics(setf (gethash 'mapping zwei:*lisp-indentation-offset-hash-table*)
-                 '(1 1))
+#+symbolics
+(setf (gethash 'mapping zwei:*lisp-indentation-offset-hash-table*)
+      '(1 1))
 
 ;; only used when optimization not possible.
 (defmacro mapping-mac (var-value-list &body body)
@@ -7617,7 +7670,41 @@ result of mapping."
           (+frag frag))))))
 
 ;; API
-(defS producing (output-list input-list &rest body) "" non-opt-producing
+(defS producing (output-list input-list &rest body)
+  "(producing output-list input-list {declaration}* {form}*
+
+PRODUCING computes and returns a group of series and non-series outputs
+given a group of series and non-series inputs.
+
+The OUTPUT-LIST has the same syntax as the binding list of a LET.  The
+names of the variables must be distinct from each other and from the names
+of the variables in the INPUT-LIST.  If there are N variables in the
+OUTPUT-LIST, PRODUCING computes N outputs.  There must be at least one
+output variable.  The variables act as the names for the outputs and can be
+used in either of two ways.  First, if an output variable has a value
+associated with it in the OUTPUT-LIST, then the variable is treated as
+holding a non-series value.  The variable is initialized to the indicated
+value and can be used in any way desired in the body. The eventual output
+value is whatever value is in the variable when the execution of the body
+terminates.  Second, if an output variable does not have a value associated
+with it in the OUTPUT-LIST, the variable is given as its value a gatherer
+that collects elements.  The only valid way to use the variable in the body
+is in a call on NEXT-OUT.  The output returned is a series containing these
+elements.  If the body never terminates, this series is unbounded.
+
+The INPUT-LIST also has the same syntax as the binding list of a LET.
+The names of the variables must be distinct from each other and the names
+of the variables in the OUTPUT-LIST.  The values can be series or
+non-series.  If the value is not explicitly specified, it defaults to NIL.
+The variables act logically both as inputs and state variables and can be
+used in one of two ways.  First, if an input variable is associated with a
+non-series value, then it is given this value before the evaluation of the
+body begins and can be used in any way desired in the body.   Second, if an
+input variable is associated with a series, then the variable is given a
+generator corresponding to this series as its initial value.  The only
+valid way to use the variable in the body is in a call on NEXT-IN.
+"
+  non-opt-producing
  :optimizer
    (optimize-producing output-list input-list body)
  :trigger
@@ -7629,8 +7716,9 @@ result of mapping."
      (when (not (consp pair))
        (return t))))
 
-#+symbolics(setf (gethash 'producing zwei:*lisp-indentation-offset-hash-table*)
-                 '(2 1))
+#+symbolics
+(setf (gethash 'producing zwei:*lisp-indentation-offset-hash-table*)
+      '(2 1))
 
 (defmacro terminate-producing ()
     "Causes the containing call on producing to terminate."
@@ -7853,7 +7941,10 @@ result of mapping."
 
 ;; API
 (defS series (expr &rest expr-list)
-  "Creates an infinite series that endlessly repeats the given items.."
+  "(series arg &rest args)
+
+Creates an infinite series that endlessly repeats the given items in
+the order given."
   (cond ((null expr-list)
          (fragl ((expr)) ((expr t)) () () () () () () :args))
         (t (cl:let ((full-expr-list
@@ -7958,8 +8049,8 @@ result of mapping."
                        (upto nil) (below nil)
                        (downto nil) (above nil)
                        (length nil) (type 'number))
-    "(scan-range &key (:start 0) (:by 1) (:type 'number):upto :below
-:downto :above :length)
+    "(scan-range &key (:start 0) (:by 1) (:type 'number) :upto :below
+                      :downto :above :length)
 
 The function SCAN-RANGE returns a series of numbers starting with the
 :start argument (default integer 0) and counting up by the :by
@@ -8350,7 +8441,9 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS cotruncate (&rest items-list)
-    "Truncates the inputs so that they are all no longer than the shortest one."
+  "(cotruncate &rest series)
+
+Truncates the inputs so that they are all no longer than the shortest one."
   (values-lists (length items-list)
                 (apply #'map-fn t #'list (mapcar #'promote-series items-list))
                 (mapcar #'alter-fn items-list))
@@ -8420,7 +8513,10 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-multiple (type sequence &rest sequences)
-    "Scans multiple sequences in parallel"
+  "(scan-multiple type first-seq &rest more-sequences)
+
+Like several calls to SCAN, but scans multiple sequences in parallel
+efficiently."
   (cl:let ((types (mapcar #'cadr
                             (decode-multiple-types-arg (list 'quote type)
                                                        (1+ (length sequences))))))
@@ -8435,7 +8531,11 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-sublists (lst)
-    "Creates a series of the sublists in a list."
+  "(scan-sublists list)
+
+Creates a series of the sublists in a list.
+
+  (SCAN-SUBLISTS '(A B C)) => #Z((A B C) (B C) (C)) "
   (fragl ((lst)) ((sublists t))
 	 ((sublists list)
 	  (lstptr list lst))
@@ -8450,7 +8550,9 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-alist (alist &optional (test #'eq))
-    "Creates two series containing the keys and values in an alist."
+  "(scan-alist alist &optional (test #'eq))
+
+Creates two series containing the keys and values in an alist."
   (fragl ((alist) (test)) ((keys t) (values t))
          ((alistptr list alist)
 	  (keys t) (values t) (parent list))
@@ -8471,7 +8573,9 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-plist (plist)
-    "Creates two series containing the indicators and values in a plist."
+  "(scan-plist plist)
+
+Creates two series containing the indicators and values in a plist."
   (fragl ((plist)) ((indicators t) (values t))
          ((indicators t) (values t)
 	  (plistptr list plist)
@@ -8494,7 +8598,10 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-lists-of-lists (tree &optional (test #'atom test-p))
-    "Creates a series of the nodes in a tree."
+  "(scan-lists-of-lists lists-of-lists &optional (leaf-test 'atom))
+
+Creates a series of the nodes in a tree, in preorder order.  LEAF-TEST
+returns non-NIL if a node is a leaf node."
   (if test-p
       (fragl ((tree) (test)) ((nodes t))
 	     ((nodes t)
@@ -8531,7 +8638,10 @@ of sequence. If type is omitted, it defaults to list."
 
 ;; API
 (defS scan-lists-of-lists-fringe (tree &optional (test #'atom test-p))
-    "Creates a series of the leaves of a tree."
+  "(scan-lists-of-lists-fringe lists-of-lists &optional (leaf-test 'atom)
+
+Creates a series of the leaves of a tree, in preorder order.  LEAF-TEST
+returns non-NIL if a node is a leaf node."
   (if test-p
       (fragl ((tree) (test)) ((leaves t))
              ((leaves t) (parent list)
@@ -8573,7 +8683,9 @@ of sequence. If type is omitted, it defaults to list."
 ;; API
 #-symbolics
 (defS scan-symbols (&optional (package nil))
-    "Creates a series of the symbols in PACKAGE."
+  "(scan-symbols (&optional (package *package*))
+
+Creates a series of the symbols in PACKAGE (which defaults to *PACKAGE*)."
   (fragl ((package)) ((symbols t))
 	 ((symbols symbol)
 	  (lst list nil))
@@ -8661,7 +8773,9 @@ correctly closed, even if an abort occurs. "
 
 ;; API
 (defS scan-stream (name &optional (reader #'read))
-    "Creates a series of the forms in the stream NAME.  Similar to
+  "(scan-stream stream &optional (reader #'read))
+
+Creates a series of the forms in the stream STREAM.  Similar to
 SCAN-FILE, except we read from an existing stream."
   (fragl ((name) (reader)) ((items t))
 	 ((items t)
@@ -8754,7 +8868,12 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS previous (items &optional (default nil) (amount 1))
-    "Shifts ITEMS to the right by AMOUNT inserting DEFAULT."
+  "(previous items &optional (default nil) (amount 1))
+
+The series returned by PREVIOUS is the same as the input series ITEMS
+except that it is shifted to the right by the positive integer AMOUNT.  The
+shifting is done by inserting AMOUNT copies of DEFAULT before ITEMS and
+discarding AMOUNT elements from the end of ITEMS."
   (cond ((eql amount 1)
          (fragl ((items t) (default)) ((shifted-items t))
                 ((shifted-items (series-element-type items))
@@ -8781,7 +8900,24 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS latch (items &key (after nil) (before nil) (pre nil pre-p) (post nil post-p))
-    "Modifies a series before or after a latch point."
+  "(latch items &key after before pre post)
+
+The series returned by LATCH is the same as the input series ITEMS except
+that some of the elements are replaced by other values.  LATCH acts like a
+LATCH electronic circuit component.  Each input element causes the creation
+of a corresponding output element.  After a specified number of non-null
+input elements have been encountered, the latch is triggered and the output
+mode is permanently changed.
+
+The :AFTER and :BEFORE arguments specify the latch point.  The latch point
+is just after the :AFTER-th non-null element in ITEMS or just before the
+:BEFORE-th non-null element.  If neither :AFTER nor :BEFORE is specified,
+an :AFTER of 1 is assumed.  If both are specified, it is an error.
+
+If a :PRE is specified, every element prior to the latch point is replaced
+by this value.  If a :POST is specified, every element after the latch
+point is replaced by this value.  If neither is specified, a :POST of NIL
+is assumed."
   (progn (when (and after before)
            (ers 79 "~%:AFTER and :BEFORE both specified in a call on LATCH."))
          (when (not (or before after))
@@ -8830,7 +8966,9 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS until (bools items-1 &rest items-i)
-   "Returns ITEMS-I up to, but not including, the first non-null element of BOOLS."
+  "(until bools items-1 &rest series-inputs)
+
+Returns ITEMS-I up to, but not including, the first non-null element of BOOLS."
   (if (null items-i)
       (until1 bools items-1)
     (apply #'cotruncate
@@ -8853,7 +8991,10 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS until-if (pred items-1 &rest items-i)
-"Returns ITEMS-i up to, but not including, the first element which satisfies PRED."
+  "(until-if pred items-1 &rest series-inputs)
+
+Returns ITEMS-i up to, but not including, the first element which
+satisfies PRED."
   (if (null items-i)
       (until-if1 pred items-1 items-1)
     (apply #'cotruncate
@@ -8876,7 +9017,10 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS positions (bools)
-    "Returns a series of the positions of non-null elements in bools."
+  "(positions bools)
+
+Returns a series of the positions of non-null elements in bools.
+Positions are counted from 0."
   (fragl ((bools t -X-)) ((index t)) ((index fixnum -1))
 	 ()
          ()
@@ -8884,7 +9028,11 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS mask (monotonic-indices)
-    "Creates a series containing t in the indicated positions."
+  "(mask monotonic-indices)
+
+Creates a series containing T in the indicated positions and NIL
+elsewhere.  The positions must be a strictly increasing series of
+non-negative integers."
   (fragl ((monotonic-indices t -x- d)) ((bools t))
          ((bools boolean t) (index fixnum 0))
 	 ()
@@ -8905,7 +9053,11 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS choose (bools &optional (items nil items-p))
-    "Chooses the elements of ITEMS corresponding to non-null elements of BOOLS."
+  "(choose bools &optional (items bools))
+
+Chooses the elements of ITEMS corresponding to non-null elements of
+BOOLS.  If ITEMS is not given, then the non-null elements of BOOLS is
+returned"
   (cond (items-p
          (fragl ((bools t) (items t)) ((items t -X-)) () ()
                 () ((if (not bools) (go F)) -X- F) () () nil))
@@ -8914,7 +9066,9 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS choose-if (pred items)
-    "Chooses the elements of ITEMS for which PRED is non-null."
+  "(choose-if pred items)
+
+Chooses the elements of ITEMS for which PRED is non-null."
   (cl:flet ((gen-unopt ()
               (fragl ((pred) (items t -X-)) ((items t)) () ()
 		     () (L -X- (if (not (cl:funcall pred items)) (go L))) () () nil)))
@@ -8933,7 +9087,15 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS expand (bools items &optional (default nil))
-    "Spreads the elements of ITEMS out into the indicated positions."
+  "(expand bools items &optional (default nil))
+
+The output contains the elements of the input series ITEMS spread out
+into the positions specified by the non-null elements in BOOLS---that
+is, ITEMS[j] is in the position occupied by the jth non-null element
+in BOOLS.  The other positions in the output are occupied by DEFAULT.
+The output stops as soon as BOOLS runs out of elements or a non-null
+element in BOOLS is encountered for which there is no corresponding
+element in ITEMS."
   (fragl ((bools t) (items t -X-) (default)) ((expanded t))
          ((expanded (series-element-type items)))
 	 ()
@@ -8945,7 +9107,12 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS spread (gaps items &optional (default nil))
-    "Spreads the elements of ITEMS by inserting copies of DEFAULT."
+  "(spread gaps items &optional (default nil)
+
+SPREAD is quite similar to EXPAND, except instead of giving booleans
+on where to put the items, GAPS are specified which indicate how far
+apart the items should be.  A gap of 0 means the items will be
+adjacent."
   (fragl ((gaps t) (items t) (default)) ((expanded t -X-))
          ((expanded (series-element-type items)) (count fixnum))
 	 ()
@@ -8958,7 +9125,12 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS subseries (items start &optional (below nil below-p))
-    "Returns the elements of items from START up to, but not including, BELOW."
+  "(subseries items start &optional below)
+
+SUBSERIES returns a series containing the elements of the input series
+ITEMS indexed by the non-negative integers from START up to, but not
+including, BELOW.  If BELOW is omitted or greater than the length of ITEMS,
+the output goes all of the way to the end of ITEMS."
   (cond (below-p
          (fragl ((items t -X-) (start) (below)) ((items t))
 		((index (integer -1) -1))
@@ -8982,7 +9154,18 @@ order of scanning the hash table is not specified."
 
 ;; API
 (defS mingle (items1 items2 comparator)
-    "Merges two series into one."
+  "(mingle items1 items2 comparator)
+
+Merges two series into one, with the same elements and order as ITEMS1
+and ITEMS2.
+
+The COMPARATOR must accept two arguments and return non-null if and only if
+its first argument is strictly less than its second argument (in some
+appropriate sense).  At each step, the COMPARATOR is used to compare the
+current elements in the two series.  If the current element from ITEMS2 is
+strictly less than the current element from ITEMS1, the current element is
+removed from ITEMS2 and transferred to the output.  Otherwise, the next
+output element comes from ITEMS1. "
   (fragl ((items1 t -X1- F1) (items2 t -X2- F2) (comparator)) ((items t))
          ((items (or (series-element-type items1)
                      (series-element-type items2)))
