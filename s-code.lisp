@@ -9,12 +9,20 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.104 2007/08/08 03:42:43 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.105 2007/08/08 13:36:56 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.105  2007/08/08 13:36:56  rtoy
+;;;; s-code.lisp:
+;;;; o Update docstrings
+;;;;
+;;;; s-doc.txt:
+;;;; o Add documentation for COLLECT-PRODUCT, COLLECT-STREAM
+;;;; o Correct the documentation for COLLECT-MAX and COLLECT-MIN.
+;;;;
 ;;;; Revision 1.104  2007/08/08 03:42:43  rtoy
 ;;;; s-code.lisp:
 ;;;; o Update docstrings with more descriptive strings.
@@ -6299,6 +6307,7 @@ value, the old value is not clobbered."
 ;; API
 (defS collect (seq-type &optional (items nil items-p))
     "(collect [type] series)
+
 Creates a sequence containing the elements of SERIES.  The TYPE
 argument specifies the type of sequence to be created.  This type must
 be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
@@ -9203,7 +9212,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS catenate (items1 items2 &rest more-items)
-    "Concatenates two or more series end to end."
+  "(catenate items1 items2 &rest more-items)
+
+Concatenates two or more series end to end."
   (if more-items
       (catenate2 items1 (apply #'catenate items2 more-items))
     (catenate2 items1 items2))
@@ -9268,7 +9279,16 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS split (items bools &rest more-bools)
-    "Divides a series into multiple outputs based on BOOLS."
+  "(split items bools &rest more-bools)
+
+Partition the input series ITEMS between several outputs.  If there
+are N test inputs following ITEMS, then there are N+1 outputs.  Each
+input element is placed in exactly one output series, depending on the
+outcome of a sequence of tests.  If the element ITEMS[j] fails the
+first K-1 tests and passes the kth test, it is put in the kth output.
+If ITEMS[j] fails every test, it is placed in the last output.  In
+addition, all output stops as soon as any series input runs out of
+elements."
   (cl:let* ((pos-lists
 	     (apply #'map-fn t
 		    #'(lambda (item &rest bools)
@@ -9287,7 +9307,16 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS split-if (items pred &rest more-pred)
-    "Divides a series into multiple outputs based on PRED."
+  "(split-if items pred &rest more-pred)
+
+Partition the input series ITEMS between several outputs.  If there
+are N test inputs following ITEMS, then there are N+1 outputs.  Each
+input element is placed in exactly one output series, depending on the
+outcome of a sequence of tests.  If the element ITEMS[j] fails the
+first K-1 predicate tests and passes the kth test, it is put in the
+kth output.  If ITEMS[j] fails every test, it is placed in the last
+output.  In addition, all output stops as soon as any series input
+runs out of elements."
   (cl:let* ((preds (list* pred (copy-list more-pred))))
     ;; FIXME
     ;;
@@ -9345,7 +9374,17 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS chunk (m n &optional (items nil items-p))
-    "Moves a window of width M over ITEMS by step N."
+  "(chunk m n items)
+
+Break up the input series ITEMS into (possibly overlapping) chunks of
+length M.  The starting positions of successive chunks differ by N.
+The inputs M and N must both be positive integers.
+
+CHUNK produces M output series.  The ith chunk consists of the ith
+elements of the M outputs.  Suppose that the length of ITEMS is L.
+The length of each output is the floor of 1+(L-M)/N.  The ith element
+of the kth output is the (i*n+k)th element of ITEMS (i and k counting
+from zero)."
   (progn
     (when (not items-p)        ;it is actually n that is optional
       (setq items n)
@@ -9389,7 +9428,15 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-append (seq-type &optional (items nil items-p))
-    "Appends the elements of ITEMS together into a single list."
+  "(collect-append [type] items)
+
+Given a series of sequences, COLLECT-APPEND returns a new sequence by
+concatenating these sequences together in order.  The TYPE is a type
+specifier indicating the type of sequence created and must be a proper
+subtype of SEQUENCE.  If TYPE is omitted, it defaults to LIST.  For
+example:
+
+  (COLLECT-APPEND #Z((A B) NIL (C D))) => (A B C D)"
   (progn
     (when (not items-p) ;it is actually seq-type that is optional
       (setq items seq-type)
@@ -9417,7 +9464,14 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-nconc (items)
-    "Nconcs the elements of ITEMS together into a single list."
+  "(collect-nconc items)
+
+COLLECT-NCONC NCONCs the elements of the series LISTS together in
+order and returns the result.  This is the same as COLLECT-APPEND
+except that the input must be a series of lists, the output is always
+a list, the concatenation is done rapidly by destructively modifying
+the input elements, and therefore the output shares all of its
+structure with the input elements."
   (fragl ((items t)) ((lst))
 	 ((lst list nil) (list-end list nil))
 	 ()
@@ -9431,7 +9485,11 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-hash (keys values &rest option-plist)
-   "Combines a series of keys and a series of values together into a hash table."
+  "(collect-hash keys values :test :size :rehash-size :rehash-threshold)
+
+Combines a series of keys and a series of values together into a hash
+table.  The keyword arguments specify the attributes of the hash table
+to be produced.  They are used as arguments to MAKE-HASH-TABLE"
   (fragl ((keys t) (values t) (option-plist))
 	 ((table))
 	 ((table t (apply #'make-hash-table option-plist)))
@@ -9447,7 +9505,14 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-file (name items &optional (printer #'print))
-    "Prints the elements of ITEMS into a file."
+  "(collect-file name items &optional (printer #'print)
+
+This creates a file named FILE-NAME and writes the elements of the
+series ITEMS into it using the function PRINTER.  PRINTER must accept
+two inputs: an object and an output stream.  (For instance, PRINTER
+can be PRINT, PRIN1, PRINC, PPRINT, WRITE-CHAR, WRITE-STRING, or
+WRITE-LINE.)  If omitted, PRINTER defaults to PRINT.  The value T is
+returned.  The file is correctly closed, even if an abort occurs."
   (fragl ((name) (items t) (printer)) ((out)) 
          ((out boolean t)
 	  (lastcons cons (list nil))
@@ -9506,7 +9571,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-alist (keys values)
-    "Combines a series of keys and a series of values together into an alist."
+  "(collect-alist keys values)
+
+Combines a series of keys and a series of values together into an alist."
   (fragl ((keys t) (values t)) ((alist))
 	 ((alist list nil))
 	 ()
@@ -9517,7 +9584,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-plist (indicators values)
-   "Combines a series of indicators and a series of values together into a plist."
+  "(collect-plist indicators values)
+
+Combines a series of indicators and a series of values together into a plist."
   (fragl ((indicators t) (values t)) ((plist))
 	 ((plist list nil))
 	 ()
@@ -9528,7 +9597,10 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-last (items &optional (default nil))
-    "Returns the last element of ITEMS."
+  "(collect-last items &optional (default nil))
+
+Returns the last element of the series ITEMS.  If ITEMS has no
+elements, DEFAULT is returned."
   (fragl ((items t) (default)) ((item))
          ((item (null-or (series-element-type items)) default))
 	 ()
@@ -9539,7 +9611,10 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-first (items &optional (default nil))
-    "Returns the first element of ITEMS."
+  "(collect-first items &optional (default nil))
+
+Returns the first element of the series ITEMS.  If ITEMS has no
+elements, DEFAULT is returned."
   (fragl ((items t) (default)) ((item))
 	 ((item (null-or (series-element-type items)) default))
 	 ()
@@ -9550,7 +9625,10 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-nth (n items &optional (default nil))
-    "Returns the nth element of ITEMS."
+  "(collect-nth n items &optional (default nil))
+
+Returns the Nth element of the series ITEMS.  If ITEMS has no Nth
+element, DEFAULT is returned."
   (fragl ((n) (items t) (default)) ((item))
          ((counter fixnum n)
           (item (null-or (series-element-type items)) default))
@@ -9562,7 +9640,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-and (bools)
-    "Computes the AND of the elements of BOOLS."
+  "(collect-and bools)
+
+Computes the AND of the elements of BOOLS."
   (fragl ((bools t)) ((bool))
 	 ((bool t t))
 	 ()
@@ -9572,7 +9652,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-or (bools)
-    "Computes the OR of the elements of BOOLS."
+  "(collect-or bools)
+
+Computes the OR of the elements of BOOLS."
   (fragl ((bools t)) ((bool))
 	 ((bool t nil))
 	 ()
@@ -9581,7 +9663,9 @@ output element comes from ITEMS1. "
  :trigger t)
 
 ;; API
-(defS collect-length (items) "Returns the number of elements in ITEMS."
+(defS collect-length (items)
+  "(collect-length items)
+Returns the number of elements in ITEMS."
   (fragl ((items t)) ((number)) 
          ((number fixnum 0))
 	 ()
@@ -9591,7 +9675,9 @@ output element comes from ITEMS1. "
 
 ;; API
 (defS collect-sum (numbers &optional (type 'number))
-    "Computes the sum of the elements in NUMBERS.  TYPE specifies the
+  "(collect-sum numbers &optional (type 'number))
+
+Computes the sum of the elements in NUMBERS.  TYPE specifies the
 type of sum to be created."
   (fragl ((numbers t) (type)) ((sum))
 	 ((sum t (coerce-maybe-fold 0 type)))
@@ -9610,7 +9696,10 @@ type of sum to be created."
 
 ;; API
 (defS collect-product (numbers &optional (type 'number))
-  "Computes the product of the elements in NUMBERS."
+  "(collect-product numbers &optional (type 'number))
+
+Computes the product of the elements in NUMBERS.  TYPE specifies the
+type of product to be created."
   (fragl ((numbers t)
           (type)) ((mul))
 	  ((mul t (coerce-maybe-fold 1 type)))
@@ -9630,7 +9719,7 @@ type of sum to be created."
 
 ;; API
 (defS collect-max (numbers &optional (items numbers items-p) (default nil))
-    "(collect numbers &optional (items numbers items-p) (default nil))
+    "(collect-max numbers &optional (items numbers items-p) (default nil))
 
 Returns the element of ITEMS that corresponds to the maximum element
 of NUMBERS.  If ITEMS is omitted, then the maximum of NUMBERS itself
@@ -9659,7 +9748,12 @@ has zero length."
 
 ;; API
 (defS collect-min (numbers &optional (items numbers items-p) (default nil))
-    "Returns the ITEM corresponding to the minimum NUMBER."
+    "(collect-min numbers &optional (items numbers items-p) (default nil))
+
+Returns the element of ITEMS that corresponds to the minimum element
+of NUMBERS.  If ITEMS is omitted, then the minimum of NUMBERS itself
+is returned.  The value DEFAULT is returned if either NUMBERS or ITEMS
+has zero length."
   (if items-p
       (fragl ((numbers t) (items t) (default)) ((result))
              ((number t nil) 

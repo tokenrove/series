@@ -768,13 +768,26 @@ elements in the input, a zero (of the appropriate type) is returned.
 (COLLECT-SUM #Z(1.1 1.2 1.3)) => 3.6 
 (COLLECT-SUM #Z() 'COMPLEX) => #C(0 0)
 
+COLLECT-PRODUCT NUMBERS &optional (TYPE 'NUMBER)                 [Function]
 
-COLLECT-MAX NUMBERS                                              [Function]
-COLLECT-MIN NUMBERS                                              [Function]
+COLLECT-PRODUCT returns the product of the elements in a series of
+numbers.  The TYPE is a type specifier that indicates the type of sum
+to be created.  If TYPE is not specified, then NUMBER is used for the
+TYPE.  If there are no elements in the input, one (of the
+appropriate type) is returned.
 
-Given a series of non-complex numbers, these functions compute the maximum
-element and the minimum element, respectively.  If there are no elements in
-the input, NIL is returned.
+(COLLECT-PRODUCT #Z(1.1 1.2 1.3)) => 1.716
+(COLLECT-PRODUCT #Z() 'FLOAT) => 1.0
+
+
+COLLECT-MAX NUMBERS &optional (ITEMS NUMBERS) (DEFAULT NIL)      [Function]
+COLLECT-MIN NUMBERS &optional (ITEMS NUMBERS) (DEFAULT NIL)      [Function]
+
+Given a series of non-complex numbers, these functions returns the
+element of ITEMS that corresponds to the maximum element and the
+minimum element of NUMBERS, respectively.  If ITEMS is omitted, the
+the maximum or minimum of NUMBERS itself is returned.  If there are no
+elements in the input, DEFAULT is returned.
 
 (COLLECT-MAX #Z(2 1 4 3)) => 4 
 (COLLECT-MIN #Z(1.2 1.1 1.4 1.3)) => 1.1 
@@ -881,6 +894,7 @@ arguments to MAKE-HASH-TABLE.
 
 
 COLLECT-FILE FILE-NAME ITEMS &optional (PRINTER #'PRINT)         [Function]
+COLLECT-STREAM STREAM ITEMS &optional (PRINTER #'PRINT)          [Function]
 
 This creates a file named FILE-NAME and writes the elements of the series
 ITEMS into it using the function PRINTER.  PRINTER must accept two inputs:
@@ -889,6 +903,8 @@ PRIN1, PRINC, PPRINT, WRITE-CHAR, WRITE-STRING, or WRITE-LINE.)  If
 omitted, PRINTER defaults to PRINT.  The value T is returned.  The file is
 correctly closed, even if an abort occurs.
 
+COLLECT-STREAM is idential to COLLECT-FILE, except an already open
+stream is used instead of creating a new file.
 
 COLLECT-FN TYPE INIT FUNCTION &rest SERIES-INPUTS                [Function]
 
