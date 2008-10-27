@@ -8,9 +8,14 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.12 2004/12/15 17:18:57 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.13 2008/10/27 14:19:23 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.13  2008/10/27 14:19:23  rtoy
+;;;; Add support for ecl.
+;;;;
+;;;; (From Stelian Ionescu.)
+;;;;
 ;;;; Revision 1.12  2004/12/15 17:18:57  rtoy
 ;;;; Apply fixes from Hannu Koivisto to support sbcl.  Also added asdf
 ;;;; support.  His comments:
@@ -169,6 +174,8 @@
   (:import-from "CCL" "COMPILER-LET")
   #+sbcl
   (:import-from "SB-CLTL2" "COMPILER-LET")
+  #+ecl
+  (:import-from "SI" "COMPILER-LET")
 )
 
 #-(or series-ansi)
