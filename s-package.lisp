@@ -8,9 +8,17 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.13 2008/10/27 14:19:23 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.14 2008/10/27 14:24:53 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.14  2008/10/27 14:24:53  rtoy
+;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
+;;;; ones, and convert uppercase symbols and symbol-names to use
+;;;; symbol-name and uninterned symbols.  This is to support scl's default
+;;;; "modern" mode.
+;;;;
+;;;; Changes from Stelian Ionescu.
+;;;;
 ;;;; Revision 1.13  2008/10/27 14:19:23  rtoy
 ;;;; Add support for ecl.
 ;;;;
@@ -104,7 +112,7 @@
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro cmu sbcl Genera Harlequin-Common-Lisp CLISP mcl)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro cmu scl sbcl Genera Harlequin-Common-Lisp CLISP mcl)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':series-ansi cl:*features*))
 
@@ -159,7 +167,7 @@
     )
   (:shadow
    #:let #:let* #:multiple-value-bind #:funcall #:defun
-   #+cmu "COLLECT" #+cmu "ITERATE")
+   #+(or cmu scl) #:collect #+(or cmu scl) #:iterate)
   #+Harlequin-Common-Lisp
   (:import-from "LISPWORKS" "COMPILER-LET")
   #+Genera
@@ -168,8 +176,8 @@
   (:import-from #:cltl1 #:compiler-let)
   #+CLISP
   (:import-from "EXT" "COMPILER-LET")
-  #+cmu
-  (:import-from "EXT" "COMPILER-LET")
+  #+(or cmu scl)
+  (:import-from :ext #:compiler-let)
   #+mcl
   (:import-from "CCL" "COMPILER-LET")
   #+sbcl
@@ -215,7 +223,7 @@
 #-(or series-ansi)
 (eval-when (compile load eval)
   (in-package "SERIES" :use '("LISP"))
-  (shadow '(let let* multiple-value-bind funcall defun eval-when #+cmu collect #+cmu iterate))
+  (shadow '(let let* multiple-value-bind funcall defun eval-when #+(or cmu scl) collect #+(or cmu scl) iterate))
 ) ; end of eval-when
 
 #-(or series-ansi)

@@ -40,9 +40,17 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.26 2007/07/10 17:45:46 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.27 2008/10/27 14:24:53 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.27  2008/10/27 14:24:53  rtoy
+;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
+;;;; ones, and convert uppercase symbols and symbol-names to use
+;;;; symbol-name and uninterned symbols.  This is to support scl's default
+;;;; "modern" mode.
+;;;;
+;;;; Changes from Stelian Ionescu.
+;;;;
 ;;;; Revision 1.26  2007/07/10 17:45:46  rtoy
 ;;;; s-code.lisp:
 ;;;; o Add an optimizer for SERIES and update appropriately for the normal
@@ -198,8 +206,7 @@
 ;;;;
 
 (series::eval-when (:compile-toplevel :load-toplevel :execute)
-  #-allegro-modern (in-package "COMMON-LISP-USER")
-  #+allegro-modern (in-package "common-lisp-user")
+  (in-package :common-lisp-user)
 
   #+(and :allegro-version>= (version>= 5 0) (not (version>= 5 1)))
   (defadvice make-sequence :before
@@ -310,11 +317,13 @@
 	   ;; Harlequin, but for CMUCL, it causes some tests to fail
 	   ;; that otherwise would pass because the compiler generates
 	   ;; a warning.
-	   #-(or cmu allegro) (*break-on-warnings* t)
-	   #+(or cmu allegro harlequin) (*break-on-signals* #+(or cmu allegro) nil
-							    #-(or cmu allegro) 'warning)
+	   #-(or cmu scl allegro)
+	   (*break-on-warnings* t)
+	   #+(or cmu scl allegro harlequin)
+	   (*break-on-signals* #+(or cmu scl allegro) nil
+			       #-(or cmu scl allegro) 'warning)
 	   ;; Don't print out "Compiling..." messages
-	   #+cmu
+	   #+(or cmu scl)
 	   (*compile-print* nil)
 	   (r (multiple-value-list
 		(eval (form entry)))))
@@ -1463,12 +1472,7 @@
 ;these are weird tests checking for particular bugs in old versions
 (defok 318 (ton (multiple-value-list
 		      (let ((strings (choose-if #'stringp
-						(scan '(1 2
-							#-allegro-modern
-							"COND"
-							#+allegro-modern
-							"cond"
-							4)))))
+						(scan `(1 2 ,(symbol-name 'cond) 4)))))
 			(find-symbol (collect-first strings)))))
   (cond :inherited))
 (defcmukernel 319 (td (defun weighted-sum (numbers weights)

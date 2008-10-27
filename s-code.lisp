@@ -9,12 +9,20 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.106 2007/08/08 15:07:45 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.107 2008/10/27 14:24:53 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.107  2008/10/27 14:24:53  rtoy
+;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
+;;;; ones, and convert uppercase symbols and symbol-names to use
+;;;; symbol-name and uninterned symbols.  This is to support scl's default
+;;;; "modern" mode.
+;;;;
+;;;; Changes from Stelian Ionescu.
+;;;;
 ;;;; Revision 1.106  2007/08/08 15:07:45  rtoy
 ;;;; Change default test for SCAN-ALIST to EQL instead of EQ.
 ;;;;
@@ -794,9 +802,9 @@ value, the old value is not clobbered."
   "T enables implicit mapping in optimized expressions")
 
 (defconst-once /ext-conflicts/
-  #+cmu '(collect iterate)
+  #+(or cmu scl) '(collect iterate)
   #+allegro-v6.1 '(until)
-  #-(or cmu allegro-v6.1) '())
+  #-(or cmu scl allegro-v6.1) '())
 
 
 (defconst-once /series-forms/
@@ -943,7 +951,7 @@ value, the old value is not clobbered."
 			   (setq z x)))))
 		 l2))))))
 
-  (cl:defun n-gensyms (n &optional (root "G"))
+  (cl:defun n-gensyms (n &optional (root (symbol-name '#:g)))
     "Generate n uninterned symbols with basename root"
     (do ((i n (1- i))
 	 (l nil (cons (gensym root) l)))
@@ -1608,7 +1616,7 @@ value, the old value is not clobbered."
 				    (cl:let ((value (eval (first operands))))
 				      (or (null value)
 					  (null (cdr operands))
-					  (foldable-constant-expression-p `(AND ,@(rest operands)) env))))))
+					  (foldable-constant-expression-p `(and ,@(rest operands)) env))))))
 
 		  ;; COND can be folded if first clause is foldable
 		      (cond (or (null operands)
@@ -1616,7 +1624,7 @@ value, the old value is not clobbered."
 				     (cl:let ((value (eval (car (first operands)))))
 				       (if value
 					   (foldable-constant-expression-p* (cdr (first operands)) env)
-					   (foldable-constant-expression-p `(COND ,@(rest operands)) env))))))
+					   (foldable-constant-expression-p `(cond ,@(rest operands)) env))))))
 		      (declare t)
 
 		  ;; IF can be folded if condition is foldable
@@ -1640,7 +1648,7 @@ value, the old value is not clobbered."
 				    (cl:let ((value (eval (first operands))))
 				      (or value
 					  (null (cdr operands))
-					  (foldable-constant-expression-p `(OR ,@(rest operands)) env))))))
+					  (foldable-constant-expression-p `(or ,@(rest operands)) env))))))
 
 		  ;; THE can be folded if the value clause is foldable
 		      (the (foldable-constant-expression-p (second operands) env))
@@ -1877,16 +1885,16 @@ value, the old value is not clobbered."
         (set-dispatch-macro-character #\# #\M (cl:function abbreviated-map-fn-reader)))
         (when (not (eq pkg spkg))
 	  ;;This is here because UNTIL and COLLECT are loop clauses.
-	  (cl:multiple-value-bind (sym code) (find-symbol "UNTIL" pkg)
+	  (cl:multiple-value-bind (sym code) (find-symbol (symbol-name '#:until) pkg)
 	    (when (and sym (eq code :internal)
 		       (not (boundp sym)) (not (fboundp sym)) (null (symbol-plist sym)))
 	      (unintern sym pkg)))
-	  (cl:multiple-value-bind (sym code) (find-symbol "COLLECT" pkg)
+	  (cl:multiple-value-bind (sym code) (find-symbol (symbol-name '#:collect) pkg)
 	    (when (and sym (eq code :internal)
 		       (not (boundp sym)) (not (fboundp sym)) (null (symbol-plist sym)))
 	      (unintern sym pkg)))
-	  #+(or cmu Harlequin-Common-Lisp)
-	  (unintern 'series "COMMON-LISP-USER")
+	  #+(or cmu scl Harlequin-Common-Lisp)
+	  (unintern 'series :common-lisp-user)
 	  (shadowing-import /ext-conflicts/ pkg)
 	  (use-package :series pkg)
 	  (when shadow (shadowing-import /series-forms/ pkg))
@@ -3340,7 +3348,7 @@ value, the old value is not clobbered."
 (cl:defun isolate-non-series (n code)
   (cl:multiple-value-bind (exp free-ins free-outs)
       (handle-non-series-stuff code)
-    (cl:let* ((vars (n-gensyms n "OUT-"))
+    (cl:let* ((vars (n-gensyms n (symbol-name '#:out-)))
 	      (mapped-inputs nil)
 	      (frag (make-frag :aux (makeaux (mapcar #'(lambda (v) (list v t)) vars)))))
       (dolist (entry free-ins)
@@ -3631,7 +3639,7 @@ value, the old value is not clobbered."
             ((< n current-n)
              (mapc #'(lambda (r) (when (not (free-out r)) (kill-ret r)))
                    (nthcdr n (rets frag))))
-            (t (dolist (v (n-gensyms (- n current-n) "XTRA-"))
+            (t (dolist (v (n-gensyms (- n current-n) (symbol-name '#:xtra-)))
                  (+ret (make-sym :var v) frag)
 		 (add-literal-aux frag v t nil))))
       (mapc #'coerce-to-type types (rets frag))))
@@ -3746,7 +3754,7 @@ value, the old value is not clobbered."
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
 
-#+(or :lispworks :cmu :excl :sbcl)
+#+(or :lispworks :cmu :scl :excl :sbcl)
 (deftype generator () 'cons)
 
 (cl:defun generator (s)
@@ -3850,7 +3858,7 @@ value, the old value is not clobbered."
 ;; print out series because that probably does a better job than this
 ;; routine would.  We basically print out series as if it were a list
 ;; of items.
-#+cmu
+#+(or cmu scl)
 (cl:defun print-series (series stream depth)
   (cl:let ((generator (generator series))
 	   (first-p t)
@@ -4356,7 +4364,7 @@ value, the old value is not clobbered."
 ;; This function converts a type to a "canonical" type.  Mainly meant
 ;; to handle things that have been deftype'd.  We want to convert that
 ;; deftype'd thing to the underlying Lisp type.  
-#+cmu
+#+(or cmu scl)
 (cl:defun canonical-type (type)
   (kernel:type-specifier (c::specifier-type (if (and (not (atom type))
                                                      (eq 'quote (first type)))
@@ -4366,7 +4374,7 @@ value, the old value is not clobbered."
 (cl:defun canonical-type (type)
   (ext:type-expand type))
 
-#-(or cmu CLISP)
+#-(or cmu scl CLISP)
 (cl:defun canonical-type (type)
   type)
 
@@ -6381,13 +6389,13 @@ be a proper subtype of sequence.  If omitted, TYPE defaults to LIST. "
 	         ((seq ,(optif *type* 'sequence))
 		  (index vector-index+ 0))
 		 ()              
-		 (#-:cmu
+		 (#-(or :cmu :scl)
 		  (setq seq (make-sequence seq-type limit))
 		  ;; For some reason seq isn't initialized when
 		  ;; *optimize-series-expressions* is nil and this
 		  ;; errors out in CMUCL.  This makes sure seq is
 		  ;; initialized to something.
-		  #+:cmu
+		  #+(or :cmu :scl)
 		  (setq seq (if seq
 				seq
 			      (make-sequence seq-type limit)))
@@ -6984,8 +6992,8 @@ function. The remaining arguments (if any) are all series. "
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
 	    (params nil)
 	    (frag (make-frag :impure :fun))
-	    (in-vars (n-gensyms (length args) "M-"))
-	    (out-vars (n-gensyms (length types) "ITEMS-"))
+	    (in-vars (n-gensyms (length args) (symbol-name '#:m-)))
+	    (out-vars (n-gensyms (length types) (symbol-name '#:items-)))
 	    (*state* nil))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p t) frag))
@@ -7005,13 +7013,13 @@ function. The remaining arguments (if any) are all series. "
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
             (params nil)
             (frag (make-frag :impure :fun))
-            (state-vars (n-gensyms (length types) "STATE-"))
-            (out-vars (n-gensyms (length types) "ITEMS-"))
+            (state-vars (n-gensyms (length types) (symbol-name '#:state-)))
+            (out-vars (n-gensyms (length types) (symbol-name '#:items-)))
             (*state* nil))
     (when wrap-fn
       (add-wrapper frag wrap-fn))
     (dolist (var out-vars)
-      (+ret (make-sym :var var :series-var-p T) frag))
+      (+ret (make-sym :var var :series-var-p t) frag))
     (setf (aux frag)
           (makeaux (append (mapcar #'list state-vars types)
                            (mapcar #'list out-vars types))))
@@ -7029,14 +7037,14 @@ nil)))
                 `(,@(if test-p
                         `((if ,(car (handle-fn-call frag nil test
 state-vars))
-                              (go ,END))))
+                              (go ,end))))
                     ,output-expr
                     ,(car (handle-fn-call frag state-vars step state-vars
 t))))
         (cl:let ((done (new-var 'd)))
           (add-literal-aux frag done 'boolean nil)
           (setf (body frag)
-                `((if ,done (go ,END))
+                `((if ,done (go ,end))
                   ,(car (handle-fn-call frag (list done) test state-vars))
                   ,output-expr
                   (if (not ,done)
@@ -7050,8 +7058,8 @@ t))))))))
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
 	    (params nil)
 	    (frag (make-frag :impure :fun))
-	    (in-vars (n-gensyms (length args) "ITEMS-"))
-	    (out-vars (n-gensyms (length types) "C-"))
+	    (in-vars (n-gensyms (length args) (symbol-name '#:items-)))
+	    (out-vars (n-gensyms (length types) (symbol-name '#:c-)))
 	    (*state* nil))
     (when wrap-fn
       (add-wrapper frag wrap-fn))
@@ -7266,8 +7274,8 @@ where s1[j],...,sn[j] are the j'th elements of the n input series.
   (cl:let* ((types (decode-type-arg (must-be-quoted type)))
 	    (params nil)
 	    (frag (make-frag :impure :fun))
-	    (in-vars (n-gensyms (length args) "ITEMS-"))
-	    (out-vars (n-gensyms (length types) "C-"))
+	    (in-vars (n-gensyms (length args) (symbol-name '#:items-)))
+	    (out-vars (n-gensyms (length types) (symbol-name '#:c-)))
 	    (*state* nil))
     (dolist (var out-vars)
       (+ret (make-sym :var var :series-var-p t) frag))
@@ -7934,8 +7942,8 @@ valid way to use the variable in the body is in a call on NEXT-IN.
   :optimizer
   (cl:let* ((params (list series))
 	    (frag (make-frag))
-	    (input-vars (n-gensyms (length other-inputs) "STATE-IN-"))
-	    (state-vars (n-gensyms (length other-inputs) "STATE-"))
+	    (input-vars (n-gensyms (length other-inputs) (symbol-name '#:state-in-)))
+	    (state-vars (n-gensyms (length other-inputs) (symbol-name '#:state-)))
 	    (var (new-var 'items)))
     (+ret (make-sym :var var :series-var-p t) frag)
     (+arg (make-sym :var var :series-var-p t) frag)
@@ -8461,7 +8469,7 @@ Truncates the inputs so that they are all no longer than the shortest one."
                 (mapcar #'alter-fn items-list))
  :optimizer
   (cl:let* ((args (copy-list items-list))
-	    (vars (n-gensyms (length args) "COTRUNC-"))
+	    (vars (n-gensyms (length args) (symbol-name '#:cotrunc-)))
 	    (ports (mapcar #'(lambda (v) (list v t)) vars)))
     (apply-frag
       (literal-frag `(,ports ,(copy-list ports) nil nil nil nil nil nil nil))
@@ -9015,7 +9023,7 @@ satisfies PRED."
  :optimizer
   (cl:let* ((params nil)
               (frag (make-frag :impure nil))
-              (item-vars (n-gensyms (1+ (length items-i)) "ITEMS-"))
+              (item-vars (n-gensyms (1+ (length items-i)) (symbol-name '#:items-)))
               (*state* nil))
     (multiple-value-setq (pred params) (handle-fn-arg frag pred params))
     (setq params (mapcar #'retify (nconc params (cons items-1 items-i))))
@@ -9412,7 +9420,7 @@ from zero)."
           (rrs 3 "~%M argument " m " to CHUNK fails to be a positive integer."))
          ((not (typep n 'positive-integer))
           (rrs 4 "~%N argument " n " to CHUNK fails to be a positive integer."))
-         (t (cl:let* ((vars (n-gensyms m "CHUNK-"))
+         (t (cl:let* ((vars (n-gensyms m (symbol-name '#:chunk-)))
                         (outs (mapcar #'(lambda (v) (list v t)) vars))
                         (auxes (mapcar #'(lambda (v)
                                            `(,v ,(copy-list
