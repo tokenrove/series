@@ -8,9 +8,21 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.14 2008/10/27 14:24:53 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.15 2008/10/27 16:25:58 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.15  2008/10/27 16:25:58  rtoy
+;;;; Bug 2165712:  Export COLLECT-IGNORE functionality
+;;;;
+;;;; s-code.lisp:
+;;;; o Add better docstring for COLLECT-IGNORE.
+;;;;
+;;;; s-package.lisp:
+;;;; o Export COLLECT-IGNORE
+;;;;
+;;;; s-doc.txt:
+;;;; o Document COLLECT-IGNORE.
+;;;;
 ;;;; Revision 1.14  2008/10/27 14:24:53  rtoy
 ;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
 ;;;; ones, and convert uppercase symbols and symbol-names to use
@@ -154,7 +166,8 @@
    #:collect-hash #:collect-length #:collect-stream
    #:collect-sum #:collect-product #:collect-max #:collect-min
    #:collect-last #:collect-first #:collect-nth
-   #:collect-and #:collect-or #:previous #:map-fn #:iterate #:mapping
+   #:collect-and #:collect-or #:collect-ignore
+   #:previous #:map-fn #:iterate #:mapping
    #:collecting-fn #:cotruncate #:latch #:until #:until-if #:positions
    #:choose #:choose-if #:spread #:expand #:mask #:subseries #:mingle
    #:catenate #:split #:split-if #:producing #:chunk

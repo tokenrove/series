@@ -9,12 +9,24 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.107 2008/10/27 14:24:53 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.108 2008/10/27 16:25:58 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.108  2008/10/27 16:25:58  rtoy
+;;;; Bug 2165712:  Export COLLECT-IGNORE functionality
+;;;;
+;;;; s-code.lisp:
+;;;; o Add better docstring for COLLECT-IGNORE.
+;;;;
+;;;; s-package.lisp:
+;;;; o Export COLLECT-IGNORE
+;;;;
+;;;; s-doc.txt:
+;;;; o Document COLLECT-IGNORE.
+;;;;
 ;;;; Revision 1.107  2008/10/27 14:24:53  rtoy
 ;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
 ;;;; ones, and convert uppercase symbols and symbol-names to use
@@ -7403,7 +7415,10 @@ part of the output."
 
 ;; API
 (defS collect-ignore (items)
-    "Reads input and returns NIL."
+  "(collect-ignore series)
+
+Like COLLECT, but any output that would have been returned is
+discarded.  In particular, no results are consed at all."
   (fragl ((items t)) (nil) () () () () () () nil)
  :trigger t)
 

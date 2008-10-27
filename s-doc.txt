@@ -864,6 +864,10 @@ structure with the sequences in the input.
 (COLLECT-APPEND #Z((A B) NIL (C D))) => (A B C D) 
 (COLLECT-APPEND 'STRING #Z("A " "BIG " "CAT")) => "A BIG CAT"
 
+COLLECT-IGNORE LISTS                                             [Function]
+
+Like COLLECT, but any results that would have been returned are
+discarded.  This also means the results are not consed.
 
 COLLECT-NCONC LISTS                                              [Function]
 
