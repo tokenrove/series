@@ -95,6 +95,15 @@ installed.
 Release notes
 -------------
 
+* Series 2.2.10 Release Notes
+  o Add optimizer for SERIES so (series t nil) returns #z(t nil t nil
+  ...) instead of #(list t nil list t nil ...)
+  o The #Z reader signals an error if we are trying to create an
+  infinite literal series.
+  o Many docstrings updated with more descriptive documentation.
+  o Documentation updated 
+  o Support ECL and SCL.
+
 * Series 2.2.9 Release Notes
 
 o Fix issue with SERIES being a declaration and a type, which is not
