@@ -8,9 +8,14 @@
 ;;;; all the necessary `defpackage' forms, and make sure this file is
 ;;;; loaded before anything else and before any `compile-file'.
 
-;;;; $Id: s-package.lisp,v 1.15 2008/10/27 16:25:58 rtoy Exp $
+;;;; $Id: s-package.lisp,v 1.16 2008/11/28 20:38:30 rtoy Exp $
 ;;;;
 ;;;; $Log: s-package.lisp,v $
+;;;; Revision 1.16  2008/11/28 20:38:30  rtoy
+;;;; Bug ID: 2212396
+;;;;
+;;;; Update for CCL, which doesn't have :mcl in *features* anymore.
+;;;;
 ;;;; Revision 1.15  2008/10/27 16:25:58  rtoy
 ;;;; Bug 2165712:  Export COLLECT-IGNORE functionality
 ;;;;
@@ -124,7 +129,7 @@
     (rename-package "LISP" "COMMON-LISP" '("LISP" "CL"))))
 
 ;;; Note this is really too early, but we need it here
-#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro cmu scl sbcl Genera Harlequin-Common-Lisp CLISP mcl)
+#+(or draft-ansi-cl draft-ansi-cl-2 ansi-cl allegro cmu scl sbcl Genera Harlequin-Common-Lisp CLISP mcl ccl)
 (cl:eval-when (load eval compile)
   (cl:pushnew ':series-ansi cl:*features*))
 
@@ -191,7 +196,7 @@
   (:import-from "EXT" "COMPILER-LET")
   #+(or cmu scl)
   (:import-from :ext #:compiler-let)
-  #+mcl
+  #+(or mcl ccl)
   (:import-from "CCL" "COMPILER-LET")
   #+sbcl
   (:import-from "SB-CLTL2" "COMPILER-LET")
