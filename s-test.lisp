@@ -40,9 +40,17 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.27 2008/10/27 14:24:53 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.28 2010/06/04 14:21:07 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.28  2010/06/04 14:21:07  rtoy
+;;;; Feature request 2295778 - don't ignore fill-pointer
+;;;; Patch 2298394 - patch for #2295778
+;;;;
+;;;; s-code.lisp:
+;;;; s-test.lisp:
+;;;; o Patch applied
+;;;;
 ;;;; Revision 1.27  2008/10/27 14:24:53  rtoy
 ;;;; Support SCL.  Just add scl conditionalizations where we have cmucl
 ;;;; ones, and convert uppercase symbols and symbol-names to use
@@ -2526,6 +2534,12 @@
 	      (subseq (with-output-to-string (s)
 			(print (positions (series t nil)) s)) 1)))
   "#Z(0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 ...) ")
+
+(defok 564 (ton (let* ((v1 (make-array 10 :fill-pointer 0))
+		       (v2 (make-array 10 :fill-pointer t)))
+		  (list (collect-length (scan 'vector v1))
+			(collect-length (scan 'vector v2)))))
+  (0 10))
 
 ;;; Some simple consistency tests.  (Some of these were broken by
 ;;; changes in series, so we include them here to prevent these from

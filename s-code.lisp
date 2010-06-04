@@ -9,12 +9,20 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.108 2008/10/27 16:25:58 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.109 2010/06/04 14:21:06 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.109  2010/06/04 14:21:06  rtoy
+;;;; Feature request 2295778 - don't ignore fill-pointer
+;;;; Patch 2298394 - patch for #2295778
+;;;;
+;;;; s-code.lisp:
+;;;; s-test.lisp:
+;;;; o Patch applied
+;;;;
 ;;;; Revision 1.108  2008/10/27 16:25:58  rtoy
 ;;;; Bug 2165712:  Export COLLECT-IGNORE functionality
 ;;;;
@@ -841,6 +849,13 @@ value, the old value is not clobbered."
   (if (listp x)
       (car x)
     x))
+
+
+(cl:defun array-fill-pointer-or-total-size (seq)
+  (if (array-has-fill-pointer-p seq)
+      (fill-pointer seq)
+      (array-total-size seq)))
+
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (deftype nonnegative-fixnum ()
@@ -8362,7 +8377,7 @@ of sequence. If type is omitted, it defaults to list."
 		 ;; symbol, the value of the symbol.
 		 (when (and (consp seq) (eq (car seq) 'quote))
 		   (setq thing (cadr seq)))
-		 (setq limit (array-total-size thing))
+		 (setq limit (array-fill-pointer-or-total-size thing))
 		 (when (eq *type* t)
 		   (setq *type* (array-element-type thing)))		 
 		 (if (= limit 0)
@@ -8374,7 +8389,7 @@ of sequence. If type is omitted, it defaults to list."
 		     `(((elements t))
 		       ((elements ,(eoptif-q *type* t))
 			(temp t seq)
-			(limit vector-index+ (array-total-size seq))
+			(limit vector-index+ (array-fill-pointer-or-total-size seq))
 			(index -vector-index+ -1))
 		       ((elements (setf (row-major-aref temp (the vector-index index)) *alt*) temp index))
 		       ()
@@ -8428,7 +8443,7 @@ of sequence. If type is omitted, it defaults to list."
 			    (locally
 			     (declare (type array seq))
 			     (setq temp seq)
-			     (setq limit (array-total-size seq)))))
+			     (setq limit (array-fill-pointer-or-total-size seq)))))
 			 ((if lstp
 			      (progn
 				(if (endp listptr) (go end))
