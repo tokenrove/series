@@ -9,12 +9,21 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.109 2010/06/04 14:21:06 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.110 2010/06/11 02:16:02 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.110  2010/06/11 02:16:02  rtoy
+;;;; Changes to make series work with ccl.
+;;;;
+;;;; o Remove the eval-when around the defstructs.  (Could this be a bug in
+;;;;   ccl?)  This works fine with cmucl and clisp.
+;;;; o Define the generator type for ccl too.
+;;;; o Remove the double definition of the foundation-series type for cmucl
+;;;;   and clisp.  Not needed anymore with cmucl 20a and clisp 2.47.
+;;;;
 ;;;; Revision 1.109  2010/06/04 14:21:06  rtoy
 ;;;; Feature request 2295778 - don't ignore fill-pointer
 ;;;; Patch 2298394 - patch for #2295778
@@ -3720,7 +3729,6 @@ value, the old value is not clobbered."
 ;;;
 ;;; ALTER-FN same as for a basic series.
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
 (defstruct (foundation-series (:conc-name nil))
   (alter-fn nil))
 
@@ -3734,10 +3742,7 @@ value, the old value is not clobbered."
                          (:print-function print-series))
   image-fn image-base (image-datum nil))
 
-#+(or cmu CLISP) ; handle multiple definition of ALTER-FN
-(defstruct (foundation-series (:conc-name nil))
-  (alter-fn nil))
-
+(eval-when (:compile-toplevel :load-toplevel :execute)
 (defmacro make-phys (&key (gen-fn nil) (alter-fn nil) (data-list t))
   `(make-basic-series :gen-fn ,gen-fn :alter-fn ,alter-fn
                       :data-so-far (cons nil ,data-list)))
@@ -3781,7 +3786,7 @@ value, the old value is not clobbered."
 (defstruct (generator (:conc-name nil) (:type list))
   gen-state gen-base (current-alter-info nil))
 
-#+(or :lispworks :cmu :scl :excl :sbcl)
+#+(or :lispworks :cmu :scl :excl :sbcl :ccl)
 (deftype generator () 'cons)
 
 (cl:defun generator (s)
