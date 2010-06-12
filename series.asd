@@ -10,7 +10,7 @@
     :author "Richard C. Waters"
     :maintainer "See <http://series.sourceforge.net/>."
     :licence "MIT"
-    :version "2.2.9"
+    :version "2.2.11"
     :serial t
     :components ((:file "s-package")
                  (:file "s-code")))
