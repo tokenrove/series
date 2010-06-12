@@ -95,6 +95,11 @@ installed.
 Release notes
 -------------
 
+* Series 2.2.11 Release Notes
+  o Update to work with CCL.
+  o Implement feature request 2295778 - don't ignore fill-pointer.
+  o Export COLLECT-IGNORE functionality.
+
 * Series 2.2.10 Release Notes
   o Add optimizer for SERIES so (series t nil) returns #z(t nil t nil
   ...) instead of #(list t nil list t nil ...)
