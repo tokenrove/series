@@ -40,9 +40,17 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.28 2010/06/04 14:21:07 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.29 2010/07/25 19:55:27 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.29  2010/07/25 19:55:27  rtoy
+;;;; Apply some portability fixes from Helmut Eller.
+;;;;
+;;;; o Use SERIES::COMPILER-LET in test 491.  Remove other
+;;;;   conditionalizations for this test as well.
+;;;; o Bind *print-case* to :upcase for test 562, in case the value of
+;;;;   *print-case* is not the expected.
+;;;;
 ;;;; Revision 1.28  2010/06/04 14:21:07  rtoy
 ;;;; Feature request 2295778 - don't ignore fill-pointer
 ;;;; Patch 2298394 - patch for #2295778
@@ -2165,23 +2173,11 @@
 (defok 490 (tw (block bar
 		   (iterate ((x (series -1 2 3)))
 		     (if (plusp x) (return-from bar x))))) 2 29)
-#-(or allegro clisp)
-(defok 491 (tw (compiler-let ((*suppress-series-warnings* t))
+(defok 491 (tw (series::compiler-let ((*suppress-series-warnings* t))
 		   (block bar
 		     (iterate ((x (series -1 2 3)))
 		       (if (plusp x) (return-from bar x)))))) 2 nil)
 
-#+clisp
-(defok 491 (tw (ext::compiler-let ((*suppress-series-warnings* t))
-		   (block bar
-		     (iterate ((x (series -1 2 3)))
-		       (if (plusp x) (return-from bar x)))))) 2 nil)
-
-#+allegro
-(defok 491 (tw (cltl1::compiler-let ((*suppress-series-warnings* t))
-		   (block bar
-		     (iterate ((x (series -1 2 3)))
-		       (if (plusp x) (return-from bar x)))))) 2 nil)
 
 ;These test restriction violation checks
 
@@ -2524,7 +2520,8 @@
 ;; Is there a better way to do this?  Print to a string seems rather
 ;; fragile.
 (defok 562 (ton
-	    (let ((*print-length* 20))
+	    (let ((*print-length* 20)
+		  (*print-case* :upcase))
 	      (subseq (with-output-to-string (s)
 			(print (series t nil) s)) 1)))
   "#Z(T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL T NIL ...) ")
