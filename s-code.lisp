@@ -9,12 +9,21 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.110 2010/06/11 02:16:02 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.111 2010/07/25 20:06:04 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.111  2010/07/25 20:06:04  rtoy
+;;;; Fix from Helmut Eller:
+;;;;
+;;;;     The functions ERS, WRS, and RRS call ERROR resp. WARN with empty
+;;;;     strings.  This is annoying when working with Slime.  I propose to
+;;;;     change that: instead of printing the messages to *error-output*
+;;;;     and calling ERROR with an empty string it's better to pass the
+;;;;     message to ERROR and let the compiler print it.
+;;;;
 ;;;; Revision 1.110  2010/06/11 02:16:02  rtoy
 ;;;; Changes to make series work with ccl.
 ;;;;
@@ -2005,49 +2014,47 @@ value, the old value is not clobbered."
 ;;;;                         ---- ERROR REPORTING ----
 
 ;; HELPER
-(cl:defun report-error (info)
+(cl:defun report-error (type info)
   (setq *last-series-error* info)
-  (loop (unless info (return nil))
-        (if (stringp (car info))
-            (format *error-output* (pop info))
-	  (write (pop info) :stream *error-output* :escape t :pretty t
-		 :level nil :length nil :case :upcase))))
-
+  (let ((message 
+	 (with-output-to-string (*error-output*)
+	   (loop (unless info (return nil))
+	    (if (stringp (car info))
+		(format *error-output* (pop info))
+		(write (pop info) :stream *error-output* :escape t :pretty t
+		       :level nil :length nil :case :upcase))))))
+    (ecase type
+      (error (error "~a" message))
+      (warning (warn "~a" message))
+      (restriction (warn "~a" message)))))
+      
 (cl:defun ers (id &rest args)  ;Fatal errors.
-  (declare (dynamic-extent args))	  
   (when *testing-errors*
     (throw :testing-errors id))
-  (if *in-series-expr*
-      (report-error (list* "~&Error " id " in series expression:~%"
-			   *in-series-expr* (copy-list args)))
-    (report-error (list* "~&Error " id (copy-list args))))
-  (error ""))
+  (report-error 'error 
+		(if *in-series-expr*
+		    (list* "Error " id " in series expression:~%"
+			   *in-series-expr* (copy-list args))
+		    (list* "Error " id (copy-list args)))))
 
 (cl:defun wrs (id always-report-p &rest args) ;Warnings.
-  (declare (dynamic-extent args))	  
   (when (or always-report-p (not *suppress-series-warnings*))
-    (report-error (list* "~&Warning " id
+    (report-error 'warning
+		  (list* "Warning " id
                          " in series expression:~%"
                          (or *in-series-expr*
                              (and (boundp '*not-straight-line-code*)
                                   *not-straight-line-code*))
-                         (copy-list args)))
-    ;; What is this for?  Why do we want to print out this warning
-    ;; when *testing-errors* is NIL?  Remove this.  Tests still pass.
-    #+nil
-    (when (not *testing-errors*)
-      (warn ""))))
+                         (copy-list args)))))
 
 ;; HELPER
 (cl:defun rrs (id &rest args) ;Restriction violations.
-  (declare (dynamic-extent args))	  
   (when (not *suppress-series-warnings*)
-    (report-error (list* "~&Restriction violation " id
+    (report-error 'restriction
+		  (list* "Restriction violation " id
                          " in series expression:~%"
                          (or *in-series-expr* *not-straight-line-code*)
-                         (copy-list args)))
-    (when (not *testing-errors*)
-      (warn "")))
+                         (copy-list args))))
   (throw :series-restriction-violation nil))
 
 ;;;;             ---- UTILITIES FOR MANIPULATING FRAGMENTS ----
