@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.111 2010/07/25 20:06:04 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.112 2010/07/26 12:23:17 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.112  2010/07/26 12:23:17  rtoy
+;;;; Oops.  As Helmut points out, REPORT-ERROR should use CL:LET, not LET.
+;;;;
 ;;;; Revision 1.111  2010/07/25 20:06:04  rtoy
 ;;;; Fix from Helmut Eller:
 ;;;;
@@ -2016,13 +2019,13 @@ value, the old value is not clobbered."
 ;; HELPER
 (cl:defun report-error (type info)
   (setq *last-series-error* info)
-  (let ((message 
-	 (with-output-to-string (*error-output*)
-	   (loop (unless info (return nil))
-	    (if (stringp (car info))
-		(format *error-output* (pop info))
-		(write (pop info) :stream *error-output* :escape t :pretty t
-		       :level nil :length nil :case :upcase))))))
+  (cl:let ((message 
+	    (with-output-to-string (*error-output*)
+	      (loop (unless info (return nil))
+		 (if (stringp (car info))
+		     (format *error-output* (pop info))
+		     (write (pop info) :stream *error-output* :escape t :pretty t
+			    :level nil :length nil :case :upcase))))))
     (ecase type
       (error (error "~a" message))
       (warning (warn "~a" message))
