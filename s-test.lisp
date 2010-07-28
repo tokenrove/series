@@ -40,9 +40,21 @@
 ;;;; old tests are given numerical names that match the numbers
 ;;;; printed out when running the old tester.
 ;;;;
-;;;; $Id: s-test.lisp,v 1.29 2010/07/25 19:55:27 rtoy Exp $
+;;;; $Id: s-test.lisp,v 1.30 2010/07/28 19:11:00 rtoy Exp $
 ;;;;
 ;;;; $Log: s-test.lisp,v $
+;;;; Revision 1.30  2010/07/28 19:11:00  rtoy
+;;;; Fix issue noted by Helmut Eller that (collect (scan '(1 2 3))) was not
+;;;; optimized.  Solution pointed out by Helmut too.
+;;;;
+;;;; s-code.lisp:
+;;;; o LIFT-OUT-VARS needs to return CODE instead of NIL if there are no
+;;;;   variables to be lifted.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add test that series should optimize (collect (scan '(1 2 3))) to
+;;;;   just '(1 2 3) during macroexpansion.
+;;;;
 ;;;; Revision 1.29  2010/07/25 19:55:27  rtoy
 ;;;; Apply some portability fixes from Helmut Eller.
 ;;;;
@@ -2552,6 +2564,12 @@
 
 (defok 1001 (ton (collect 'list (scan 'vector +constant+)))
   (1 2 3 4))
+
+;; Make sure series optimizes (collect (scan '(1 2 3))).  I don't know
+;; of any way to test this other than macroexpanding it.
+(defok 1002 (to (values (macroexpand '(collect (scan '(1 2 3))))))
+  '(1 2 3))
+
 
 ;;; New basic tests
 (defvar *str* (make-test-struct))

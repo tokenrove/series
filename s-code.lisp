@@ -9,12 +9,24 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.112 2010/07/26 12:23:17 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.113 2010/07/28 19:10:59 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.113  2010/07/28 19:10:59  rtoy
+;;;; Fix issue noted by Helmut Eller that (collect (scan '(1 2 3))) was not
+;;;; optimized.  Solution pointed out by Helmut too.
+;;;;
+;;;; s-code.lisp:
+;;;; o LIFT-OUT-VARS needs to return CODE instead of NIL if there are no
+;;;;   variables to be lifted.
+;;;;
+;;;; s-test.lisp:
+;;;; o Add test that series should optimize (collect (scan '(1 2 3))) to
+;;;;   just '(1 2 3) during macroexpansion.
+;;;;
 ;;;; Revision 1.112  2010/07/26 12:23:17  rtoy
 ;;;; Oops.  As Helmut points out, REPORT-ERROR should use CL:LET, not LET.
 ;;;;
@@ -5732,23 +5744,24 @@ value, the old value is not clobbered."
   ;; between the binding and <stuff>.
   (cl:let ((bindings (second code))
 	   (out-vars (find-out-vars code)))
-    (when out-vars
-      ;; There are output vars.  Find the initializers associated with
-      ;; those output vars.
-      (cl:let* ((inits (find-initializers out-vars code))
-		(new-bindings
-		 (mapcar #'(lambda (v)
-			     ;; Create a new bindings
-			     ;; list that initializes the
-			     ;; variables appropriately.
-			     (cl:let ((var (if (listp v) (first v) v)))
-			       (or (assoc var inits :key #'(lambda (x)
-							     (if (listp x)
-								 (first x)
-								 x)))
-				   v)))
-			 bindings)))
-	`(cl:let* ,new-bindings ,@(remove-initializers inits code))))))
+    (if out-vars
+	;; There are output vars.  Find the initializers associated with
+	;; those output vars.
+	(cl:let* ((inits (find-initializers out-vars code))
+		  (new-bindings
+		   (mapcar #'(lambda (v)
+			       ;; Create a new bindings
+			       ;; list that initializes the
+			       ;; variables appropriately.
+			       (cl:let ((var (if (listp v) (first v) v)))
+				 (or (assoc var inits :key #'(lambda (x)
+							       (if (listp x)
+								   (first x)
+								   x)))
+				     v)))
+			   bindings)))
+	  `(cl:let* ,new-bindings ,@(remove-initializers inits code)))
+	code)))
 
 ;; Set this to non-NIL to activate LIFT-OUT-VARS when generating the
 ;; series expansion.
