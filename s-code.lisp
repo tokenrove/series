@@ -9,12 +9,15 @@
 ;;;; above web site now to obtain the latest version.
 ;;;; NO PATCHES TO OTHER BUT THE LATEST VERSION WILL BE ACCEPTED.
 ;;;;
-;;;; $Id: s-code.lisp,v 1.113 2010/07/28 19:10:59 rtoy Exp $
+;;;; $Id: s-code.lisp,v 1.114 2010/07/28 19:54:39 rtoy Exp $
 ;;;;
 ;;;; This is Richard C. Waters' Series package.
 ;;;; This started from his November 26, 1991 version.
 ;;;;
 ;;;; $Log: s-code.lisp,v $
+;;;; Revision 1.114  2010/07/28 19:54:39  rtoy
+;;;; Add optimizer for scan-hash.  From Helmut Eller.
+;;;;
 ;;;; Revision 1.113  2010/07/28 19:10:59  rtoy
 ;;;; Fix issue noted by Helmut Eller that (collect (scan '(1 2 3))) was not
 ;;;; optimized.  Solution pointed out by Helmut too.
@@ -8894,7 +8897,7 @@ SCAN-FILE, except we read from an existing stream."
 (defS scan-hash (table)
     "(scan-hash table)
 
-Scans the entries of teh hash table and returns two series containing
+Scans the entries of the hash table and returns two series containing
 the keys and their associated values.  The first element of key series
 is the key of the first entry in the hash table, and the first element
 of the values series is the value of the first entry, and so on.  The
@@ -8928,7 +8931,30 @@ order of scanning the hash table is not specified."
 	 ()
 	 :mutable ; table can change - OK if scan-private table
 	 )
-#+symbolics :optimizer #+symbolics
+  :optimizer
+  #-symbolics
+  (apply-literal-frag
+    (cl:let ((next (new-var 'next)))
+      `((() ; args
+	 ((keys t) (values t)) ; rets
+	 ((keys t) (values t)) ; aux
+	 (); alt
+	 (); prolog
+         (; body:
+	  (cl:multiple-value-bind (more? key value)
+	      (,next)  
+	    (unless more? (go end))
+	    (setq keys key
+		  values value)))
+	 () ; epilog
+         (; wraprs:
+	  ((lambda (code) 
+	     `(with-hash-table-iterator (,',next ,',table) ,code))
+	   :loop))
+	 :mutable ; impure
+	 ))))
+
+  #+symbolics
   (apply-literal-frag
     `((((table))
        ((keys t) (values t))
