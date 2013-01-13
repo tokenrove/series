@@ -188,7 +188,7 @@
    #+(or cmu scl) #:collect #+(or cmu scl) #:iterate)
   #+Harlequin-Common-Lisp
   (:import-from "LISPWORKS" "COMPILER-LET")
-  #+Genera
+  #+(or Genera abcl)
   (:import-from "LISP" "COMPILER-LET")
   #+allegro
   (:import-from #:cltl1 #:compiler-let)
