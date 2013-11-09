@@ -191,7 +191,7 @@
   #+(or Genera abcl)
   (:import-from "LISP" "COMPILER-LET")
   #+allegro
-  (:import-from #:cltl1 #:compiler-let)
+  (:import-from #:excl #:compiler-let)
   #+CLISP
   (:import-from "EXT" "COMPILER-LET")
   #+(or cmu scl)
